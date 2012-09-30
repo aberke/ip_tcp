@@ -23,7 +23,7 @@ functions:
 	
 		create empty hashmap
 		create link_interface_factory
-		factory_make(linked list, &hashmap)
+		factory_make(list_t linkedlist, &hashmap)
 			//populates hashmap and passes back array
 
 	node_start(node_t node){

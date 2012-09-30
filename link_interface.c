@@ -2,7 +2,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <inttypes.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 
+#include "util/list.h"
 #include "link_interface.h"
 #include "parselinks.h"
 
@@ -13,7 +21,7 @@
 	doesn't know its ip address
 	boolean up_down  -- know whether or not it's down
 	
-has function send() that takes in void* data  which is a packet constructed by node.c
+has function send_packet() that takes in void* data  which is a packet constructed by node.c
 	-- wraps udp protocol around this ip packet
 
 has function read_packet() 
