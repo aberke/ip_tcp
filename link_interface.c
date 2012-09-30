@@ -1,3 +1,11 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+
+#include "link_interface.h"
+#include "parselinks.h"
+
 //wrapper around link_t structure they give us
 // has read_packet function  -- reads from socket
 // what it adds to link_t:
