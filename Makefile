@@ -14,6 +14,11 @@ CFLAGS=-g -Wall
 _OBJS=main.o routing_table.o forwarding_table.o link_interface.o
 OBJS=$(patsubst %.o, $(BUILD_DIR)/%.o, $(_OBJS))
 
+debug: 
+	@echo $(_OBJS)
+	@echo "turned into..."
+	@echo $(OBJS)
+
 _INCLUDE=$(INC_DIR) $(UTHASH_INC)
 INCLUDE=$(patsubst %, -I%, $(_INCLUDE))
 

@@ -32,9 +32,17 @@ routing_entry_t routing_entry_init(uint32_t next_hop,
 	return entry;
 }
 
+void routing_entry_print(routing_entry_t entry){
+	printf("Routing entry: <address:%d> <next-hop:%d> <cost:%d>\n", entry->address, entry->next_hop, entry->cost);
+}
+
 void routing_entry_destroy(routing_entry_t* info){
 	free(*info);
 	*info = NULL;
+}
+
+void routing_entry_free(routing_entry_t info){
+	free(info);
 }
 
 routing_table_t routing_table_init(){
@@ -48,6 +56,7 @@ void routing_table_destroy(routing_table_t* rt){
 	routing_entry_t info, tmp;
 
 	HASH_ITER(hh, (*rt)->route_hash, info, tmp){
+		routing_entry_print(info);
 		HASH_DEL((*rt)->route_hash, info);
 		routing_entry_destroy(&info);
 	}
@@ -59,28 +68,37 @@ void routing_table_destroy(routing_table_t* rt){
 /* FUNCTIONALITY */
 
 void routing_table_update_entry(routing_table_t rt, routing_entry_t entry){
-	HASH_ADD_INT(rt->route_hash,address,entry); 
+	HASH_ADD_INT(rt->route_hash, address, entry); 
 }
 
 void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct routing_info* info, uint32_t next_hop){
 	int i;
-	uint32_t address,cost;
+	uint32_t addr,cost;
 	/* for each entry in info, see if you already have info for that address, or if
  		your current distance is better than the supposed distance (given distance + 1), 
 		and if either of these are false, update your talbe with the new info */
 	for(i=0;i<info->num_entries;i++){
 		/* pull out the address and cost of the current line in the info */
-		address = info->entries[i].address;
+		addr = info->entries[i].address;
 		cost = info->entries[i].cost;		
 
 		/* now find the hash entry corresponding to that address, and run RIP */
 		routing_entry_t entry;
-		HASH_FIND_INT(rt->route_hash, &address, entry);
-		if(!entry || entry->cost > cost + HOP_COST){
-			routing_entry_destroy(&entry);
-			routing_table_update_entry(rt, routing_entry_init(next_hop, cost, address));
-			forwarding_table_update_entry(ft, address, next_hop);
+		HASH_FIND_INT(rt->route_hash, &addr, entry); 		
+		if(!entry){
+			routing_table_update_entry(rt, routing_entry_init(next_hop, cost, addr));			
+			forwarding_table_update_entry(ft, addr, next_hop);
 		}	
+		else if(entry->cost > cost + HOP_COST){
+			//printf("cost was more.\n");
+			HASH_DEL(rt->route_hash, entry);
+			routing_entry_free(entry);
+			routing_table_update_entry(rt, routing_entry_init(next_hop, cost, addr));
+			forwarding_table_update_entry(ft, addr, next_hop); 
+		}	
+		else{
+			//printf("Keeping key %d\n", addr);
+		}
 	}
 }
 

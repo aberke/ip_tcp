@@ -9,6 +9,7 @@ struct forwarding_info{
 	
 	UT_hash_handle hh;
 };
+
 typedef struct forwarding_info* forwarding_info_t;
 
 struct forwarding_table {
@@ -42,12 +43,12 @@ forwarding_table_t forwarding_table_init(){
 }
 
 void forwarding_table_destroy(forwarding_table_t* ft){
-	forwarding_info_t info,tmp;
+	forwarding_info_t info, tmp;
 
 	HASH_ITER(hh,(*ft)->entries,info,tmp){
-		//forwarding_info_print(info);
-		HASH_DEL(((*ft)->entries), info);
-		//forwarding_info_free(info);
+		forwarding_info_print(info);
+		HASH_DEL((*ft)->entries, info);
+		forwarding_info_free(info);
 	}
 
 	free(*ft);
@@ -56,12 +57,13 @@ void forwarding_table_destroy(forwarding_table_t* ft){
 
 void forwarding_table_update_entry(forwarding_table_t ft, uint32_t addr, uint32_t next){
 	forwarding_info_t info;
-	//HASH_FIND_INT(ft->entries,&addr, info);
+	HASH_FIND_INT(ft->entries,&addr, info);
 	if(info){
-		//HASH_DEL(ft->entries, info);	
-		//forwarding_info_destroy(&info);
+		HASH_DEL(ft->entries, info);	
+		forwarding_info_destroy(&info);
 	}
-	HASH_ADD_INT(ft->entries, final_address, forwarding_info_init(addr, next));
+	info = forwarding_info_init(addr, next);
+	HASH_ADD_INT(ft->entries, final_address,info); 
 } 
 
 void forwarding_table_print(forwarding_table_t ft){
