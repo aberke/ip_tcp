@@ -5,6 +5,8 @@
 
 #define HOP_COST 1
 
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
+
 /* STRUCTS */
 struct routing_entry {
 	uint32_t cost;
@@ -56,7 +58,7 @@ void routing_table_destroy(routing_table_t* rt){
 	routing_entry_t info, tmp;
 
 	HASH_ITER(hh, (*rt)->route_hash, info, tmp){
-		routing_entry_print(info);
+		//routing_entry_print(info);
 		HASH_DEL((*rt)->route_hash, info);
 		routing_entry_destroy(&info);
 	}
@@ -80,7 +82,7 @@ void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct rout
 	for(i=0;i<info->num_entries;i++){
 		/* pull out the address and cost of the current line in the info */
 		addr = info->entries[i].address;
-		cost = info->entries[i].cost;		
+		cost = MIN(info->entries[i].cost + HOP_COST, INFINITY);		
 
 		/* now find the hash entry corresponding to that address, and run RIP */
 		routing_entry_t entry;
@@ -89,7 +91,7 @@ void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct rout
 			routing_table_update_entry(rt, routing_entry_init(next_hop, cost, addr));			
 			forwarding_table_update_entry(ft, addr, next_hop);
 		}	
-		else if(entry->cost > cost + HOP_COST){
+		else if(entry->cost > cost){
 			//printf("cost was more.\n");
 			HASH_DEL(rt->route_hash, entry);
 			routing_entry_free(entry);
@@ -109,6 +111,22 @@ void routing_table_print(routing_table_t rt){
 	}
 }
 
+
+/* INTERROGATORS */
+/* 
+Parameters
+	routing table
+	address
+
+Returns
+	- the cost of getting to that address
+	- -1 if that address does not have a place in the table */
+uint32_t routing_table_get_cost(routing_table_t rt, uint32_t address){
+	routing_entry_t entry;
+	HASH_FIND_INT(rt->route_hash, &address, entry);
+	if(!entry) return -1;
+	else return entry->cost;	
+}
 
 
 

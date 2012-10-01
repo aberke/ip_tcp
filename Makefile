@@ -34,7 +34,6 @@ TEST_OBJS=$(patsubst %.o, $(TEST_BUILD_DIR)/%.o, $(_TEST_OBJS)) $(patsubst %.o, 
 
 test_build: $(TEST_OBJS)
 	$(CC) $(CFLAGS) -o $(TEST_EXEC_FILE) $(TEST_OBJS)
-	@echo "Tests compiled..."
 
 $(TEST_BUILD_DIR)/%.o: $(TEST_DIR)/%.c
 	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@

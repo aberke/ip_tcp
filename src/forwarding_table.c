@@ -46,7 +46,7 @@ void forwarding_table_destroy(forwarding_table_t* ft){
 	forwarding_info_t info, tmp;
 
 	HASH_ITER(hh,(*ft)->entries,info,tmp){
-		forwarding_info_print(info);
+		//forwarding_info_print(info);
 		HASH_DEL((*ft)->entries, info);
 		forwarding_info_free(info);
 	}
@@ -72,3 +72,22 @@ void forwarding_table_print(forwarding_table_t ft){
 		forwarding_info_print(info);
 	}
 } 
+
+
+// INTERROGATORS 
+
+/* 
+Parameters
+	forwarding_table, final_address
+
+Returns
+	- next-hop that corresponds to the given address
+	- -1 if no such address can be found */
+uint32_t forwarding_table_get_next_hop(forwarding_table_t ft, uint32_t final_address){
+	forwarding_info_t info;
+	HASH_FIND_INT(ft->entries, &final_address, info);
+	if(!info) return -1;
+	else return info->next_hop;	
+}
+
+
