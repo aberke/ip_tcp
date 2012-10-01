@@ -22,4 +22,4 @@ int main(int argc, char *argv[]){
 	
 	node_destroy(node);
 	return 0;
-	}
+}
