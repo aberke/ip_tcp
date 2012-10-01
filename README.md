@@ -10,30 +10,52 @@ node.c in change of constructing packet to send
 node:
 	forwarding_table_t forwarding_table; // why not just a hashmap?
 	routing_table_t routing_table;
-	Map<int, link_interface_t> sock_interfaceMap (maps sockets to interface structs) // for convenience with select()
-	Map<ip, link_interface_t> nextMap (maps ip addresses to interface structs)
+	
+	//for taking sfd from select() and telling interface to read
+	sfd_interface_map<sfd, link_interface_t> sock_interfaceMap (maps sockets to interface structs) // for convenience with select()
+	// for getting forward vip from forwarding table and getting interface to send packet
+	ip_interface_map<ip, link_interface_t> nextMap (maps ip addresses to interface structs)
 
 	int num_interfaces
-	array: of link_interfaces
-	hashmap: <sfd, arrayindex>
+	// for query_interfaces iteration
+	link_interface links[num_interfaces] -- array of link_interfaces
+	
 
 functions:
 
 	node_init(linked list of link_t's)
 	
-		create empty hashmap
+		int num_interfaces = : iterate through list to get num_interfaces
+	
+		create empty hashmap ip_interface_map;
+		create empty hashmap sfd_interface_map;
 		create link_interface_factory
-		factory_make(list_t linkedlist, &hashmap)
+		link_interface[num_interfaces] links = 
+			factory_make(list_t linkedlist, &ip_interface_map, &sfd_interface_map, num_interfaces)
 			//populates hashmap and passes back array
 
-	node_start(node_t node){
+node_start(node_t node){
 	
 		while(1){
 			select
+			
+				handle_stdin()
+				query_interfaces()  // checks if each interface up/down
+					// handles updating_routing_table if necessary 
+					//-- which then handles updating about new info: update_all_interfaces
+			
 				handle_selected_sfd()
 			
 			if time elapsed > 5 s:
 				update_all_interfaces()
+				
+		
+}
+def query_interfaces(node_t node){
+	for(i = 0; i<num_interfaces; i++):
+		check if each interface up/down
+			if status has changed:
+				update_routing_table();
 }
 
 def update_all_interfaces():
@@ -98,7 +120,3 @@ uint32_t address;
 	write node.h file
 	write routing_table.c, .h
 	write forwarding_table.c, .h
-	
-	WRITE OUR MAKEFILE PLEASE
-	reorganize directories (I suppose this will go with creating makefile)
-	
