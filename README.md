@@ -8,7 +8,7 @@ main:
 node.c in change of constructing packet to send
 
 node:
-	forwarding_table_t forwarding_table;
+	forwarding_table_t forwarding_table; // why not just a hashmap?
 	routing_table_t routing_table;
 	Map<int, link_interface_t> sock_interfaceMap (maps sockets to interface structs) // for convenience with select()
 	Map<ip, link_interface_t> nextMap (maps ip addresses to interface structs)
@@ -23,7 +23,7 @@ functions:
 	
 		create empty hashmap
 		create link_interface_factory
-		factory_make(linked list, &hashmap)
+		factory_make(list_t linkedlist, &hashmap)
 			//populates hashmap and passes back array
 
 	node_start(node_t node){
@@ -98,4 +98,7 @@ uint32_t address;
 	write node.h file
 	write routing_table.c, .h
 	write forwarding_table.c, .h
+	
+	WRITE OUR MAKEFILE PLEASE
+	reorganize directories (I suppose this will go with creating makefile)
 	
