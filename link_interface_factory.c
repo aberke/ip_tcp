@@ -3,6 +3,6 @@
 // takes in pointer to hashmap to populate and linkedlist of link_t's
 // returns array of link_interface_t's
 
-
+#include "uthash.h"
 #include "util/list.h"
 #include "parselinks.h"

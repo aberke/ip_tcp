@@ -111,6 +111,10 @@ uint32_t address;
 	make link_interface.h
 	make link_interface_factory
 	
+	questions:
+		is it ok to read from the port of an interface if the incoming 
+			message isn't from the right port?
+	
 	git add  -- only needs to happen once per file
 	git commit
 	git pull
