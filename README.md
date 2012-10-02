@@ -1,3 +1,6 @@
+So I think that when we're writing functions where we have to make something that
+seems like a design decision, we should tag it by putting in #DESIGN-DECISION
+
 main:
 	linked list of link_t's x = parses links of file
 	node = init_node(x)
