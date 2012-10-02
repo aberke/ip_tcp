@@ -108,15 +108,13 @@ uint32_t address;
 //ALEX TODO:
 	make link_interface.c
 	make link_interface.h
-	// cast ip's into uint32's:w
 
 	write handle selected
 	write wrap_ip_packet  // don't have to deal with fragmentation
 	write unwrap_ip_packet
 	
 	questions:
-		is it ok to read from the port of an interface if the incoming 
-			message isn't from the right port?
+		all in ipv4 right???? when do i need to make a distinction??
 	
 	git add  -- only needs to happen once per file
 	git commit
