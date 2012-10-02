@@ -30,7 +30,7 @@ struct link_interface{
 
 // helper to link_interface_create
 // creates and binds socket and returns socket file descriptor sfd
-int bind_socket(char *localhost, char *localport){
+int link_interface_bind_socket(char *localhost, char *localport){
 	int status, sfd;
 	struct addrinfo hints, *addrinfo;
 	memset(&hints,0,sizeof hints);  //make struct empty
@@ -62,7 +62,7 @@ link_interface_t link_interface_create(link_t *link){
 	sprintf (remote_port, "%u", link->remote_phys_port);
 	
 	// create and bind socket_fd	
-	if((socket_fd = bind_socket(link->local_phys_host, local_port)) < 0){
+	if((socket_fd = link_interface_bind_socket(link->local_phys_host, local_port)) < 0){
 		//failed
 		return NULL;
 	}
@@ -97,7 +97,7 @@ void link_interface_destroy(link_interface_t interface){
 // data is a packet constructed by node.c-- wraps udp protocol around this ip packet
 // data_len = sizeof data
 // returns 1 on success, -1 on error/failure
-int send_packet(link_interface_t li, void* data, int data_len){
+int link_interface_send_packet(link_interface_t li, void* data, int data_len){
 	int socket_fd = li->sfd;
 	struct sockaddr remoteaddr = li->remote;
 	socklen_t size = sizeof(remoteaddr);
@@ -108,7 +108,7 @@ int send_packet(link_interface_t li, void* data, int data_len){
 		if(sent < 0){
 			// interface needs to go down
 			printf("Remote connection %u closed.\n", li->remote_virt_ip);
-			bringdown_interface(li);
+			link_interface_bringdown(li);
 			return sent;
 		}
     	sent = sendto(socket_fd, data+bytes_sent, data_len-bytes_sent, 0, (struct sockaddr*)&remoteaddr, size);
@@ -147,9 +147,9 @@ int compare_remote_addr(struct sockaddr* a1, struct sockaddr* a2){
 }
 // reads into buffer
 // returns ip packet or null
-void* read_packet(link_interface_t l_i, char* buffer, int buffer_len){
+void* link_interface_read_packet(link_interface_t l_i, char* buffer, int buffer_len){
 	int status, sfd;
-	sfd = get_sfd(l_i);
+	sfd = link_interface_get_sfd(l_i);
 	struct sockaddr remote_addr_in, remote_addr;
 	remote_addr = l_i->remote;
 	socklen_t size = sizeof(remote_addr_in);
@@ -158,7 +158,7 @@ void* read_packet(link_interface_t l_i, char* buffer, int buffer_len){
 	//handle packet in buffer
 	if(status <= 0){
 		//link shut down:
-		bringdown_interface(l_i);
+		link_interface_bringdown(l_i);
 		if(status == 0){
 			printf("Remote connection %u closed.\n", l_i->remote_virt_ip);
 		}
@@ -177,30 +177,30 @@ void* read_packet(link_interface_t l_i, char* buffer, int buffer_len){
 }
 
 // returns sfd	
-int get_sfd(link_interface_t l_i){
+int link_interface_get_sfd(link_interface_t l_i){
 	return l_i->sfd;
 }
 // returns local_virt_ip
-uint32_t get_local_virt_ip(link_interface_t l_i){
+uint32_t link_interface_get_local_virt_ip(link_interface_t l_i){
 	return l_i->local_virt_ip;
 }
 //returns remote_virt_ip
-uint32_t get_remote_virt_ip(link_interface_t l_i){
+uint32_t link_interface_get_remote_virt_ip(link_interface_t l_i){
 	return l_i->remote_virt_ip;
 }
 // brings down interface
-void bringdown_interface(link_interface_t l_i){
+void link_interface_bringdown(link_interface_t l_i){
 	printf("Interface %u down\n", l_i->local_virt_ip);
 	l_i->up_down_boolean = 0;
 }
 // brings interface up
-void bringup_interface(link_interface_t l_i){
+void link_interface_bringup(link_interface_t l_i){
 	printf("Interface %u up\n", l_i->local_virt_ip);
 	l_i->up_down_boolean = 1;
 }
 // queries whether interface up or down
 // returns 0 for interface down, 1 for interface up
-int interface_up_down(link_interface_t l_i){
+int link_interface_interface_up_down(link_interface_t l_i){
 	return l_i->up_down_boolean;
 }
 
