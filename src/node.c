@@ -3,6 +3,8 @@
 #include "uthash.h"
 #include "list.h"
 
+#define STDIN fileno(stdin)
+
 /* STRUCTS */
 
 struct interface_socket_keyed{
@@ -52,23 +54,24 @@ void interface_ip_keyed_destroy(interface_ip_keyed_t* ip_keyed){
 	*ip_keyed = NULL;
 }
 
-node_t node_init(list_t* interfaces){
+node_t node_init(list_t* links){
 	node_t node = (node_t)malloc(sizeof(struct node));
 	node->forwarding_table = forwarding_table_init();
 	node->routing_table = routing_table_init();
-	node->num_interfaces = interfaces->length;	
-	node->interfaces = (struct link_interface*)malloc(sizeof(struct link_interface)*node->num_interfaces);
+	node->num_interfaces = links->length;	
+	node->interfaces = (struct link_interface*)malloc(sizeof(struct link_interface)((*node)->num_interfaces));
 	
 	link_interface_t interface; 
+	link_t link;
 	int interfact_socket;
 	uint32_t interface_ip;
 	node_t* curr;
 
 	int index=0;
-	for(curr = interfaces->head; curr != NULL; curr = curr->next){
-		interface = (link_interface_t)curr->data;		
+	for(curr = links->head; curr != NULL; curr = curr->next){
+		link = (link_t)curr->data;
+		interface = link_interface_create(link);
 		interface_socket = interface_get_socket(interface);
-		
 		interface_ip 	 = interface_get_ip(interface);
 		node->interfaces[index] = interface;
 		HASH_ADD_INT(node->socketToInterface, socket, interface_socket_keyed_init(interface_socket, interface));
@@ -79,8 +82,38 @@ node_t node_init(list_t* interfaces){
 	return node;
 }
 
-
+void node_update_select_list(node_t node){
+	FD_SET(&(node->readfds), fileno(stdin));
+	
+	int i;
+	for(i=0;i<node->num_interfaces;i++){
+		FD_SET(&(node->readfds), interface_get_socket(node));
+	}
 
 void handle_selected(
+/******************** ALEX's AREA ************************/
 
 
+
+
+
+
+
+
+
+/******************* END OF ALEX's AREA *************************
+
+
+/****************INTERNAL FUNCTIONS******************/
+static void _update_fd_sets(node_t node){
+	FD_ZERO(&(node->read_fds));
+	FD_SET(STDIN, &(node->read_fds));
+	
+	int i;
+	link_interface_t interface;
+	for(i=0;i<node->num_interfaces;i++){
+		interface = node->interfaces[i];
+		if(link_interface_is_up(interface))
+			FD_SET(link_interface_get_socket(interface), &(node->read_fds));
+	}
+}
