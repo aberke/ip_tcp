@@ -107,7 +107,8 @@ int send_packet(link_interface_t li, void* data, int data_len){
 	while(bytes_sent < data_len){
 		if(sent < 0){
 			// interface needs to go down
-			
+			printf("Remote connection %u closed.\n", li->remote_virt_ip);
+			bringdown_interface(li);
 			return sent;
 		}
     	sent = sendto(socket_fd, data+bytes_sent, data_len-bytes_sent, 0, (struct sockaddr*)&remoteaddr, size);
@@ -115,31 +116,64 @@ int send_packet(link_interface_t li, void* data, int data_len){
 	}
 	return bytes_sent;
 }
-
-
+// helper to read_packet:
+// checks that incoming packet from expected remote address
+// Returns -1 if given addresses don't match, returns 1 otherwise
+int compare_remote_addr(struct sockaddr* a1, struct sockaddr* a2){
+	if(a1->sa_family != a2->sa_family){
+		printf("Incoming packet from different type of sa_family than expected -- discarding.\n");
+		return -1;
+	}
+	if(a1->sa_family == AF_INET){ 
+		//IPV4  -- cast to sockaddr_in to handle IPV4
+		struct sockaddr_in *b1 = (struct sockaddr_in *)a1;
+		struct sockaddr_in *b2 = (struct sockaddr_in *)a2;
+		if((b1->sin_port != b2->sin_port)||(b1->sin_addr.s_addr != b2->sin_addr.s_addr)){
+			printf("Incoming ipv4 packet from different address -- discarding.\n");
+			return -1;
+			}
+		}
+	else{ 
+		//IPV6  -- cast to sockaddr_in6 to handle IPV6
+		struct sockaddr_in6 *b1 = (struct sockaddr_in6 *)a1;
+		struct sockaddr_in6 *b2 = (struct sockaddr_in6 *)a2;
+		if((b1->sin6_port != b2->sin6_port)||(b1->sin6_addr.s6_addr != b2->sin6_addr.s6_addr)){
+			printf("Incoming packet from different address -- discarding.\n");
+			return -1;
+		}
+	}
+	// addresses match
+	return 1;
+}
+// reads into buffer
 // returns ip packet or null
-void* read_packet(link_interface_t l_i){
+void* read_packet(link_interface_t l_i, char* buffer, int buffer_len){
 	int status, sfd;
 	sfd = get_sfd(l_i);
-	char buffer[IP_PACKET_MAX_SIZE] = {0};
-	struct sockaddr_in remote_addr;
-	socklen_t size = sizeof(remote_addr);
-	
-	
-	status = recvfrom(sfd, buffer, IP_PACKET_MAX_SIZE, 0, (struct sockaddr*)&remote_addr, &size);
-	//if status <= 0: link shut down:
-		//shut link down
-	// if status < 0: error
-	// if status > 0:
-		//check that remote_addr port and host match info
-		//if not from correct remote link:
-			//discard
-			// return NULL
-		//else:
-			//deal with packet --return it
-	
-	
-	return NULL;
+	struct sockaddr remote_addr_in, remote_addr;
+	remote_addr = l_i->remote;
+	socklen_t size = sizeof(remote_addr_in);
+	//read in packet
+	status = recvfrom(sfd, buffer, buffer_len, 0, (struct sockaddr*)&remote_addr_in, &size);
+	//handle packet in buffer
+	if(status <= 0){
+		//link shut down:
+		bringdown_interface(l_i);
+		if(status == 0){
+			printf("Remote connection %u closed.\n", l_i->remote_virt_ip);
+		}
+		else{
+			printf("Error reading from connection to %u.\n", l_i->remote_virt_ip);
+		}
+		return NULL;
+	}
+	// else: check that remote_addr port and host match info -- if not, discard it
+	if(compare_remote_addr(&remote_addr_in, &remote_addr) < 0){
+		//addresses don't match -- discard packet
+		return NULL;
+	}
+	//deal with packet --return it
+	return buffer;
 }
 
 // returns sfd	
@@ -153,5 +187,20 @@ uint32_t get_local_virt_ip(link_interface_t l_i){
 //returns remote_virt_ip
 uint32_t get_remote_virt_ip(link_interface_t l_i){
 	return l_i->remote_virt_ip;
+}
+// brings down interface
+void bringdown_interface(link_interface_t l_i){
+	printf("Interface %u down\n", l_i->local_virt_ip);
+	l_i->up_down_boolean = 0;
+}
+// brings interface up
+void bringup_interface(link_interface_t l_i){
+	printf("Interface %u up\n", l_i->local_virt_ip);
+	l_i->up_down_boolean = 1;
+}
+// queries whether interface up or down
+// returns 0 for interface down, 1 for interface up
+int interface_up_down(link_interface_t l_i){
+	return l_i->up_down_boolean;
 }
 

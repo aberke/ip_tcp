@@ -98,6 +98,7 @@ void node_update_select_list(node_t node){
 
 void handle_selected(link_interface_t li){
 
+	char buffer[IP_PACKET_MAX_SIZE] = {0};
 
 }
 //write wrap_ip_packet //don't have to deal with fragmentation but make sure you don't send more than limit
