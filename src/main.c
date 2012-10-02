@@ -1,9 +1,9 @@
 //main file outline
-
+#include <stdio.h>
 
 #include "util/list.h"
-#include "parselinks.h"
-#include "node.h"
+#include "util/parselinks.h"
+#include "ip_node.h"
 
 int main(int argc, char *argv[]){
 	// check arguments
@@ -14,12 +14,14 @@ int main(int argc, char *argv[]){
 	// get linked-list of link_t's
 	list_t* linkedlist = parse_links(argv[1]);
 	
-	//initiate node_t which will create factory and use linkedlist
-	node_t node = node_init(linkedlist);
-	free_links(linkedlist);
+	//initiate ip_node_t which will create factory and use linkedlist
+	ip_node_t ip_node = ip_node_init(linkedlist);
+
+	// This should probably be done in node-destroy
+	//free_links(linkedlist);
+
+	ip_node_start(ip_node);
 	
-	node_start(node);
-	
-	node_destroy(node);
+	ip_node_destroy(&ip_node);
 	return 0;
 	}

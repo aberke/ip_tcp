@@ -14,11 +14,6 @@ CFLAGS=-g -Wall
 _OBJS=main.o routing_table.o forwarding_table.o link_interface.o
 OBJS=$(patsubst %.o, $(BUILD_DIR)/%.o, $(_OBJS))
 
-debug: 
-	@echo $(_OBJS)
-	@echo "turned into..."
-	@echo $(OBJS)
-
 _INCLUDE=$(INC_DIR) $(UTHASH_INC)
 INCLUDE=$(patsubst %, -I%, $(_INCLUDE))
 
@@ -32,8 +27,10 @@ _TEST_OBJS=test.o
 _TEST_DEP_OBJS=routing_table.o forwarding_table.o
 TEST_OBJS=$(patsubst %.o, $(TEST_BUILD_DIR)/%.o, $(_TEST_OBJS)) $(patsubst %.o, $(BUILD_DIR)/%.o, $(_TEST_DEP_OBJS))
 
-test_build: $(TEST_OBJS)
+test_link:
 	$(CC) $(CFLAGS) -o $(TEST_EXEC_FILE) $(TEST_OBJS)
+
+test_build: test_validate $(TEST_OBJS) test_link
 
 $(TEST_BUILD_DIR)/%.o: $(TEST_DIR)/%.c
 	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@
@@ -43,6 +40,9 @@ test_clean:
 	rm -f $(TEST_EXEC_FILE)
 	rm -f $(TEST_BUILD_DIR)/*.o
 	@echo ""
+
+test_validate:
+	@[ -d $(TEST_BUILD_DIR) ] || ( echo "Creating directory $(TEST_BUILD_DIR)..." && mkdir $(TEST_BUILD_DIR))
 
 echo_compile:
 	@echo "******************Compiling*****************"
@@ -59,7 +59,7 @@ test: test_rebuild
 link: 
 	$(CC) $(CFLAGS) $(INCLUDE) $(LIB_DIRS) $(LIBS) -o $(EXEC_FILE) $(OBJS)
 
-build: $(OBJS) link
+build: validate $(OBJS) link
 	@echo "objs, _objs:"
 	@$(OBJS) $(_OBJS)
 
@@ -70,6 +70,10 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 clean: 
 	rm -f $(BUILD_DIR)/*.o
 	rm -f $(EXEC_FILE)
+
+validate:
+	@[ -d $(BUILD_DIR) ] || (echo "Creating directory $(BUILD_DIR)..." &&  mkdir $(BUILD_DIR))
+
 
 rebuild: clean build
 
