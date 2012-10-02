@@ -107,11 +107,16 @@ void* read_packet(link_interface_t l_i){
 	
 	
 	status = recvfrom(sfd, buffer, IP_PACKET_MAX_SIZE, 0, (struct sockaddr*)&remote_addr, &size);
-	//if status == 0: link shut down
+	//if status <= 0: link shut down:
+		//shut link down
 	// if status < 0: error
 	// if status > 0:
 		//check that remote_addr port and host match info
-		//deal with packet
+		//if not from correct remote link:
+			//discard
+			// return NULL
+		//else:
+			//deal with packet --return it
 	
 	
 	return NULL;
