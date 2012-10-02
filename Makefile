@@ -60,6 +60,8 @@ link:
 	$(CC) $(CFLAGS) $(INCLUDE) $(LIB_DIRS) $(LIBS) -o $(EXEC_FILE) $(OBJS)
 
 build: validate $(OBJS) link
+	@echo "objs, _objs:"
+	@$(OBJS) $(_OBJS)
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	@echo "compiling $<"

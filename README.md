@@ -30,8 +30,7 @@ functions:
 		create empty hashmap ip_interface_map;
 		create empty hashmap sfd_interface_map;
 		create link_interface_factory
-		link_interface[num_interfaces] links = 
-			factory_make(list_t linkedlist, &ip_interface_map, &sfd_interface_map, num_interfaces)
+		
 			//populates hashmap and passes back array
 
 node_start(node_t node){
@@ -109,7 +108,11 @@ uint32_t address;
 //ALEX TODO:
 	make link_interface.c
 	make link_interface.h
-	make link_interface_factory
+	// cast ip's into uint32's:w
+
+	write handle selected
+	write wrap_ip_packet  // don't have to deal with fragmentation
+	write unwrap_ip_packet
 	
 	git add  -- only needs to happen once per file
 	git commit

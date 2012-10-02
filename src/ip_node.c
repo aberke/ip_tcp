@@ -1,7 +1,9 @@
 #include <inttypes.h>
 
 #include "uthash.h"
+#include "parselinks.h"
 #include "list.h"
+#include "link_interface.h"
 
 #define STDIN fileno(stdin)
 
@@ -73,7 +75,9 @@ ip_node_t ip_node_init(list_t* links){
 	int index=0;
 	for(curr = links->head; curr != NULL; curr = curr->next){
 		link = (link_t)curr->data;
-		interface = link_interface_create(link);
+		if((interface = link_interface_create(link)) == NULL){
+			//todo: add error handing for when socket doesn't bind
+		}
 		interface_socket = interface_get_socket(interface);
 		interface_ip 	 = interface_get_ip(interface);
 		ip_node->interfaces[index] = interface;
@@ -102,7 +106,15 @@ void ip_node_update_select_list(ip_node_t ip_node){
 
 /******************** ALEX's AREA ************************/
 
+void handle_selected(link_interface_t li){
 
+	char buffer[IP_PACKET_MAX_SIZE] = {0};
+
+}
+//write wrap_ip_packet //don't have to deal with fragmentation but make sure you don't send more than limit
+
+
+//write unwrap_ip_packet
 
 
 
