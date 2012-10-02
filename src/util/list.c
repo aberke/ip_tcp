@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "list.h"
+#include "util/list.h"
 
 void list_init(list_t **list)
 {
