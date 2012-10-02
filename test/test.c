@@ -102,7 +102,7 @@ void test_small(){
 	// for the routing table
 	TEST_EQ(routing_table_get_cost(rt, 0),4);
 	TEST_EQ(routing_table_get_cost(rt, 1),7);
-	TEST_EQ(routing_table_get_cost(rt, 2),7);
+	TEST_EQ(routing_table_get_cost(rt, 2),8);
 
 	// for the forwarding_table
 	TEST_EQ(forwarding_table_get_next_hop(ft,2),4);
