@@ -1,15 +1,15 @@
-#ifndef __NODE_H__
-#define __NODE_H__
+#ifndef __IP_NODE_H__
+#define __IP_NODE_H__
 
-#include "list.h"
+#include "util/list.h"
 
-typedef struct node* node_t; 
+typedef struct ip_node* ip_node_t; 
 
-node_t node_init(link_t* link);
-void node_destroy(node_t* node);
+ip_node_t ip_node_init(list_t* links);
+void ip_node_destroy(ip_node_t* ip_node);
 
-void node_start();
-void node_stop();
+void ip_node_start();
+void ip_node_stop();
 
 
-#endif // __NODE_H__
+#endif // __IP_NODE_H__

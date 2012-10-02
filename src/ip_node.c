@@ -17,13 +17,16 @@ struct interface_ip_keyed{
 	int ip;
 };
 
-struct node{
+struct ip_node{
 	forwarding_table_t forwarding_table;
 	routing_table_t routing_table;
 	int num_interfaces;
 	struct link_interface* interfaces;
 	struct interface_socket_keyed *socketToInterface;
 	struct interface_ip_keyed *addressToInterface;
+
+	fd_set read_fds;
+	int highsock;
 };	
 
 typedef struct interface_socket_keyed* interface_socket_keyed_t;
@@ -54,12 +57,12 @@ void interface_ip_keyed_destroy(interface_ip_keyed_t* ip_keyed){
 	*ip_keyed = NULL;
 }
 
-node_t node_init(list_t* links){
-	node_t node = (node_t)malloc(sizeof(struct node));
-	node->forwarding_table = forwarding_table_init();
-	node->routing_table = routing_table_init();
-	node->num_interfaces = links->length;	
-	node->interfaces = (struct link_interface*)malloc(sizeof(struct link_interface)((*node)->num_interfaces));
+ip_node_t ip_node_init(list_t* links){
+	ip_node_t ip_node = (ip_node_t)malloc(sizeof(struct ip_node));
+	ip_node->forwarding_table = forwarding_table_init();
+	ip_node->routing_table = routing_table_init();
+	ip_node->num_interfaces = links->length;	
+	ip_node->interfaces = (struct link_interface*)malloc(sizeof(struct link_interface)((*ip_node)->num_interfaces));
 	
 	link_interface_t interface; 
 	link_t link;
@@ -73,24 +76,30 @@ node_t node_init(list_t* links){
 		interface = link_interface_create(link);
 		interface_socket = interface_get_socket(interface);
 		interface_ip 	 = interface_get_ip(interface);
-		node->interfaces[index] = interface;
-		HASH_ADD_INT(node->socketToInterface, socket, interface_socket_keyed_init(interface_socket, interface));
-		HASH_ADD_INT(node->addressToInterface, ip, interface_ip_keyed_init(interface_ip, interface));
+		ip_node->interfaces[index] = interface;
+		HASH_ADD_INT(ip_node->socketToInterface, socket, interface_socket_keyed_init(interface_socket, interface));
+		HASH_ADD_INT(ip_node->addressToInterface, ip, interface_ip_keyed_init(interface_ip, interface));
 		index++;
 	}	 
 
-	return node;
+	return ip_node;
 }
 
-void node_update_select_list(node_t node){
-	FD_SET(&(node->readfds), fileno(stdin));
+void ip_node_update_select_list(ip_node_t ip_node){
+	FD_ZERO(&(ip_node->readfds));
+	FD_SET(&(ip_node->readfds), fileno(stdin));
+	int max_fd = fileno(stdin);	
+	int sfd;		
 	
 	int i;
-	for(i=0;i<node->num_interfaces;i++){
-		FD_SET(&(node->readfds), interface_get_socket(node));
+	for(i=0;i<ip_node->num_interfaces;i++){
+		sfd = interface_get_socket(ip_node);
+		max_fd = (sfd > max_fd ? sfd : max_fd);
+		FD_SET(&(ip_node->readfds), sfd);
 	}
+	ip_node->highsock = max_fd;
+}
 
-void handle_selected(
 /******************** ALEX's AREA ************************/
 
 
@@ -101,19 +110,19 @@ void handle_selected(
 
 
 
-/******************* END OF ALEX's AREA *************************
+/******************* END OF ALEX's AREA *************************/
 
 
 /****************INTERNAL FUNCTIONS******************/
-static void _update_fd_sets(node_t node){
-	FD_ZERO(&(node->read_fds));
-	FD_SET(STDIN, &(node->read_fds));
+static void _update_fd_sets(ip_node_t ip_node){
+	FD_ZERO(&(ip_node->read_fds));
+	FD_SET(STDIN, &(ip_node->read_fds));
 	
 	int i;
 	link_interface_t interface;
-	for(i=0;i<node->num_interfaces;i++){
-		interface = node->interfaces[i];
+	for(i=0;i<ip_node->num_interfaces;i++){
+		interface = ip_node->interfaces[i];
 		if(link_interface_is_up(interface))
-			FD_SET(link_interface_get_socket(interface), &(node->read_fds));
+			FD_SET(link_interface_get_socket(interface), &(ip_node->read_fds));
 	}
 }
