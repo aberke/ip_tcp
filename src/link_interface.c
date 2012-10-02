@@ -22,10 +22,10 @@
 struct link_interface{ 
 	int sfd; // socket file descriptor on which listening/sending
 	int up_down_boolean;  //1 for up, 0 for down
-	struct sockaddr_in remote; //contains the remote IP address and port for sending
+	struct sockaddr remote; //contains the remote IP address and port for sending
 	
-	struct in_addr local_virt_ip;
-	struct in_addr remote_virt_ip;
+	uint32_t local_virt_ip;
+	uint32_t remote_virt_ip;
 };
 
 // helper to link_interface_create
@@ -66,20 +66,26 @@ link_interface_t link_interface_create(link_t *link){
 		//failed
 		return NULL;
 	}
-	link_interface_t l_i = (struct link_interface *)malloc(sizeof(struct link_interface));
-	
-	struct sockaddr_in remoteaddr;	
-	bzero(&remoteaddr,sizeof(remoteaddr));
-   	remoteaddr.sin_family = AF_INET;
-   	remoteaddr.sin_addr.s_addr=inet_addr(link->remote_phys_host);
-   	remoteaddr.sin_port=htons(link->remote_phys_port);
+	// get address info for remote interface
+	struct addrinfo hints, *addrinfo;
+	memset(&hints,0,sizeof hints);  //make struct empty
+	hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
+    
+    if (getaddrinfo(link->remote_phys_host, remote_port, &hints, &addrinfo) != 0){
+		perror("Error in getaddrinfo");
+		return NULL;
+    }
+    link_interface_t l_i = (struct link_interface *)malloc(sizeof(struct link_interface));
 	
 	l_i->sfd = socket_fd;
 	l_i->up_down_boolean = 1; //link_interface starts out up
-	l_i->remote = remoteaddr; //contains the remote IP address and port 
+	l_i->remote = *(addrinfo->ai_addr); //contains the remote IP address and port 
+	freeaddrinfo(addrinfo); // free the linked-list
 
-	l_i->local_virt_ip = (struct in_addr)link->local_virt_ip;
-	l_i->remote_virt_ip = (struct in_addr)link->remote_virt_ip;
+	l_i->local_virt_ip = (link->local_virt_ip).s_addr;
+	l_i->remote_virt_ip = (link->remote_virt_ip).s_addr;
 	
 	return l_i;
 }
@@ -87,15 +93,29 @@ void link_interface_destroy(link_interface_t interface){
 	close(interface->sfd);
 	free(interface);
 }
-
-
 // sends packet using given link_interface
 // data is a packet constructed by node.c-- wraps udp protocol around this ip packet
+// data_len = sizeof data
 // returns 1 on success, -1 on error/failure
-int send_packet(link_interface_t interface, void* data){
-
-	return 1;
+int send_packet(link_interface_t li, void* data, int data_len){
+	int socket_fd = li->sfd;
+	struct sockaddr remoteaddr = li->remote;
+	socklen_t size = sizeof(remoteaddr);
+	int sent, bytes_sent;
+	sent = sendto(socket_fd, data, data_len, 0, (struct sockaddr*)&remoteaddr, size);
+	bytes_sent = sent;
+	while(bytes_sent < data_len){
+		if(sent < 0){
+			// interface needs to go down
+			
+			return sent;
+		}
+    	sent = sendto(socket_fd, data+bytes_sent, data_len-bytes_sent, 0, (struct sockaddr*)&remoteaddr, size);
+		bytes_sent = bytes_sent + sent;
+	}
+	return bytes_sent;
 }
+
 
 // returns ip packet or null
 void* read_packet(link_interface_t l_i){
@@ -127,11 +147,11 @@ int get_sfd(link_interface_t l_i){
 	return l_i->sfd;
 }
 // returns local_virt_ip
-struct in_addr get_local_virt_ip(link_interface_t l_i){
+uint32_t get_local_virt_ip(link_interface_t l_i){
 	return l_i->local_virt_ip;
 }
 //returns remote_virt_ip
-struct in_addr get_remote_virt_ip(link_interface_t l_i){
+uint32_t get_remote_virt_ip(link_interface_t l_i){
 	return l_i->remote_virt_ip;
 }
 
