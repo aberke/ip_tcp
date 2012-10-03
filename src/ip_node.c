@@ -276,7 +276,14 @@ static void _update_select_list(ip_node_t ip_node){
 }
 
 /* _handle_user_command does exactly what it says. Note: this is only called 
-   if reading from STDIN won't block, so just do it already. */
+   if reading from STDIN won't block, so just do it already. 
+
+	RECOGNIZED COMMANDS:
+		- interfaces : print out all interfaces
+		- routes     : print out routes to known destination
+		- quit/q     : stop everything
+
+*/
 
 static void _handle_user_command(ip_node_t ip_node){
 	char* buffer = (char*) malloc(sizeof(char)*BUFFER_SIZE);
@@ -290,6 +297,9 @@ static void _handle_user_command(ip_node_t ip_node){
 	else if(!strcmp(buffer, "interfaces"))
 		ip_node_print_interfaces(ip_node);
 
+	else if(!strcmp(buffer, "routes"))
+		routing_table_print(ip_node->routing_table);
+
 	else
 		printf("Received unrecognized input from user: %s\n", buffer); 
 	
@@ -300,6 +310,17 @@ static void _handle_user_command(ip_node_t ip_node){
    of the system (and not the implementation of the link_interface). This will be 
    done by linking to a dummy link_interface file that provides the same methods */
 static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
-	puts("Handling selected."); 
-}
+	char* packet_buffer = (char*)malloc(sizeof(char)*IP_PACKET_MAX_SIZE);
+	int read;
+	if((read = link_interface_read_packet(interface, packet_buffer, IP_PACKET_MAX_SIZE-1)) < 0)
+		puts("Error occurred. What should we do? Currently nothing.");
+	else{
+		packet_buffer[read]= '\0';
+		printf("Received: %s\n", packet_buffer);
+	}
 
+	puts("done."); 
+	
+	//// clean up
+	free(packet_buffer);
+}
