@@ -105,9 +105,13 @@ void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct rout
 }
 
 void routing_table_print(routing_table_t rt){
-	routing_entry_t info,tmp;
-	HASH_ITER(hh, rt->route_hash, info, tmp){
-		printf("route entry: <address:%d> <cost:%d> <next-hop:%d>\n", info->address, info->cost, info->next_hop);
+	if(HASH_COUNT(rt->route_hash) == 0)
+		printf("[ no routes known ]\n");
+	else{
+		routing_entry_t info,tmp;
+		HASH_ITER(hh, rt->route_hash, info, tmp){
+			printf("route entry: <address:%d> <cost:%d> <next-hop:%d>\n", info->address, info->cost, info->next_hop);
+		}
 	}
 }
 
