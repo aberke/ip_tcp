@@ -34,7 +34,7 @@ int link_interface_bind_socket(char *localhost, char *localport){
 	int status, sfd;
 	struct addrinfo hints, *addrinfo;
 	memset(&hints,0,sizeof hints);  //make struct empty
-	hints.ai_family = AF_UNSPEC;
+	hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
     
@@ -69,7 +69,7 @@ link_interface_t link_interface_create(link_t *link){
 	// get address info for remote interface
 	struct addrinfo hints, *addrinfo;
 	memset(&hints,0,sizeof hints);  //make struct empty
-	hints.ai_family = AF_UNSPEC;
+	hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
     
