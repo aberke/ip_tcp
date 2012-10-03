@@ -2,7 +2,6 @@
 
 /* Alex needs: */
 #include <netinet/ip.h>
-#include "util/ipsum.h"
 /***************/
 
 #include "ip_node.h"

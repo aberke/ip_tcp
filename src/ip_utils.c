@@ -6,7 +6,7 @@
 #include <inttypes.h>
 
 #include "ip_utils.h"
-#include "ipsum.h"
+#include "util/ipsum.h"
 
 #define RIP_DATA 200  
 #define TEST_DATA 0  
@@ -39,11 +39,12 @@ int ip_check_valid_packet(char* buffer, int bytes_read){
 	struct ip *ip_header = (struct ip *)header;
 	//run checksum
 	checksum = ip_header->ip_sum;
-	if(checksum != ip_sum(header, sizeof(struct ip)){
+	if(checksum != ip_sum(header, sizeof(struct ip))){
 		puts("Packet ip_sum != actually checksum");
 		return -1;
 	}
 	//make sure as long as its supposed to be
+	u_short ip_len;
 	ip_len = ip_header->ip_len;
 	if(bytes_read < ip_len){
 		//didn't read in entire packet -- error
