@@ -1,14 +1,4 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-#include <inttypes.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netdb.h>
-#include <unistd.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
+
 
 #include "util/list.h"
 #include "util/parselinks.h"
@@ -22,6 +12,7 @@
 struct link_interface{ 
 	int sfd; // socket file descriptor on which listening/sending
 	int up_down_boolean;  //1 for up, 0 for down
+	struct sockaddr local;
 	struct sockaddr remote; //contains the remote IP address and port for sending
 	
 	uint32_t local_virt_ip;
@@ -30,27 +21,16 @@ struct link_interface{
 
 // helper to link_interface_create
 // creates and binds socket and returns socket file descriptor sfd
-int link_interface_bind_socket(char *localhost, char *localport){
-	int status, sfd;
-	struct addrinfo hints, *addrinfo;
-	memset(&hints,0,sizeof hints);  //make struct empty
-	hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
-    
-    if ((status = getaddrinfo(localhost, localport, &hints, &addrinfo)) != 0){
-		fprintf(stderr, "Error in getaddrinfo: %s\n", gai_strerror(status));
-		return -1;
-    }
-    if((sfd = socket(addrinfo->ai_family, addrinfo->ai_socktype, addrinfo->ai_protocol))<0){
+int link_interface_bind_socket(char *localhost, char *localport, struct addrinfo* local_addrinfo){
+	int sfd;
+    if((sfd = socket(local_addrinfo->ai_family, local_addrinfo->ai_socktype, local_addrinfo->ai_protocol))<0){
 		perror("Error: Failed to create socket\n");
         return -1;
     }
-    if(bind(sfd, addrinfo->ai_addr, addrinfo->ai_addrlen) < 0){
+    if(bind(sfd, local_addrinfo->ai_addr, local_addrinfo->ai_addrlen) < 0){
     	perror("Error: Failed to bind socket");
     	return -1;
     }
-    freeaddrinfo(addrinfo); // free the linked-list
     return sfd;
 }
 link_interface_t link_interface_create(link_t *link){
@@ -61,28 +41,37 @@ link_interface_t link_interface_create(link_t *link){
 	char remote_port[32];
 	sprintf (remote_port, "%u", link->remote_phys_port);
 	
-	// create and bind socket_fd	
-	if((socket_fd = link_interface_bind_socket(link->local_phys_host, local_port)) < 0){
-		//failed
-		return NULL;
-	}
+	struct addrinfo hints, *local_addrinfo, *remote_addrinfo;
+
 	// get address info for remote interface
-	struct addrinfo hints, *addrinfo;
 	memset(&hints,0,sizeof hints);  //make struct empty
-	hints.ai_family = AF_UNSPEC;
+	hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
     hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
-    
-    if (getaddrinfo(link->remote_phys_host, remote_port, &hints, &addrinfo) != 0){
+    // fill local_addrinfo
+    if (getaddrinfo(link->local_phys_host, local_port, &hints, &local_addrinfo) != 0){
+		perror("Error in getaddrinfo");
+		return NULL;
+    }  
+    // fill  remote_addrinfo
+    if (getaddrinfo(link->remote_phys_host, remote_port, &hints, &remote_addrinfo) != 0){
 		perror("Error in getaddrinfo");
 		return NULL;
     }
+    // create and bind socket_fd	
+	if((socket_fd = link_interface_bind_socket(link->local_phys_host, local_port, local_addrinfo)) < 0){
+		//failed
+		return NULL;
+	}
+	// create link_interface
     link_interface_t l_i = (struct link_interface *)malloc(sizeof(struct link_interface));
 	
 	l_i->sfd = socket_fd;
 	l_i->up_down_boolean = 1; //link_interface starts out up
-	l_i->remote = *(addrinfo->ai_addr); //contains the remote IP address and port 
-	freeaddrinfo(addrinfo); // free the linked-list
+	l_i->remote = *(remote_addrinfo->ai_addr); //contains the remote IP address and port 
+	l_i->local = *(local_addrinfo->ai_addr);
+	freeaddrinfo(local_addrinfo);
+	freeaddrinfo(remote_addrinfo); // free the linked-list
 
 	l_i->local_virt_ip = (link->local_virt_ip).s_addr;
 	l_i->remote_virt_ip = (link->remote_virt_ip).s_addr;
@@ -237,11 +226,11 @@ void link_interface_print(link_interface_t l_i){
 	local.s_addr = htonl(l_i->local_virt_ip); 
 	remote.s_addr = ntohl(l_i->remote_virt_ip);
 
-	printf("Interface: <up: %s> <socket: %d> %s:%s %s %s:%d %s\n", 
+	printf("Interface: <up: %s> <socket: %d> %s:%d %s %s:%d %s\n", 
 		(l_i->up_down_boolean ? "true" : "false"),
 		l_i->sfd,
 		"localhost",
-		"<we should remember the local port>",
+		ntohs((*(struct sockaddr_in*)(&l_i->local)).sin_port),
 		inet_ntop(AF_INET, &local, local_buffer, INET_ADDRSTRLEN),
 		"localhost",
 		ntohs((*(struct sockaddr_in*)(&l_i->remote)).sin_port),
