@@ -53,6 +53,30 @@ node_start(node_t node){
 				
 		
 }
+def handle_packet(node_t node, link_interface li):
+	char buffer[]
+	bytes_read = link_interface_read_packet(li, buffer)
+	int packet_size = ip_check_valid_packet(buffer) //ALEX WRITE
+		if(packet_size < 0):
+			discard
+			
+	uint32 dest_addr = ip_get_dest_addr(buffer) //ALEX WRITE
+	if(!(dest_addr in our hashmap of local ips)):
+		get next hop from forwarding table
+		link_interface = hashmap_getvalue(next hop);
+		link_interface_send_packet(buffer);
+	else:
+		char packet_unwrapped[];
+		int type = ip_unwrap_packet(buffer, packet_unwrapped);
+		if(type == RIP){
+			struct routing_info = ip_parse_routing_info(packet_unwrapped);
+			update_routing_table(routing_table_t rt, forwarding_table_t ft, struct routing_info* info, link_interface_get_virt_ip(li))
+		}
+		else{
+			printf("Message Received: %s\n", packet_unwrapped);
+		}
+}
+
 def query_interfaces(node_t node){
 	for(i = 0; i<num_interfaces; i++):
 		check if each interface up/down
