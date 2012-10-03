@@ -2,6 +2,17 @@
 #ifndef __LINK_INTERFACE__
 #define __LINK_INTERFACE__
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <inttypes.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <unistd.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
 #include "util/parselinks.h"
 
 #define INTERFACE_SUCCESS 0
@@ -22,7 +33,7 @@ void link_interface_destroy(link_interface_t interface);
 
 // helper to link_interface_create
 // creates and binds socket and returns socket file descriptor sfd
-int link_interface_bind_socket(char* localhost, char* localport);
+int link_interface_bind_socket(char* localhost, char* localport, struct addrinfo* local_addrinfo);
 
 // sends packet using given link_interface
 // returns 1 on success, -1 on error/failure

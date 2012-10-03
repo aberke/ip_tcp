@@ -37,7 +37,7 @@ def handler(signum, frame):
 
 signal.signal(signal.SIGINT, handler)
 
-sfd = socket.socket(socket.AF_INET6, socket.SOCK_DGRAM)
+sfd = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sfd.bind((UDP_LOCAL_HOST, UDP_LOCAL_PORT))
 
 while True:
