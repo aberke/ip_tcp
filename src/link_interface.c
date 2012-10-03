@@ -116,21 +116,24 @@ int link_interface_send_packet(link_interface_t li, void* data, int data_len){
 	}
 	return bytes_sent;
 }
+
 // helper to read_packet:
 // checks that incoming packet from expected remote address
 // Returns -1 if given addresses don't match, returns 1 otherwise
 int compare_remote_addr(struct sockaddr* a1, struct sockaddr* a2){
 	if(a1->sa_family != a2->sa_family){
-		printf("Incoming packet from different type of sa_family than expected -- discarding.\n");
-		return -1;
+		//// I commented this out because I think we should handle this further up. 
+		//printf("Incoming packet from different type of sa_family than expected -- discarding.\n");
+		return INTERFACE_ERROR_WRONG_ADDRESS;
 	}
 	if(a1->sa_family == AF_INET){ 
 		//IPV4  -- cast to sockaddr_in to handle IPV4
 		struct sockaddr_in *b1 = (struct sockaddr_in *)a1;
 		struct sockaddr_in *b2 = (struct sockaddr_in *)a2;
 		if((b1->sin_port != b2->sin_port)||(b1->sin_addr.s_addr != b2->sin_addr.s_addr)){
-			printf("Incoming ipv4 packet from different address -- discarding.\n");
-			return -1;
+			//// I commented this out so we could handle it higher up
+			//printf("Incoming ipv4 packet from different address -- discarding.\n");
+			return INTERFACE_ERROR_WRONG_ADDRESS;
 			}
 		}
 	else{ 
@@ -138,13 +141,33 @@ int compare_remote_addr(struct sockaddr* a1, struct sockaddr* a2){
 		struct sockaddr_in6 *b1 = (struct sockaddr_in6 *)a1;
 		struct sockaddr_in6 *b2 = (struct sockaddr_in6 *)a2;
 		if((b1->sin6_port != b2->sin6_port)||(b1->sin6_addr.s6_addr != b2->sin6_addr.s6_addr)){
-			printf("Incoming packet from different address -- discarding.\n");
-			return -1;
+			char* remote_addr_exp = malloc(sizeof(char)*INET6_ADDRSTRLEN);
+			char* remote_addr_got = malloc(sizeof(char)*INET6_ADDRSTRLEN);
+			printf("Expected remote: %s:%d, got: %s:%d\n", 
+				inet_ntop(AF_INET6, b2->sin6_addr.s6_addr, remote_addr_exp, INET6_ADDRSTRLEN),
+				ntohs(b2->sin6_port),
+				inet_ntop(AF_INET6, b1->sin6_addr.s6_addr, remote_addr_got, INET6_ADDRSTRLEN),			
+				ntohs(b1->sin6_port));
+				
+			free(remote_addr_exp);		
+			free(remote_addr_got);
+			
+			//// I commented this out so we could handle it higher up
+			//printf("Incoming packet from different address -- discarding.\n");
+			return INTERFACE_ERROR_WRONG_ADDRESS;
 		}
 	}
 	// addresses match
-	return 1;
+	return INTERFACE_SUCCESS;
 }
+
+///// ADDED BY NEIL
+// I think we should add different error messages for different things. 
+// for instance:
+//     INTERFACE_ERROR_WRONG_ADDRESS wrong address
+//     INTERFACE_ERROR_FATAL if you're shutting down the interface.
+//     ... 
+
 // reads into buffer
 // returns bytes_read on success, -1 in error
 int link_interface_read_packet(link_interface_t l_i, char* buffer, int buffer_len){
@@ -165,13 +188,16 @@ int link_interface_read_packet(link_interface_t l_i, char* buffer, int buffer_le
 		else{
 			printf("Error reading from connection to %u.\n", l_i->remote_virt_ip);
 		}
-		return -1;
+		return INTERFACE_ERROR_FATAL;
 	}
+
 	// else: check that remote_addr port and host match info -- if not, discard it
-	if(compare_remote_addr(&remote_addr_in, &remote_addr) < 0){
+	if(DISCARD_ON_WRONG_ADDRESS &&
+		 compare_remote_addr(&remote_addr_in, &remote_addr) == INTERFACE_ERROR_WRONG_ADDRESS){
 		//addresses don't match -- discard packet
-		return -1;
+		return INTERFACE_ERROR_WRONG_ADDRESS;
 	}
+
 	//deal with packet --return it
 	return bytes_read;
 }
@@ -211,9 +237,13 @@ void link_interface_print(link_interface_t l_i){
 	local.s_addr = htonl(l_i->local_virt_ip); 
 	remote.s_addr = ntohl(l_i->remote_virt_ip);
 
-	printf("Interface: <socket: %d> <up: %s> <local-vip: %s> <remove-vip: %s>\n", 
-		l_i->sfd,
+	printf("Interface: <up: %s> <socket: %d> %s:%s %s %s:%d %s\n", 
 		(l_i->up_down_boolean ? "true" : "false"),
+		l_i->sfd,
+		"localhost",
+		"<we should remember the local port>",
 		inet_ntop(AF_INET, &local, local_buffer, INET_ADDRSTRLEN),
+		"localhost",
+		ntohs((*(struct sockaddr_in*)(&l_i->remote)).sin_port),
 		inet_ntop(AF_INET, &remote, remote_buffer, INET_ADDRSTRLEN));
 }

@@ -4,10 +4,15 @@
 
 #include "util/parselinks.h"
 
+#define INTERFACE_SUCCESS 0
+#define INTERFACE_ERROR_WRONG_ADDRESS -1
+#define INTERFACE_ERROR_FATAL -2
 
 #define IP_PACKET_MAX_SIZE 64000
 #define UDP_PACKET_MAX_SIZE 1400
 
+/// Some configuration
+#define DISCARD_ON_WRONG_ADDRESS 1
 
 typedef struct link_interface * link_interface_t;
 
