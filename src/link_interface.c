@@ -204,4 +204,16 @@ int link_interface_interface_up_down(link_interface_t l_i){
 	return l_i->up_down_boolean;
 }
 
+//// added by neil
+void link_interface_print(link_interface_t l_i){
+	char local_buffer[INET_ADDRSTRLEN], remote_buffer[INET_ADDRSTRLEN];
+	struct in_addr local, remote;
+	local.s_addr = htonl(l_i->local_virt_ip); 
+	remote.s_addr = ntohl(l_i->remote_virt_ip);
 
+	printf("Interface: <socket: %d> <up: %s> <local-vip: %s> <remove-vip: %s>\n", 
+		l_i->sfd,
+		(l_i->up_down_boolean ? "true" : "false"),
+		inet_ntop(AF_INET, &local, local_buffer, INET_ADDRSTRLEN),
+		inet_ntop(AF_INET, &remote, remote_buffer, INET_ADDRSTRLEN));
+}
