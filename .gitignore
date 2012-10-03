@@ -24,3 +24,9 @@
 
 #testing files
 testing
+
+# python .pyc files
+*.pyc
+
+# our node binary
+node
