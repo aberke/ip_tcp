@@ -210,9 +210,9 @@ void parse_arguments(int argc,char** argv){
 int main(int argc, char** argv){
 	parse_arguments(argc,argv);	
 
-	TEST(test_util_string);
+	//TEST(test_util_string);
 
-	//TEST(test_small);
+	TEST(test_small);
 	//TEST(test_basic_routing);
 
 	/* RETURN */

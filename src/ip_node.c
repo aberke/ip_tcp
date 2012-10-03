@@ -46,18 +46,22 @@ static void _handle_user_command(ip_node_t node);
    and they are named accordingly */
 
 struct interface_socket_keyed{
-	struct link_interface* interface;
+	link_interface_t interface;
 	int socket;
 
 	UT_hash_handle hh;
 };
 
 struct interface_ip_keyed{
-	struct link_interface* interface;
-	int ip;
+	link_interface_t interface;
+	uint32_t ip;
 
 	UT_hash_handle hh;
 };
+
+typedef struct interface_socket_keyed* interface_socket_keyed_t;
+typedef struct interface_ip_keyed* interface_ip_keyed_t;
+
 
 /* The ip_node has a forwarding_table, a routing_table and then the number of
    interfaces that it owns, an array to keep them in, and then a hashmap that maps
@@ -70,14 +74,14 @@ struct ip_node{
 	routing_table_t routing_table;
 	int num_interfaces;
 	link_interface_t* interfaces;
-	struct interface_socket_keyed *socketToInterface;
-	struct interface_ip_keyed *addressToInterface;
+	interface_socket_keyed_t socketToInterface;
+	interface_ip_keyed_t addressToInterface;
+
 	fd_set read_fds;
 	int highsock;
-};	
 
-typedef struct interface_socket_keyed* interface_socket_keyed_t;
-typedef struct interface_ip_keyed* interface_ip_keyed_t;
+	int running; 
+};	
 
 /* CTORS/DTORS */
 
@@ -121,12 +125,17 @@ ip_node_t ip_node_init(list_t* links){
 	ip_node->forwarding_table = forwarding_table_init();
 	ip_node->routing_table = routing_table_init();
 	ip_node->num_interfaces = links->length;	
+	
 	ip_node->interfaces = (link_interface_t*)malloc(sizeof(link_interface_t)*(ip_node->num_interfaces));
+	//ip_node->socketToInterface = NULL;
+	//ip_node->addressToInterface = NULL;
 	
 	link_interface_t interface; 
 	link_t* link;
 	node_t* curr;
-	
+	interface_socket_keyed_t socket_keyed;
+	interface_ip_keyed_t ip_keyed;	
+
 	/* keep track of the index in order to populate
        the array of interfaces */
 	int index=0;
@@ -134,17 +143,29 @@ ip_node_t ip_node_init(list_t* links){
 		link = (link_t*)curr->data;
 		if((interface = link_interface_create(link)) == NULL){
 			//todo: add error handing for when socket doesn't bind
+			puts("link_interface didn't init properly");
 		}
 		ip_node->interfaces[index] = interface;
-
+	
 		/* Now add each interface to the hashmaps. In order to do this we use the macro provided 
 		   by uthash which takes in the hash-map (just an array of structs that should be initialized
 	       to null), the name of the field that will be used as the key, and then the struct that 
            contains the key/info */
-		HASH_ADD_INT(ip_node->socketToInterface, socket, interface_socket_keyed_init(interface));
-		HASH_ADD_INT(ip_node->addressToInterface, ip, interface_ip_keyed_init(interface));
+		
+		socket_keyed = interface_socket_keyed_init(interface);
+		ip_keyed     = interface_ip_keyed_init(interface);
+
+		HASH_ADD_INT(ip_node->socketToInterface, socket, socket_keyed);
+		HASH_ADD_INT(ip_node->addressToInterface, ip, ip_keyed);
+
 		index++;
 	}	 
+
+	//// you're still running right? right
+	ip_node->running = 1;
+
+	//// clean up -- free the list of links and free all of the links
+	free_links(links);
 
 	return ip_node;
 }
@@ -158,9 +179,11 @@ void ip_node_destroy(ip_node_t* ip_node){
 	//// this will NOT destroy the interfaces
 	interface_socket_keyed_t socket_keyed, tmp_sock_keyed;
 	HASH_ITER(hh, (*ip_node)->socketToInterface, socket_keyed, tmp_sock_keyed){
+		puts("destroying..."); 
 		HASH_DEL((*ip_node)->socketToInterface, socket_keyed);
 		interface_socket_keyed_destroy(&socket_keyed);
 	}
+
 	//// ditto (see above)
 	interface_ip_keyed_t ip_keyed, tmp_ip_keyed;
 	HASH_ITER(hh, (*ip_node)->addressToInterface, ip_keyed, tmp_ip_keyed){
@@ -173,6 +196,7 @@ void ip_node_destroy(ip_node_t* ip_node){
 	for(i=0;i<(*ip_node)->num_interfaces;i++){
 		link_interface_destroy((*ip_node)->interfaces[i]);
 	}		
+	free((*ip_node)->interfaces);
 
 	//// basic clean up
 	free(*ip_node);
@@ -180,6 +204,16 @@ void ip_node_destroy(ip_node_t* ip_node){
 
 	//// and we're done!
 }
+
+///// PRINTERS
+void ip_node_print_interfaces(ip_node_t ip_node){
+	int i;
+	for(i=0;i<ip_node->num_interfaces;i++){
+		link_interface_print(ip_node->interfaces[i]);
+	}
+}
+
+
 
 /* ip_node_start will take just the ip_node as a parameter and will start
    up the whole process of listening to all the interfaces, and handling all
@@ -192,7 +226,7 @@ void ip_node_start(ip_node_t ip_node){
 	tv.tv_sec = SELECT_TIMEOUT;
 	tv.tv_usec = 0;	
 
-	while(1){
+	while(ip_node->running){
 		//// first update the list (rebuild it)
 		_update_select_list(ip_node);
 
@@ -211,13 +245,15 @@ void ip_node_start(ip_node_t ip_node){
    of the interface sockets by iterating over the hashmap of sockets to interfaces. */
 static void _handle_reading_sockets(ip_node_t ip_node){
 	//// if there's incoming data from the user, pass off to _handle_user_command
-	if(FD_ISSET(STDIN, &(ip_node->read_fds)))
+	if(FD_ISSET(STDIN, &(ip_node->read_fds))){
 		_handle_user_command(ip_node);
+	}
 
 	struct interface_socket_keyed *socket_keyed, *tmp;
 	HASH_ITER(hh, ip_node->socketToInterface, socket_keyed, tmp){
-		if(FD_ISSET(socket_keyed->socket, &(ip_node->read_fds)))
-			_handle_selected(ip_node, socket_keyed->interface);		
+		if(FD_ISSET(socket_keyed->socket, &(ip_node->read_fds))){
+			_handle_selected(ip_node, socket_keyed->interface);	
+		}	
 	}
 }
 
@@ -243,11 +279,21 @@ static void _update_select_list(ip_node_t ip_node){
 /* _handle_user_command does exactly what it says. Note: this is only called 
    if reading from STDIN won't block, so just do it already. */
 
-static void _handle_user_command(ip_node_t node){
+static void _handle_user_command(ip_node_t ip_node){
 	char* buffer = (char*) malloc(sizeof(char)*BUFFER_SIZE);
 	fgets(buffer, BUFFER_SIZE-1, stdin);
 	rtrim(buffer, "\n");
-	printf("Received from user: %s\n", buffer);
+	
+	//// handle the commands
+	if(!strcmp(buffer, "quit") || !strcmp(buffer, "q"))
+		ip_node->running = 0;
+	
+	else if(!strcmp(buffer, "interfaces"))
+		ip_node_print_interfaces(ip_node);
+
+	else
+		printf("Received unrecognized input from user: %s\n", buffer); 
+	
 	free(buffer); 
 }
 

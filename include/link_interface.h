@@ -45,4 +45,7 @@ void link_interface_bringup(link_interface_t l_i);
 // returns 0 for interface down, 1 for interface up
 int interface_up_down(link_interface_t l_i);
 
+// prints out info
+void link_interface_print(link_interface_t l_i);	
+
 #endif //__LINK_INTERFACE__

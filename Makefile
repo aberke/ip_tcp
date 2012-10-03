@@ -2,7 +2,7 @@ EXEC_FILE=node
 SRC_DIR=src
 BUILD_DIR=build
 INC_DIR=include
-DEFAULT_ARGS=
+DEFAULT_ARGS=test/helper_files/A.lnx
 
 ## uthash
 UTHASH_DIR=lib/uthash-1.9.6
@@ -83,3 +83,5 @@ rebuild: clean build
 run: 
 	@./$(EXEC_FILE) $(DEFAULT_ARGS)
 
+valgrind: rebuild
+	valgrind --leak-check=full ./$(EXEC_FILE) $(DEFAULT_ARGS)
