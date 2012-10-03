@@ -146,34 +146,34 @@ int compare_remote_addr(struct sockaddr* a1, struct sockaddr* a2){
 	return 1;
 }
 // reads into buffer
-// returns ip packet or null
-void* link_interface_read_packet(link_interface_t l_i, char* buffer, int buffer_len){
-	int status, sfd;
+// returns bytes_read on success, -1 in error
+int link_interface_read_packet(link_interface_t l_i, char* buffer, int buffer_len){
+	int bytes_read, sfd;
 	sfd = link_interface_get_sfd(l_i);
 	struct sockaddr remote_addr_in, remote_addr;
 	remote_addr = l_i->remote;
 	socklen_t size = sizeof(remote_addr_in);
 	//read in packet
-	status = recvfrom(sfd, buffer, buffer_len, 0, (struct sockaddr*)&remote_addr_in, &size);
+	bytes_read = recvfrom(sfd, buffer, buffer_len, 0, (struct sockaddr*)&remote_addr_in, &size);
 	//handle packet in buffer
-	if(status <= 0){
+	if(bytes_read <= 0){
 		//link shut down:
 		link_interface_bringdown(l_i);
-		if(status == 0){
+		if(bytes_read == 0){
 			printf("Remote connection %u closed.\n", l_i->remote_virt_ip);
 		}
 		else{
 			printf("Error reading from connection to %u.\n", l_i->remote_virt_ip);
 		}
-		return NULL;
+		return -1;
 	}
 	// else: check that remote_addr port and host match info -- if not, discard it
 	if(compare_remote_addr(&remote_addr_in, &remote_addr) < 0){
 		//addresses don't match -- discard packet
-		return NULL;
+		return -1;
 	}
 	//deal with packet --return it
-	return buffer;
+	return bytes_read;
 }
 
 // returns sfd	
