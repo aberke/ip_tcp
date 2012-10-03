@@ -4,8 +4,8 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-#include "parselinks.h"
-#include "list.h"
+#include "util/parselinks.h"
+#include "util/list.h"
 
 int parse_triple(FILE *f, char phys_host[HOST_MAX_LENGTH], uint16_t *phys_port,
                  struct in_addr *virt_ip)

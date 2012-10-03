@@ -3,6 +3,7 @@
 #include <string.h>
 #include <assert.h>
 
+#include "util/utils.h"
 #include "routing_table.h"
 
 #define ANSI_COLOR_RED     "\x1b[31m"
@@ -18,6 +19,20 @@
 #define OPTIONS "v"
 #define DEFAULT_VERBOSE 0
 #define DEFAULT_COMMAND 0
+
+#define TEST_STR_EQ(e1,e2)													\
+do{																			\
+	printf("%-50s == %-20s\t\t", (#e1), (#e2));								\
+	if(!strcmp(e1,e2)) printf("%sGood%s\n", ANSI_COLOR_GREEN, ANSI_COLOR_RESET);\
+	else {																	\
+		printf("%sBad\n", ANSI_COLOR_RED);									\
+		printf("RESULTS:\n");												\
+		printf("%s = %s\n", (#e1), e1);										\
+		printf("\t\t\t%s = %s\n", (#e2), e2);								\
+		printf("%s", ANSI_COLOR_RESET);										\
+	}																		\
+}																			\
+while(0)
 
 #define TEST_EQ(e1,e2)													\
 do{																		\
@@ -72,6 +87,14 @@ void debug_update_routing_table(routing_table_t rt, forwarding_table_t ft, struc
 		forwarding_table_print(ft);
 		puts("");
 	}
+}
+
+//// Testing for utils
+void test_util_string(){
+	char* x = malloc(sizeof(char)*BUFFER_SIZE);
+	strcpy(x, "Hello there someoneee");
+	rtrim(x, "e"); 
+	TEST_STR_EQ(x, "Hello there someon");	
 }
 
 void test_small(){
@@ -187,8 +210,10 @@ void parse_arguments(int argc,char** argv){
 int main(int argc, char** argv){
 	parse_arguments(argc,argv);	
 
-	TEST(test_small);
-	TEST(test_basic_routing);
+	TEST(test_util_string);
+
+	//TEST(test_small);
+	//TEST(test_basic_routing);
 
 	/* RETURN */
 	return(0);

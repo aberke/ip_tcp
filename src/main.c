@@ -8,7 +8,7 @@
 int main(int argc, char *argv[]){
 	// check arguments
 	if (argc != 2){
-		printf("usage: ./node linkfile.lnx");
+		printf("usage: ./node linkfile.lnx\n");
 		return 0;
 	}
 	// get linked-list of link_t's
@@ -21,7 +21,7 @@ int main(int argc, char *argv[]){
 	//free_links(linkedlist);
 
 	ip_node_start(ip_node);
-	
 	ip_node_destroy(&ip_node);
+
 	return 0;
-	}
+}

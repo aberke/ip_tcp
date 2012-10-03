@@ -5,12 +5,24 @@
 #include "util/ipsum.h"
 /***************/
 
-#include "uthash.h"
-#include "parselinks.h"
-#include "list.h"
-#include "utils.h"
+#include "ip_node.h"
+#include "forwarding_table.h"
+#include "routing_table.h"
 #include "link_interface.h"
+#include "util/parselinks.h"
+#include "util/list.h"
+#include "util/utils.h"
 
+//// select
+#include <sys/types.h>
+#include <unistd.h>
+#include <stdio.h>
+
+//// hash-map 
+#include "uthash.h"
+
+
+//// some helpful static globals
 #define STDIN fileno(stdin)
 #define SELECT_TIMEOUT 1
 
@@ -22,6 +34,7 @@
 static void _update_select_list(ip_node_t node);
 static void _handle_selected(ip_node_t node, link_interface_t interface);
 static void _handle_reading_sockets(ip_node_t node);
+static void _handle_user_command(ip_node_t node);
 
 /* STRUCTS */
 
@@ -35,11 +48,15 @@ static void _handle_reading_sockets(ip_node_t node);
 struct interface_socket_keyed{
 	struct link_interface* interface;
 	int socket;
+
+	UT_hash_handle hh;
 };
 
 struct interface_ip_keyed{
 	struct link_interface* interface;
 	int ip;
+
+	UT_hash_handle hh;
 };
 
 /* The ip_node has a forwarding_table, a routing_table and then the number of
@@ -52,10 +69,9 @@ struct ip_node{
 	forwarding_table_t forwarding_table;
 	routing_table_t routing_table;
 	int num_interfaces;
-	struct link_interface* interfaces;
+	link_interface_t* interfaces;
 	struct interface_socket_keyed *socketToInterface;
 	struct interface_ip_keyed *addressToInterface;
-
 	fd_set read_fds;
 	int highsock;
 };	
@@ -68,14 +84,15 @@ typedef struct interface_ip_keyed* interface_ip_keyed_t;
 /* These are straightforward in the case of the keyed structs. Just store the interface
    and pull out the socket/ip_address */
 
-interface_socket_keyed interface_socket_keyed_init(link_interface_t interface){
+interface_socket_keyed_t interface_socket_keyed_init(link_interface_t interface){
 	interface_socket_keyed_t sock_keyed = malloc(sizeof(struct interface_socket_keyed));
-	sock_keyed->socket = link_interface_get_socket(interface);
+	sock_keyed->socket = link_interface_get_sfd(interface);
 	sock_keyed->interface = interface;
 	return sock_keyed;
 }
 
-void interface_socket_keyed_destroy(interfacce_socket_keyed_t* sock_keyed){
+//// DO NOT DESTROY THE INTERFACE
+void interface_socket_keyed_destroy(interface_socket_keyed_t* sock_keyed){
 	free(*sock_keyed);
 	*sock_keyed = NULL;
 }
@@ -83,10 +100,13 @@ void interface_socket_keyed_destroy(interfacce_socket_keyed_t* sock_keyed){
 
 interface_ip_keyed_t interface_ip_keyed_init(link_interface_t interface){
 	interface_ip_keyed_t ip_keyed = malloc(sizeof(struct interface_ip_keyed));
-	ip_keyed->ip = link_interface_get_ip(ip);
+	ip_keyed->ip = link_interface_get_local_virt_ip(interface);
 	ip_keyed->interface = interface;
+	
+	return ip_keyed;
 }
 
+//// DO NOT DESTROY THE INTERFACE
 void interface_ip_keyed_destroy(interface_ip_keyed_t* ip_keyed){
 	free(*ip_keyed);
 	*ip_keyed = NULL;
@@ -101,19 +121,17 @@ ip_node_t ip_node_init(list_t* links){
 	ip_node->forwarding_table = forwarding_table_init();
 	ip_node->routing_table = routing_table_init();
 	ip_node->num_interfaces = links->length;	
-	ip_node->interfaces = (struct link_interface*)malloc(sizeof(struct link_interface)((*ip_node)->num_interfaces));
+	ip_node->interfaces = (link_interface_t*)malloc(sizeof(link_interface_t)*(ip_node->num_interfaces));
 	
 	link_interface_t interface; 
-	link_t link;
-	int interfact_socket;
-	uint32_t interface_ip;
+	link_t* link;
 	node_t* curr;
 	
 	/* keep track of the index in order to populate
        the array of interfaces */
 	int index=0;
 	for(curr = links->head; curr != NULL; curr = curr->next){
-		link = (link_t)curr->data;
+		link = (link_t*)curr->data;
 		if((interface = link_interface_create(link)) == NULL){
 			//todo: add error handing for when socket doesn't bind
 		}
@@ -131,76 +149,37 @@ ip_node_t ip_node_init(list_t* links){
 	return ip_node;
 }
 
-/******************** ALEX's AREA ************************/
-
-/*KEEP IN MIND:
-"We ask you to design and implement an interface that allows an upper layer to register a handler
-for a given protocol number. We’ll leave its speciﬁcs up to you."
-*/
-
-/*"When IP packets arrive at their destination, if they aren’t RIP packets, you should
-simply print them out in a useful way."*/
-void handle_local_packet(link_interface_t li, void* packet, int packet_len){
-	//print packet nicely
-	// future use will be to hand packet to tcp
-}
-
-void handle_selected(link_interface_t li){
+void ip_node_destroy(ip_node_t* ip_node){
+	//// destroy forwarding/routing tables
+	forwarding_table_destroy(&((*ip_node)->forwarding_table));
+	routing_table_destroy(&((*ip_node)->routing_table));
 	
-	//must hand read_packet(link_interface, buffer, buffer_len) a buffer
-	char buffer[IP_PACKET_MAX_SIZE];
-	memset (buffer, 0, IP_MAX_SIZE);
-	int bytes_read;
-	bytes_read = read_packet(li, buffer, IP_PACKET_MAX_SIZE);
-	char unwrapped[bytes_read];
-	int protocol;
-	protocol = unwrap_ip_packet(buffer, bytes_read, unwrapped);
-
-}
-//write wrap_ip_packet //don't have to deal with fragmentation but make sure you don't send more than limit
-
-
-//write unwrap_ip_packet
-/* use:
-IP checksum calculation: ipsum.c ipsum.h. Use this function to calculate the checksum in
-the IP header for you.
-*/
-// int is type: RIP vs other  --return -1 if bad packet
-// fills unwrapped with unwrapped packet
-int unwrap_ip_packet(void* packet, int packet_len, char* unwrapped){
-	if(packet_len < sizeof(struct ip)){
-		//packet not large enough
-		puts("received packet with packet_len < sizeof(struct ip)");
-		return -1;
+	//// iterate through the hash maps and destroy all of the keys/values,
+	//// this will NOT destroy the interfaces
+	interface_socket_keyed_t socket_keyed, tmp_sock_keyed;
+	HASH_ITER(hh, (*ip_node)->socketToInterface, socket_keyed, tmp_sock_keyed){
+		HASH_DEL((*ip_node)->socketToInterface, socket_keyed);
+		interface_socket_keyed_destroy(&socket_keyed);
+	}
+	//// ditto (see above)
+	interface_ip_keyed_t ip_keyed, tmp_ip_keyed;
+	HASH_ITER(hh, (*ip_node)->addressToInterface, ip_keyed, tmp_ip_keyed){
+		HASH_DEL((*ip_node)->addressToInterface, ip_keyed);
+		interface_ip_keyed_destroy(&ip_keyed);
 	}
 
-	u_int header_length;
-	u_short ip_len, ip_sum;
-	u_char protocol;
-	struct  in_addr src_ip, dest_ip;
-	
-	char header[sizeof(struct ip)];
-	memcpy(header,  = packet;
-	
-	struct ip *ip_header = (struct ip *)packet;
-	ip_sum = ip_header->ip_sum;
-	if(ip_sum != ip_sum(header, sizeof)
-	
-	ip_len = ip_header->ip_len;
-	
-	char unwrapped[ip_len];
-	unwrapped = buffer[4*(ip_header->ip_hl)];
-	
-	
+	//// NOW destroy all the interfaces
+	int i;
+	for(i=0;i<(*ip_node)->num_interfaces;i++){
+		link_interface_destroy((*ip_node)->interfaces[i]);
+	}		
 
+	//// basic clean up
+	free(*ip_node);
+	*ip_node = NULL;
 
-	return 0;
+	//// and we're done!
 }
-
-
-
-
-/******************* END OF ALEX's AREA *************************/
 
 /* ip_node_start will take just the ip_node as a parameter and will start
    up the whole process of listening to all the interfaces, and handling all
@@ -230,15 +209,15 @@ void ip_node_start(ip_node_t ip_node){
    effect of a select call. This will get called only if there is a fd to
    read from. First check STDIN, and handle that command. Then check all 
    of the interface sockets by iterating over the hashmap of sockets to interfaces. */
-void _handle_reading_sockets(ip_node_t ip_node){
+static void _handle_reading_sockets(ip_node_t ip_node){
 	//// if there's incoming data from the user, pass off to _handle_user_command
 	if(FD_ISSET(STDIN, &(ip_node->read_fds)))
 		_handle_user_command(ip_node);
 
-	struct interface_socket_keyed socket_keyed, tmp;
+	struct interface_socket_keyed *socket_keyed, *tmp;
 	HASH_ITER(hh, ip_node->socketToInterface, socket_keyed, tmp){
-		if(FD_ISSET(socket_keyed.socket, &(ip_node->read_fds)))
-			_handle_selected(ip_node, socket_keyed.interface);		
+		if(FD_ISSET(socket_keyed->socket, &(ip_node->read_fds)))
+			_handle_selected(ip_node, socket_keyed->interface);		
 	}
 }
 
@@ -246,25 +225,36 @@ void _handle_reading_sockets(ip_node_t ip_node){
    to read from each of the interfaces. It checks that each interface
    is up before adding it (#DESIGN-DECISION) */ 
 
-void _update_select_list(ip_node_t ip_node){
-	FD_ZERO(&(ip_node->readfds));
-	FD_SET(STDIN, &(ip_node->readfds));
+static void _update_select_list(ip_node_t ip_node){
+	FD_ZERO(&(ip_node->read_fds));
+	FD_SET(STDIN, &(ip_node->read_fds));
 	int max_fd = fileno(stdin);	
 	int sfd;		
 	
 	int i;
 	for(i=0;i<ip_node->num_interfaces;i++){
-		sfd = interface_get_socket(ip_node->interfaces[i]);
+		sfd = link_interface_get_sfd(ip_node->interfaces[i]);
 		max_fd = (sfd > max_fd ? sfd : max_fd);
-		FD_SET(sfd, &(ip_node->readfds));
+		FD_SET(sfd, &(ip_node->read_fds));
 	}
 	ip_node->highsock = max_fd;
+}
+
+/* _handle_user_command does exactly what it says. Note: this is only called 
+   if reading from STDIN won't block, so just do it already. */
+
+static void _handle_user_command(ip_node_t node){
+	char* buffer = (char*) malloc(sizeof(char)*BUFFER_SIZE);
+	fgets(buffer, BUFFER_SIZE-1, stdin);
+	rtrim(buffer, "\n");
+	printf("Received from user: %s\n", buffer);
+	free(buffer); 
 }
 
 /* _handle_selected is a dummy function for testing the functionality of the rest
    of the system (and not the implementation of the link_interface). This will be 
    done by linking to a dummy link_interface file that provides the same methods */
-void _handle_selected(ip_node_t ip_node, link_interface_t interface){
+static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 	puts("Handling selected."); 
 }
 
