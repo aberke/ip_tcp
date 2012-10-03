@@ -17,6 +17,9 @@ OBJS=$(patsubst %.o, $(BUILD_DIR)/%.o, $(_OBJS))
 _INCLUDE=$(INC_DIR) $(UTHASH_INC)
 INCLUDE=$(patsubst %, -I%, $(_INCLUDE))
 
+_DEPENDENT_DIRS=build build/util 
+DEPENDENT_DIRS=$(patsubst %, directory/%, $(_DEPENDENT_DIRS))
+
 #default target
 default: build
 
@@ -63,8 +66,6 @@ link:
 	$(CC) $(CFLAGS) $(INCLUDE) $(LIB_DIRS) $(LIBS) -o $(EXEC_FILE) $(OBJS)
 
 build: validate $(OBJS) link
-#@echo "objs, _objs:"
-#@$(OBJS) $(_OBJS)
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	@echo "compiling $<"
@@ -74,9 +75,10 @@ clean:
 	rm -f $(BUILD_DIR)/*.o
 	rm -f $(EXEC_FILE)
 
-validate:
-	@[ -d $(BUILD_DIR) ] || (echo "Creating directory $(BUILD_DIR)..." &&  mkdir $(BUILD_DIR))
+validate: $(DEPENDENT_DIRS)
 
+directory/%: 	
+	@[ -d $(patsubst directory/%, %, $@) ] || (echo "Creating directory $(patsubst directory/%, %, $@)..." && mkdir $(patsubst directory/%, %, $@))
 
 rebuild: clean build
 
