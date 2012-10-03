@@ -127,8 +127,8 @@ ip_node_t ip_node_init(list_t* links){
 	ip_node->num_interfaces = links->length;	
 	
 	ip_node->interfaces = (link_interface_t*)malloc(sizeof(link_interface_t)*(ip_node->num_interfaces));
-	//ip_node->socketToInterface = NULL;
-	//ip_node->addressToInterface = NULL;
+	ip_node->socketToInterface = NULL;
+	ip_node->addressToInterface = NULL;
 	
 	link_interface_t interface; 
 	link_t* link;
