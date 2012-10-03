@@ -1,6 +1,15 @@
-int ip_check_valid_packet(buffer, packet)
-	//run checksum
-	//make sure as long as its supposed to be
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#include <netinet/ip.h>
+#include <inttypes.h>
+
+#include "ip_utils.h"
+#include "util/ipsum.h"
+
+#define RIP_DATA 200  
+#define TEST_DATA 0  
 
 
 /*KEEP IN MIND:
@@ -10,59 +19,72 @@ for a given protocol number. We’ll leave its speciﬁcs up to you."
 
 /*"When IP packets arrive at their destination, if they aren’t RIP packets, you should
 simply print them out in a useful way."*/
-void handle_local_packet(link_interface_t li, void* packet, int packet_len){
-	//print packet nicely
-	// future use will be to hand packet to tcp
-}
-
-void handle_selected(link_interface_t li){
-	
-	//must hand read_packet(link_interface, buffer, buffer_len) a buffer
-	char buffer[IP_PACKET_MAX_SIZE];
-	memset (buffer, 0, IP_PACKET_MAX_SIZE);
-	int bytes_read;
-	bytes_read = link_interface_read_packet(li, buffer, IP_PACKET_MAX_SIZE);
-	char unwrapped[bytes_read];
-	int protocol;
-	//protocol = unwrap_ip_packet(buffer, bytes_read, unwrapped);
-
-}
-//write wrap_ip_packet //don't have to deal with fragmentation but make sure you don't send more than limit
 
 
-//write unwrap_ip_packet
-/* use:
-IP checksum calculation: ipsum.c ipsum.h. Use this function to calculate the checksum in
-the IP header for you.
-*/
-// int is type: RIP vs other  --return -1 if bad packet
-// fills unwrapped with unwrapped packet
-int unwrap_ip_packet(void* packet, int packet_len, char* unwrapped){
-	if(packet_len < sizeof(struct ip)){
+//write wrap_ip_packet 
+//don't have to deal with fragmentation but make sure you don't send more than limit
+
+//Param: buffer read in, number of bytes read in
+//Return value: bytes of data within packet on success, -1 on error
+int ip_check_valid_packet(char* buffer, int bytes_read){
+	//make sure packet long enough to be an ip packet
+	if(bytes_read < sizeof(struct ip)){
 		//packet not large enough
-		puts("received packet with packet_len < sizeof(struct ip)");
+		printf("received packet with length < sizeof(struct ip)");
 		return -1;
 	}
-
-	u_int header_length;
-	u_short ip_len, ip_sum;
-	u_char protocol;
-	struct  in_addr src_ip, dest_ip;
-	
+	u_short checksum;
 	char header[sizeof(struct ip)];
-	memcpy(header,  = packet;
-	
-	struct ip *ip_header = (struct ip *)packet;
-	ip_sum = ip_header->ip_sum;
-	if(ip_sum != ip_sum(header, sizeof)
-	
+	memcpy(header, buffer, sizeof(struct ip));
+	struct ip *ip_header = (struct ip *)header;
+	//run checksum
+	checksum = ip_header->ip_sum;
+	if(checksum != ip_sum(header, sizeof(struct ip))){
+		puts("Packet ip_sum != actually checksum");
+		return -1;
+	}
+	//make sure as long as its supposed to be
+	u_short ip_len;
 	ip_len = ip_header->ip_len;
+	if(bytes_read < ip_len){
+		//didn't read in entire packet -- error
+		puts("bytes read in less than packet length");
+		return -1;
+	}
+	u_int header_length;
+	header_length = ip_header->ip_hl;
+	int data_len = ip_len - header_length;
+	return data_len;
+}
+// returns destination address of packet
+uint32_t ip_get_dest_addr(char* buffer){
+	char header[sizeof(struct ip)];
+	memcpy(header, buffer, sizeof(struct ip));
+	struct ip *ip_header = (struct ip *)header;
 	
-	char unwrapped[ip_len];
-	unwrapped = buffer[4*(ip_header->ip_hl)];
-	
-	
-
-
-	return 0;
+	struct  in_addr dest_ip;
+	uint32_t d_addr;
+	dest_ip = ip_header->ip_dst;
+	d_addr = dest_ip.s_addr;
+	return d_addr;
+}
+// int is type: RIP vs other  --return -1 if bad packet
+// fills packet_unwrapped with data within packet
+int ip_unwrap_packet(char* buffer, char* packet_unwrapped, int packet_data_size){
+	u_int header_len;
+	u_char ip_p;           /* protocol */
+	char header[sizeof(struct ip)];
+	memcpy(header, buffer, sizeof(struct ip));
+	struct ip *ip_header = (struct ip *)header;
+	header_len = ip_header->ip_hl;
+	ip_p = ip_header->ip_p;
+	memcpy(packet_unwrapped, buffer+header_len, packet_data_size);
+	if(ip_p == RIP_DATA){
+		return RIP_DATA;
+	}
+	if(ip_p == TEST_DATA){
+		return TEST_DATA;
+	}
+	puts("Received packet of unknown protocol");
+	return -1;
 }

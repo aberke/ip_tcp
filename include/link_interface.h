@@ -28,8 +28,8 @@ int link_interface_send_packet(link_interface_t interface, void* data, int data_
 // Returns -1 if given addresses don't match, returns 1 otherwise
 int compare_remote_addr(struct sockaddr* a1, struct sockaddr* a2);
 // reads into buffer
-// returns ip packet or null
-void* link_interface_read_packet(link_interface_t l_i, char* buffer, int buffer_len);
+// returns bytes_read on success, -1 on error or socket closure
+int link_interface_read_packet(link_interface_t l_i, char* buffer, int buffer_len);
 
 // returns sfd	
 int link_interface_get_sfd(link_interface_t interface);
