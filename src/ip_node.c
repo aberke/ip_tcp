@@ -234,6 +234,13 @@ void ip_node_start(ip_node_t ip_node){
 			{ error("select()"); } // #DESIGN-DECISION 	
 		else if (retval)	
 			_handle_reading_sockets(ip_node);
+		
+		/* STILL TODO *******
+		
+		if time elapsed > 5 s:
+			update_all_interfaces()	
+		**********************/
+			
 	}
 }
 /*************************** INTERNAL ******************************/
@@ -246,6 +253,12 @@ static void _handle_reading_sockets(ip_node_t ip_node){
 	if(FD_ISSET(STDIN, &(ip_node->read_fds))){
 		_handle_user_command(ip_node);
 	}
+	/* STILL TODO ***
+			query_interfaces()  // checks if each interface up/down
+				// handles updating_routing_table if necessary 
+				//-- which then handles updating about new info: update_all_interfaces
+
+	*********/
 
 	struct interface_socket_keyed *socket_keyed, *tmp;
 	HASH_ITER(hh, ip_node->socketToInterface, socket_keyed, tmp){
