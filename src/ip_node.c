@@ -32,6 +32,7 @@ static void _update_select_list(ip_node_t node);
 static void _handle_selected(ip_node_t node, link_interface_t interface);
 static void _handle_reading_sockets(ip_node_t node);
 static void _handle_user_command(ip_node_t node);
+static void _is_local_ip(ip_node_t ip_node, uint32_t ip);
 
 /* STRUCTS */
 
@@ -235,7 +236,7 @@ void ip_node_start(ip_node_t ip_node){
 			_handle_reading_sockets(ip_node);
 	}
 }
-
+/*************************** INTERNAL ******************************/
 /* _handle_reading_sockets is an internal function for dealing with the 
    effect of a select call. This will get called only if there is a fd to
    read from. First check STDIN, and handle that command. Then check all 
@@ -252,6 +253,20 @@ static void _handle_reading_sockets(ip_node_t ip_node){
 			_handle_selected(ip_node, socket_keyed->interface);	
 		}	
 	}
+}
+
+/* takes in a uint32_t and says whether it's a local_ip or not. 
+   returns:
+		0 if not
+		1 if it is */
+static int _is_local_ip(ip_node_t ip_node, uint32_t vip){
+	interface_address_keyed_t address_keyed;
+
+	HASH_FIND_INT(ip_node->addressToInterface, &vip, address_keyed);
+	if(address_keyed)
+		return 1;
+	else
+		return 0
 }
 
 /* This will handle updating the fdset that the ip_node uses in order
