@@ -1,10 +1,8 @@
 #include <inttypes.h>
-
-/* Alex needs: */
 #include <netinet/ip.h>
-/***************/
 
 #include "ip_node.h"
+#include "ip_utils.h"
 #include "forwarding_table.h"
 #include "routing_table.h"
 #include "link_interface.h"
@@ -322,7 +320,8 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 			puts("Fatal error in the interface."); 
 			break;
 
-		default: printf("Successfully received a message: %s\n", packet_buffer);
+		default: 
+			printf("Got as result of checking validity: %d\n", ip_check_valid_packet(packet_buffer, read));
 	}
 	
 
