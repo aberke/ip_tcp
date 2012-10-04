@@ -308,24 +308,34 @@ static void _handle_user_command(ip_node_t ip_node){
    of the system (and not the implementation of the link_interface). This will be 
    done by linking to a dummy link_interface file that provides the same methods */
 static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
-	char* packet_buffer = (char*)malloc(sizeof(char)*IP_PACKET_MAX_SIZE);
+	char* packet_buffer = (char*)malloc(sizeof(char)*IP_PACKET_MAX_SIZE + 1);
 	int bytes_read = link_interface_read_packet(interface, packet_buffer, IP_PACKET_MAX_SIZE);
-
-	switch(read){
-		case INTERFACE_ERROR_WRONG_ADDRESS: 
+	if(bytes_read < 0){
+		//Error -- discard packet
+		if(bytes_read == INTERFACE_ERROR_WRONG_ADDRESS){
 			puts("Received a message from incorrect address. Discarding."); 
-			break;
-	
-		case INTERFACE_ERROR_FATAL: 
+		}
+		else if(INTERFACE_ERROR_FATAL:){
 			puts("Fatal error in the interface."); 
-			break;
-
-		default: 
-			printf("Got as result of checking validity: %d\n", ip_check_valid_packet(packet_buffer, read));
+		}
+		else{
+			printf("Got as result of checking validity: %d\n", ip_check_valid_packet(packet_buffer, bytes_read));
+		}
+		//// clean up
+		free(packet_buffer);
+		return NULL;
 	}
+	int packet_data_size = 	ip_check_valid_packet(packet_buffer, bytes_read);	
+ 	if(packet_data_size < 0){
+ 		puts("Discarding packet");
+ 		free(packet_buffer);
+		return NULL;
+	}
+	uint32_t dest_addr = ip_get_dest_addr(packet_buffer);
+	if(!(_is_local_ip(ip_node, dest_addr))){
 	
-
-	puts("done."); 
+	
+	}
 	
 	//// clean up
 	free(packet_buffer);
