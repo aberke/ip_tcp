@@ -82,6 +82,7 @@ Parameters
 
 Returns
 	- next-hop that corresponds to the given address
+	// next_hop = local_virt_ip 
 	- -1 if no such address can be found */
 uint32_t forwarding_table_get_next_hop(forwarding_table_t ft, uint32_t final_address){
 	forwarding_info_t info;

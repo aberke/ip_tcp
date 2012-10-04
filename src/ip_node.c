@@ -32,7 +32,7 @@ static void _update_select_list(ip_node_t node);
 static void _handle_selected(ip_node_t node, link_interface_t interface);
 static void _handle_reading_sockets(ip_node_t node);
 static void _handle_user_command(ip_node_t node);
-static void _is_local_ip(ip_node_t ip_node, uint32_t ip);
+static int _is_local_ip(ip_node_t ip_node, uint32_t ip);
 
 /* STRUCTS */
 
@@ -260,13 +260,13 @@ static void _handle_reading_sockets(ip_node_t ip_node){
 		0 if not
 		1 if it is */
 static int _is_local_ip(ip_node_t ip_node, uint32_t vip){
-	interface_address_keyed_t address_keyed;
+	interface_ip_keyed_t address_keyed;
 
 	HASH_FIND_INT(ip_node->addressToInterface, &vip, address_keyed);
 	if(address_keyed)
 		return 1;
 	else
-		return 0
+		return 0;
 }
 
 /* This will handle updating the fdset that the ip_node uses in order
@@ -318,7 +318,30 @@ static void _handle_user_command(ip_node_t ip_node){
 	
 	free(buffer); 
 }
-
+/* Helper to _handle_selected to clean up code -- just does the error printing */
+static void _handle_selected_printerror(int error, char* buffer){
+	if(error == INTERFACE_ERROR_WRONG_ADDRESS){
+		puts("Received a message from incorrect address. Discarding."); 
+	}
+	else if(error == INTERFACE_ERROR_FATAL){
+		puts("Fatal error in the interface."); 
+	}
+	else{
+		printf("Got as result of checking validity: %d\n", ip_check_valid_packet(buffer, error));
+	}
+}
+static void _handle_selected_forward(ip_node_t ip_node, uint32_t dest_addr, char* packet_buffer, int bytes_read){
+	uint32_t next_hop = forwarding_table_get_next_hop(ip_node->forwarding_table, dest_addr);
+	
+	interface_ip_keyed_t address_keyed;
+	HASH_FIND_INT(ip_node->addressToInterface, &next_hop, address_keyed);
+	if(!address_keyed){
+		puts("ERROR: forwarding_table local_vip as next hop with no corresponding interface entry in hashmap addressToInterface");
+		return;
+	}
+	link_interface_t next_hop_interface = address_keyed->interface;
+	link_interface_send_packet(next_hop_interface, packet_buffer, bytes_read);
+}
 /* _handle_selected is a dummy function for testing the functionality of the rest
    of the system (and not the implementation of the link_interface). This will be 
    done by linking to a dummy link_interface file that provides the same methods */
@@ -327,61 +350,38 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 	int bytes_read = link_interface_read_packet(interface, packet_buffer, IP_PACKET_MAX_SIZE);
 	if(bytes_read < 0){
 		//Error -- discard packet
-		if(bytes_read == INTERFACE_ERROR_WRONG_ADDRESS){
-			puts("Received a message from incorrect address. Discarding."); 
-		}
-		else if(INTERFACE_ERROR_FATAL:){
-			puts("Fatal error in the interface."); 
-		}
-		else{
-			printf("Got as result of checking validity: %d\n", ip_check_valid_packet(packet_buffer, bytes_read));
-		}
+		_handle_selected_printerror(bytes_read, packet_buffer);
 		//// clean up
 		free(packet_buffer);
-		return NULL;
+		return;
 	}
 	int packet_data_size = 	ip_check_valid_packet(packet_buffer, bytes_read);	
  	if(packet_data_size < 0){
  		puts("Discarding packet");
  		free(packet_buffer);
-		return NULL;
+		return;
 	}
 	uint32_t dest_addr = ip_get_dest_addr(packet_buffer);
 	if(!(_is_local_ip(ip_node, dest_addr))){
-	
-	
+		_handle_selected_forward(ip_node, dest_addr, packet_buffer, bytes_read);	
+		free(packet_buffer);
+		return;
 	}
-	
+	// else either RIP data or TEST_DATA to print:
+	char packet_unwrapped[packet_data_size];
+	int type = ip_unwrap_packet(packet_buffer, packet_unwrapped, packet_data_size);
+	if(type == RIP_DATA){
+		struct routing_info* info = (struct routing_info*) packet_unwrapped; 
+		update_routing_table(ip_node->routing_table, 
+		ip_node->forwarding_table, info, link_interface_get_local_virt_ip(interface));
+	}
+	else if (type == TEST_DATA){
+		printf("Message Received: %s\n", packet_unwrapped);
+	}
+	else{
+		puts("Error -- discarding packet");
+	}
 	//// clean up
 	free(packet_buffer);
 }
-def handle_selected(node_t node, link_interface li):
-	char buffer[]
-	int bytes_read = link_interface_read_packet(li, buffer);
-	if(bytes_read < 0){
-		return NULL;
-	}
-	int packet_data_size = ip_check_valid_packet(buffer, bytes_read) //ALEX WRITE
-		if(packet_size < 0):
-			puts("discarding packet");
-			return NULL
-			
-	uint32 dest_addr = ip_get_dest_addr(buffer) //ALEX WRITE
-	if(!(dest_addr in our hashmap of local ips)):
-		get next hop from forwarding table
-		link_interface = hashmap_getvalue(next hop);
-		link_interface_send_packet(buffer);
-	else:
-		char packet_unwrapped[packet_data_size];
-		int type = ip_unwrap_packet(buffer, packet_unwrapped);
-		if(type == RIP){
-			struct routing_info* info = (struct routing_info*) packet_unwrapped; //ALEX WRITE
-			update_routing_table(routing_table_t rt, forwarding_table_t ft, struct routing_info* info, link_interface_get_virt_ip(li))
-		}
-		else if (type == TEST_DATA){
-			printf("Message Received: %s\n", packet_unwrapped);
-		}
-		else{
-			puts("Error -- discarding packet");
-		}
-}
+
