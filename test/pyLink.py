@@ -4,7 +4,7 @@ import sys
 import socket
 import signal
 import time
-import utils
+import pyUtils
 
 EXPECTED_ARGS = 1
 TIME_TO_SLEEP = 2
@@ -20,11 +20,12 @@ interface = ''
 try:
 	f = open(sys.argv[1])
 	line = f.readline()
-	interface = utils.Interface(line)
+	interface = pyUtils.Interface(line)
 except IOError:
-	utils.error("Unable to open file: " + sys.argv[1])
+	pyUtils.error("Unable to open file: " + sys.argv[1])
 
 interface.interface_print()
+interface.bind()
 
 # set up the handler for signals
 def handler(signum, frame):

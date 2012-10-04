@@ -11,7 +11,7 @@ UTHASH_INC=$(UTHASH_DIR)/src #not a mistake
 CC=gcc
 CFLAGS=-g -Wall
 
-_OBJS=main.o ip_node.o routing_table.o forwarding_table.o ip_utils.o link_interface.o util/parselinks.o util/ipsum.o util/utils.o util/list.o 
+_OBJS=main.o ip_node.o routing_table.o forwarding_table.o ip_utils.o link_interface.o util/ipsum.o util/parselinks.o util/utils.o util/list.o 
 OBJS=$(patsubst %.o, $(BUILD_DIR)/%.o, $(_OBJS))
 
 _INCLUDE=$(INC_DIR) $(UTHASH_INC)
@@ -28,6 +28,7 @@ TEST_EXEC_FILE=testing
 TEST_DIR=test
 TEST_BUILD_DIR=$(TEST_DIR)/build
 TEST_DEFAULT_ARGS=
+PYTEST=pyLink.py
 
 _TEST_OBJS=test.o
 _TEST_DEP_OBJS=routing_table.o forwarding_table.o util/utils.o
@@ -54,6 +55,9 @@ echo_compile:
 	@echo "******************Compiling*****************"
 
 test_rebuild: test_clean echo_compile test_build
+
+pyTest:
+	./$(TEST_DIR)/$(PYTEST) $(DEFAULT_ARGS)
 
 test: test_rebuild
 	@echo ""

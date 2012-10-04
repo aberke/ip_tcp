@@ -120,8 +120,17 @@ int compare_remote_addr(struct sockaddr* a1, struct sockaddr* a2){
 		struct sockaddr_in *b1 = (struct sockaddr_in *)a1;
 		struct sockaddr_in *b2 = (struct sockaddr_in *)a2;
 		if((b1->sin_port != b2->sin_port)||(b1->sin_addr.s_addr != b2->sin_addr.s_addr)){
-			//// I commented this out so we could handle it higher up
-			//printf("Incoming ipv4 packet from different address -- discarding.\n");
+			char* remote_addr_exp = malloc(sizeof(char)*INET_ADDRSTRLEN);
+			char* remote_addr_got = malloc(sizeof(char)*INET_ADDRSTRLEN);
+			printf("Expected remote: %s:%d, got: %s:%d\n", 
+				inet_ntop(AF_INET, &(b2->sin_addr.s_addr), remote_addr_exp, INET_ADDRSTRLEN),
+				ntohs(b2->sin_port),
+				inet_ntop(AF_INET, &(b1->sin_addr.s_addr), remote_addr_got, INET_ADDRSTRLEN),			
+				ntohs(b1->sin_port));
+				
+			free(remote_addr_exp);		
+			free(remote_addr_got);
+			
 			return INTERFACE_ERROR_WRONG_ADDRESS;
 			}
 		}
@@ -130,19 +139,19 @@ int compare_remote_addr(struct sockaddr* a1, struct sockaddr* a2){
 		struct sockaddr_in6 *b1 = (struct sockaddr_in6 *)a1;
 		struct sockaddr_in6 *b2 = (struct sockaddr_in6 *)a2;
 		if((b1->sin6_port != b2->sin6_port)||(b1->sin6_addr.s6_addr != b2->sin6_addr.s6_addr)){
+
+			//// let's just print it out for some good old casting fun
 			char* remote_addr_exp = malloc(sizeof(char)*INET6_ADDRSTRLEN);
 			char* remote_addr_got = malloc(sizeof(char)*INET6_ADDRSTRLEN);
 			printf("Expected remote: %s:%d, got: %s:%d\n", 
-				inet_ntop(AF_INET6, b2->sin6_addr.s6_addr, remote_addr_exp, INET6_ADDRSTRLEN),
+				inet_ntop(AF_INET6, &(b2->sin6_addr.s6_addr), remote_addr_exp, INET6_ADDRSTRLEN),
 				ntohs(b2->sin6_port),
-				inet_ntop(AF_INET6, b1->sin6_addr.s6_addr, remote_addr_got, INET6_ADDRSTRLEN),			
+				inet_ntop(AF_INET6, &(b1->sin6_addr.s6_addr), remote_addr_got, INET6_ADDRSTRLEN),			
 				ntohs(b1->sin6_port));
 				
 			free(remote_addr_exp);		
 			free(remote_addr_got);
 			
-			//// I commented this out so we could handle it higher up
-			//printf("Incoming packet from different address -- discarding.\n");
 			return INTERFACE_ERROR_WRONG_ADDRESS;
 		}
 	}
