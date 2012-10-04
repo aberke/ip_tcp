@@ -311,7 +311,7 @@ static void _handle_user_command(ip_node_t ip_node){
    done by linking to a dummy link_interface file that provides the same methods */
 static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 	char* packet_buffer = (char*)malloc(sizeof(char)*IP_PACKET_MAX_SIZE);
-	int read = link_interface_read_packet(interface, packet_buffer, IP_PACKET_MAX_SIZE-1);
+	int bytes_read = link_interface_read_packet(interface, packet_buffer, IP_PACKET_MAX_SIZE);
 
 	switch(read){
 		case INTERFACE_ERROR_WRONG_ADDRESS: 
@@ -330,4 +330,34 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 	
 	//// clean up
 	free(packet_buffer);
+}
+def handle_selected(node_t node, link_interface li):
+	char buffer[]
+	int bytes_read = link_interface_read_packet(li, buffer);
+	if(bytes_read < 0){
+		return NULL;
+	}
+	int packet_data_size = ip_check_valid_packet(buffer, bytes_read) //ALEX WRITE
+		if(packet_size < 0):
+			puts("discarding packet");
+			return NULL
+			
+	uint32 dest_addr = ip_get_dest_addr(buffer) //ALEX WRITE
+	if(!(dest_addr in our hashmap of local ips)):
+		get next hop from forwarding table
+		link_interface = hashmap_getvalue(next hop);
+		link_interface_send_packet(buffer);
+	else:
+		char packet_unwrapped[packet_data_size];
+		int type = ip_unwrap_packet(buffer, packet_unwrapped);
+		if(type == RIP){
+			struct routing_info* info = (struct routing_info*) packet_unwrapped; //ALEX WRITE
+			update_routing_table(routing_table_t rt, forwarding_table_t ft, struct routing_info* info, link_interface_get_virt_ip(li))
+		}
+		else if (type == TEST_DATA){
+			printf("Message Received: %s\n", packet_unwrapped);
+		}
+		else{
+			puts("Error -- discarding packet");
+		}
 }

@@ -88,3 +88,15 @@ int ip_unwrap_packet(char* buffer, char* packet_unwrapped, int packet_data_size)
 	puts("Received packet of unknown protocol");
 	return -1;
 }
+/*
+struct routing_info{
+	uint16_t command;
+	uint16_t num_entries;
+	struct cost_address entries[];
+};
+*/
+
+
+
+
+
