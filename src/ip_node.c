@@ -234,6 +234,13 @@ void ip_node_start(ip_node_t ip_node){
 			{ error("select()"); } // #DESIGN-DECISION 	
 		else if (retval)	
 			_handle_reading_sockets(ip_node);
+		
+		/* STILL TODO *******
+		
+		if time elapsed > 5 s:
+			update_all_interfaces()	
+		**********************/
+			
 	}
 }
 /*************************** INTERNAL ******************************/
@@ -246,6 +253,12 @@ static void _handle_reading_sockets(ip_node_t ip_node){
 	if(FD_ISSET(STDIN, &(ip_node->read_fds))){
 		_handle_user_command(ip_node);
 	}
+	/* STILL TODO ***
+			query_interfaces()  // checks if each interface up/down
+				// handles updating_routing_table if necessary 
+				//-- which then handles updating about new info: update_all_interfaces
+
+	*********/
 
 	struct interface_socket_keyed *socket_keyed, *tmp;
 	HASH_ITER(hh, ip_node->socketToInterface, socket_keyed, tmp){
@@ -318,30 +331,70 @@ static void _handle_user_command(ip_node_t ip_node){
 	
 	free(buffer); 
 }
-
+/* Helper to _handle_selected to clean up code -- just does the error printing */
+static void _handle_selected_printerror(int error, char* buffer){
+	if(error == INTERFACE_ERROR_WRONG_ADDRESS){
+		puts("Received a message from incorrect address. Discarding."); 
+	}
+	else if(error == INTERFACE_ERROR_FATAL){
+		puts("Fatal error in the interface."); 
+	}
+	else{
+		printf("Got as result of checking validity: %d\n", ip_check_valid_packet(buffer, error));
+	}
+}
+static void _handle_selected_forward(ip_node_t ip_node, uint32_t dest_addr, char* packet_buffer, int bytes_read){
+	uint32_t next_hop = forwarding_table_get_next_hop(ip_node->forwarding_table, dest_addr);
+	
+	interface_ip_keyed_t address_keyed;
+	HASH_FIND_INT(ip_node->addressToInterface, &next_hop, address_keyed);
+	if(!address_keyed){
+		puts("ERROR: forwarding_table local_vip as next hop with no corresponding interface entry in hashmap addressToInterface");
+		return;
+	}
+	link_interface_t next_hop_interface = address_keyed->interface;
+	link_interface_send_packet(next_hop_interface, packet_buffer, bytes_read);
+}
 /* _handle_selected is a dummy function for testing the functionality of the rest
    of the system (and not the implementation of the link_interface). This will be 
    done by linking to a dummy link_interface file that provides the same methods */
 static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
-	char* packet_buffer = (char*)malloc(sizeof(char)*IP_PACKET_MAX_SIZE);
-	int read = link_interface_read_packet(interface, packet_buffer, IP_PACKET_MAX_SIZE-1);
-
-	switch(read){
-		case INTERFACE_ERROR_WRONG_ADDRESS: 
-			puts("Received a message from incorrect address. Discarding."); 
-			break;
-	
-		case INTERFACE_ERROR_FATAL: 
-			puts("Fatal error in the interface."); 
-			break;
-
-		default: 
-			printf("Got as result of checking validity: %d\n", ip_check_valid_packet(packet_buffer, read));
+	char* packet_buffer = (char*)malloc(sizeof(char)*IP_PACKET_MAX_SIZE + 1);
+	int bytes_read = link_interface_read_packet(interface, packet_buffer, IP_PACKET_MAX_SIZE);
+	if(bytes_read < 0){
+		//Error -- discard packet
+		_handle_selected_printerror(bytes_read, packet_buffer);
+		//// clean up
+		free(packet_buffer);
+		return;
 	}
-	
-
-	puts("done."); 
-	
+	int packet_data_size = 	ip_check_valid_packet(packet_buffer, bytes_read);	
+ 	if(packet_data_size < 0){
+ 		puts("Discarding packet");
+ 		free(packet_buffer);
+		return;
+	}
+	uint32_t dest_addr = ip_get_dest_addr(packet_buffer);
+	if(!(_is_local_ip(ip_node, dest_addr))){
+		_handle_selected_forward(ip_node, dest_addr, packet_buffer, bytes_read);	
+		free(packet_buffer);
+		return;
+	}
+	// else either RIP data or TEST_DATA to print:
+	char packet_unwrapped[packet_data_size];
+	int type = ip_unwrap_packet(packet_buffer, packet_unwrapped, packet_data_size);
+	if(type == RIP_DATA){
+		struct routing_info* info = (struct routing_info*) packet_unwrapped; 
+		update_routing_table(ip_node->routing_table, 
+		ip_node->forwarding_table, info, link_interface_get_local_virt_ip(interface));
+	}
+	else if (type == TEST_DATA){
+		printf("Message Received: %s\n", packet_unwrapped);
+	}
+	else{
+		puts("Error -- discarding packet");
+	}
 	//// clean up
 	free(packet_buffer);
 }
+

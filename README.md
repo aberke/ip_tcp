@@ -73,7 +73,7 @@ def handle_selected(node_t node, link_interface li):
 		char packet_unwrapped[packet_data_size];
 		int type = ip_unwrap_packet(buffer, packet_unwrapped);
 		if(type == RIP){
-			struct routing_info = ip_parse_routing_info(packet_unwrapped); //ALEX WRITE
+			struct routing_info* info = (struct routing_info*) packet_unwrapped; //ALEX WRITE
 			update_routing_table(routing_table_t rt, forwarding_table_t ft, struct routing_info* info, link_interface_get_virt_ip(li))
 		}
 		else if (type == TEST_DATA){

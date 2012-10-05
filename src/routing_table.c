@@ -72,7 +72,7 @@ void routing_table_destroy(routing_table_t* rt){
 void routing_table_update_entry(routing_table_t rt, routing_entry_t entry){
 	HASH_ADD_INT(rt->route_hash, address, entry); 
 }
-// next_hop = remote_virt_ip -- address of interface that told interface about info
+// next_hop = local_virt_ip -- address of interface that received info
 void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct routing_info* info, uint32_t next_hop){
 	int i;
 	uint32_t addr,cost;
