@@ -32,7 +32,7 @@ static void _update_select_list(ip_node_t node);
 static void _handle_selected(ip_node_t node, link_interface_t interface);
 static void _handle_reading_sockets(ip_node_t node);
 static void _handle_user_command(ip_node_t node);
-static void _is_local_ip(ip_node_t ip_node, uint32_t ip);
+static int _is_local_ip(ip_node_t ip_node, uint32_t ip);
 
 /* STRUCTS */
 
@@ -260,13 +260,13 @@ static void _handle_reading_sockets(ip_node_t ip_node){
 		0 if not
 		1 if it is */
 static int _is_local_ip(ip_node_t ip_node, uint32_t vip){
-	interface_address_keyed_t address_keyed;
+	interface_ip_keyed_t address_keyed;
 
 	HASH_FIND_INT(ip_node->addressToInterface, &vip, address_keyed);
 	if(address_keyed)
 		return 1;
 	else
-		return 0
+		return 0;
 }
 
 /* This will handle updating the fdset that the ip_node uses in order

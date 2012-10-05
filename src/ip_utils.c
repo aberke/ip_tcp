@@ -39,7 +39,7 @@ int ip_check_valid_packet(char* buffer, int bytes_read){
 	struct ip *ip_header = (struct ip *)header;
 	//run checksum
 	checksum = ip_header->ip_sum;
-	if(checksum != ip_sum(header, sizeof(struct ip))){
+	if(checksum != ip_sum(header, sizeof(struct ip))){  
 		puts("Packet ip_sum != actually checksum");
 		return -1;
 	}
