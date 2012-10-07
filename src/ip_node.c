@@ -33,6 +33,7 @@ static void _handle_selected(ip_node_t node, link_interface_t interface);
 static void _handle_reading_sockets(ip_node_t node);
 static void _handle_user_command(ip_node_t node);
 static int _is_local_ip(ip_node_t ip_node, uint32_t ip);
+static void _handle_query_interfaces(ip_node_t ip_node);
 
 /* STRUCTS */
 
@@ -253,12 +254,8 @@ static void _handle_reading_sockets(ip_node_t ip_node){
 	if(FD_ISSET(STDIN, &(ip_node->read_fds))){
 		_handle_user_command(ip_node);
 	}
-	/* STILL TODO ***
-			query_interfaces()  // checks if each interface up/down
-				// handles updating_routing_table if necessary 
-				//-- which then handles updating about new info: update_all_interfaces
-
-	*********/
+	// iterate through interfaces to see if any have gone up or down since last checked -- in which case must update routing table
+	_handle_query_interfaces(ip_node);
 
 	struct interface_socket_keyed *socket_keyed, *tmp;
 	HASH_ITER(hh, ip_node->socketToInterface, socket_keyed, tmp){
@@ -267,6 +264,52 @@ static void _handle_reading_sockets(ip_node_t ip_node){
 		}	
 	}
 }
+/*  Recently added by Alex: _handle_query_interfaces()
+	iterates through interfaces to check if any interfaces have gone up or down since last checked.
+	link_interface_up_down(link_interface_t l_i) returns 0 if status hasn't changed since function last called
+	if status has recently changed: returns -1 if down, returns 1 if up -- in which case we need to update routing_table
+	This function handles checking each interface for a status changed and updating the routing table as needed
+*/
+static void _handle_query_interfaces(ip_node_t ip_node){
+	// create routing_info struct to fill with information as iterate through interfaces -- then send info to routing table
+	struct routing_info *info = (struct routing_info *)malloc(sizeof(struct routing_info) + sizeof(struct cost_address));
+	// command and num_entries will be the same for each interface
+	info->command = 2;
+	info->num_entries = 1;
+	// set up variables to iteration
+	uint32_t next_hop_addr;
+	struct interface_socket_keyed *socket_keyed, *tmp;
+	// iterate through interfaces in hashmap
+	HASH_ITER(hh, ip_node->socketToInterface, socket_keyed, tmp){
+		link_interface_t interface = socket_keyed->interface;
+		// check if interface status on whether up or down has changed since last checked
+		int up_down;
+		if((up_down = link_interface_up_down(interface)) != 0){
+			// up-down status changed -- must update routing table with struct routing_info info
+			if(up_down < 0){
+				info->entries[0].cost = 16;
+			}
+			else{
+				info->entries[0].cost = 0;
+			}
+			info->entries[0].address = link_interface_get_remote_virt_ip(interface);
+			next_hop_addr = link_interface_get_local_virt_ip(interface);
+			update_routing_table(ip_node->routing_table, ip_node->forwarding_table, info, next_hop_addr);
+		}
+	}
+}
+/*
+struct routing_info{
+	uint16_t command;
+	uint16_t num_entries;
+	struct cost_address entries[];
+};
+struct cost_address{
+	uint32_t cost;
+	uint32_t address;
+};
+void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct routing_info* info, uint32_t next_hop_addr);
+*/
 
 /* takes in a uint32_t and says whether it's a local_ip or not. 
    returns:
@@ -375,8 +418,12 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 		return;
 	}
 	uint32_t dest_addr = ip_get_dest_addr(packet_buffer);
-	if(!(_is_local_ip(ip_node, dest_addr))){ //TODO: HANDLE TTL DECREMENTATION
-		_handle_selected_forward(ip_node, dest_addr, packet_buffer, bytes_read);	
+	if(!(_is_local_ip(ip_node, dest_addr))){ 
+		// Must forward packet to destination -- first decrement TTL
+		if(ip_decrement_TTL(packet_buffer) > 0){ // if -1 returned, must drop packet instead of forwarding
+			// Time-to-live > 0: Forward packet to destination:
+			_handle_selected_forward(ip_node, dest_addr, packet_buffer, bytes_read);
+		}	
 		free(packet_buffer);
 		return;
 	}
@@ -392,7 +439,7 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 		printf("Message Received: %s\n", packet_unwrapped);
 	}
 	else{
-		puts("Error -- discarding packet");
+		puts("Error -- packet type neither RIP nor TEST_DATA: discarding packet");
 	}
 	//// clean up
 	free(packet_buffer);

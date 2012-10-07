@@ -56,6 +56,18 @@ int ip_check_valid_packet(char* buffer, int bytes_read){
 	int data_len = ip_len - header_length;
 	return data_len;
 }
+// decrements packet's TTL.
+// returns -1 if packet needs to be thrown out (if TTL == 0 when received)
+int ip_decrement_TTL(char* packet){
+	u_char  ip_ttl;         /* time to live */
+	struct ip *ip_header = (struct ip *)packet;
+	ip_ttl = ip_header->ip_ttl;
+	if(ip_ttl <= 0){
+		return -1;
+	}
+	ip_header->ip_ttl = ip_ttl - 1;
+	return 1;
+}
 // returns destination address of packet
 uint32_t ip_get_dest_addr(char* buffer){
 	char header[sizeof(struct ip)];

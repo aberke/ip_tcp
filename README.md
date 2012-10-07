@@ -141,7 +141,6 @@ uint32_t address;
 
 //ALEX TODO:
 
-	deal with TTYL
 
 	make link_interface.c
 	make link_interface.h
