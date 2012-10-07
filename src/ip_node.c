@@ -375,7 +375,7 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 		return;
 	}
 	uint32_t dest_addr = ip_get_dest_addr(packet_buffer);
-	if(!(_is_local_ip(ip_node, dest_addr))){
+	if(!(_is_local_ip(ip_node, dest_addr))){ //TODO: HANDLE TTL DECREMENTATION
 		_handle_selected_forward(ip_node, dest_addr, packet_buffer, bytes_read);	
 		free(packet_buffer);
 		return;

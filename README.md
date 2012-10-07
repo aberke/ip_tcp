@@ -140,6 +140,9 @@ uint32_t address;
 	
 
 //ALEX TODO:
+
+	deal with TTYL
+
 	make link_interface.c
 	make link_interface.h
 
@@ -156,6 +159,8 @@ uint32_t address;
 	git push
 	
 //NEIL TODO
+	write send function
 	write node.h file
 	write routing_table.c, .h
 	write forwarding_table.c, .h
+	
