@@ -297,6 +297,7 @@ static void _handle_query_interfaces(ip_node_t ip_node){
 			update_routing_table(ip_node->routing_table, ip_node->forwarding_table, info, next_hop_addr);
 		}
 	}
+	free(info);
 }
 /*
 struct routing_info{
