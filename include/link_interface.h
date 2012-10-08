@@ -27,7 +27,7 @@
 
 typedef struct link_interface * link_interface_t;
 
-link_interface_t link_interface_create(link_t *link);
+link_interface_t link_interface_create(link_t *link, int id);
 
 void link_interface_destroy(link_interface_t interface);
 

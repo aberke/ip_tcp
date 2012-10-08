@@ -140,10 +140,10 @@ uint32_t address;
 	
 
 //ALEX TODO:
+	write ip_wrap_packet
+	handle RIP protocol
+	finish _handle_selected_RIP
 
-
-	make link_interface.c
-	make link_interface.h
 
 	write handle selected
 	write wrap_ip_packet  // don't have to deal with fragmentation

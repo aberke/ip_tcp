@@ -14,4 +14,7 @@ int ip_decrement_TTL(char* packet);
 // fills packet_unwrapped with data within packet
 int ip_unwrap_packet(char* buffer, char* packet_unwrapped, int packet_data_size);
 
+// fills packet_wrapped with packet_data and header
+int ip_wrap_packet(char* packet_data, char* packet_wrapped, int protocol, struct in_addr ip_src, struct in_addr ip_dst);
+
 #endif //__LINK_INTERFACE__

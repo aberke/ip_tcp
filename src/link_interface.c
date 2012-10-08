@@ -10,6 +10,7 @@
 //wrapper around link_t structure parsed from .lnx file
 //abstracts udp link layer
 struct link_interface{ 
+	int id; //necessary for 'interfaces' command for command-line -- also id corresponds to index in ip_node's array of interfaces
 	int sfd; // socket file descriptor on which listening/sending
 	// ip_node queries link_interface on its up_down_boolean by calling int interface_up_down(link_interface_t l_i);
 	//2 for up and hasn't yet been queried, 1 for up and already queried; -2 for down and not yet queried, -1 for down and already queried
@@ -35,7 +36,7 @@ int link_interface_bind_socket(char *localhost, char *localport, struct addrinfo
     }
     return sfd;
 }
-link_interface_t link_interface_create(link_t *link){
+link_interface_t link_interface_create(link_t *link, int id){
 	int socket_fd;
 	// convert ports from link to character strings for link_interface
 	char local_port[32];
@@ -68,6 +69,7 @@ link_interface_t link_interface_create(link_t *link){
 	// create link_interface
     link_interface_t l_i = (struct link_interface *)malloc(sizeof(struct link_interface));
 	
+	l_i->id = id;
 	l_i->sfd = socket_fd;
 	l_i->up_down_boolean = 2; //link_interface starts out up and needs to be able to report up to ip_node when queried
 	l_i->remote = *(remote_addrinfo->ai_addr); //contains the remote IP address and port 
@@ -216,14 +218,14 @@ uint32_t link_interface_get_remote_virt_ip(link_interface_t l_i){
 }
 // brings down interface -- sets up_down_boolean to -2 if was previously up (since needs to tell ip_node), otherwise doesn't change it
 void link_interface_bringdown(link_interface_t l_i){
-	printf("Interface %u down\n", l_i->local_virt_ip);
+	printf("Interface %d down\n", l_i->id);
 	if(l_i->up_down_boolean > 0){
 		l_i->up_down_boolean = -2;
 	}
 }
 // brings interface up -- sets up_down_boolean to 2 if was previously down (since needs to tell ip_node), otherwise doesn't change
 void link_interface_bringup(link_interface_t l_i){
-	printf("Interface %u up\n", l_i->local_virt_ip);
+	printf("Interface %d up\n", l_i->id);
 	if(l_i->up_down_boolean < 0){
 		l_i->up_down_boolean = 2;
 	}
@@ -251,9 +253,14 @@ void link_interface_print(link_interface_t l_i){
 	struct in_addr local, remote;
 	local.s_addr = htonl(l_i->local_virt_ip); 
 	remote.s_addr = ntohl(l_i->remote_virt_ip);
+	char* up_down = "true";
+	if(l_i->up_down_boolean < 0){
+		up_down = "false";
+	}
 
-	printf("Interface: <up: %s> <socket: %d> %s:%d %s %s:%d %s\n", 
-		(l_i->up_down_boolean ? "true" : "false"),
+	printf("Interface %d: <up: %s> <socket: %d> %s:%d %s %s:%d %s\n", 
+		l_i->id,
+		up_down,
 		l_i->sfd,
 		"localhost",
 		ntohs((*(struct sockaddr_in*)(&l_i->local)).sin_port),

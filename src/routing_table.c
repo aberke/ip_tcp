@@ -69,6 +69,7 @@ void routing_table_destroy(routing_table_t* rt){
 
 /* FUNCTIONALITY */
 
+
 void routing_table_update_entry(routing_table_t rt, routing_entry_t entry){
 	HASH_ADD_INT(rt->route_hash, address, entry); 
 }
@@ -96,6 +97,7 @@ void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct rout
 			HASH_DEL(rt->route_hash, entry);
 			routing_entry_free(entry);
 			routing_table_update_entry(rt, routing_entry_init(next_hop, cost, addr));
+			//TODO: CREATE RIP MESSAGE
 			forwarding_table_update_entry(ft, addr, next_hop); 
 		}	
 		else{

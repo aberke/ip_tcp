@@ -38,14 +38,14 @@ int ip_check_valid_packet(char* buffer, int bytes_read){
 	memcpy(header, buffer, sizeof(struct ip));
 	struct ip *ip_header = (struct ip *)header;
 	//run checksum
-	checksum = ip_header->ip_sum;
+	checksum = ntohs(ip_header->ip_sum);
 	if(checksum != ip_sum(header, sizeof(struct ip))){  
 		puts("Packet ip_sum != actually checksum");
 		return -1;
 	}
 	//make sure as long as its supposed to be
 	u_short ip_len;
-	ip_len = ip_header->ip_len;
+	ip_len = ntohs(ip_header->ip_len);
 	if(bytes_read < ip_len){
 		//didn't read in entire packet -- error
 		puts("bytes read in less than packet length");
@@ -77,7 +77,7 @@ uint32_t ip_get_dest_addr(char* buffer){
 	struct  in_addr dest_ip;
 	uint32_t d_addr;
 	dest_ip = ip_header->ip_dst;
-	d_addr = dest_ip.s_addr;
+	d_addr = ntohl(dest_ip.s_addr);
 	return d_addr;
 }
 // int is type: RIP vs other  --return -1 if bad packet
@@ -99,6 +99,15 @@ int ip_unwrap_packet(char* buffer, char* packet_unwrapped, int packet_data_size)
 	}
 	puts("Received packet of unknown protocol");
 	return -1;
+}
+// fills packet_wrapped with packet_data and header
+int ip_wrap_packet(char* packet_data, char* packet_wrapped, int protocol, struct in_addr ip_src, struct in_addr ip_dst){
+	struct ip* ip_header;
+	ip_header->ip_v = 4;
+	ip_header->ip_hl = 5;
+	//ip_header->
+	
+	return 1;
 }
 /*
 struct routing_info{
