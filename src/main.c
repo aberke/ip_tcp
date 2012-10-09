@@ -20,7 +20,6 @@ int main(int argc, char *argv[]){
 	if(!ip_node)
 		return 1;
 
-
 	// This should probably be done in node-destroy
 	//free_links(linkedlist);
 

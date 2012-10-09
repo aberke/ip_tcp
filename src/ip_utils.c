@@ -108,9 +108,9 @@ int ip_wrap_send_packet(void* data, int data_len, int protocol, struct in_addr i
 	// convert addresses to network byte order
 	ip_src.s_addr = htonl(ip_src.s_addr);
 	ip_dst.s_addr = htonl(ip_dst.s_addr);
-	
+
 	// fill in header
-	struct ip* ip_header;
+	struct ip* ip_header = (struct ip*)malloc(sizeof(struct ip));
 	ip_header->ip_v = 4;
 	ip_header->ip_hl = 5;
 	ip_header->ip_len = htons(data_len + 20); //add header length to packet length
@@ -128,6 +128,7 @@ int ip_wrap_send_packet(void* data, int data_len, int protocol, struct in_addr i
 	// send on link interface
 	link_interface_send_packet(li, to_send, data_len+20);
 	// free packet	
+	free(ip_header);
 	free(to_send);
 	return 1;
 }
