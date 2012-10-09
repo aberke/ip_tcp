@@ -140,9 +140,8 @@ uint32_t address;
 	
 
 //ALEX TODO:
-	write ip_wrap_packet
-	handle RIP protocol
-	finish _handle_selected_RIP
+	finish _handle_command_send  -- have different handlers for different proto types
+	make sure ip_wrap_send_packet functioning
 
 
 	write handle selected

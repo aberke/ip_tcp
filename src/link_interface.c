@@ -230,10 +230,15 @@ void link_interface_bringup(link_interface_t l_i){
 		l_i->up_down_boolean = 2;
 	}
 }
+// simply returns link_interface up_down_boolean
+int link_interface_up_down(link_interface_t l_i){
+	return l_i->up_down_boolean;
+}
+
 // queries whether interface up or down
 // returns 0 if status hasn't changed since this function was last called
 // if status has recently changed: returns -1 if down, returns 1 if up
-int link_interface_up_down(link_interface_t l_i){
+int link_interface_query_up_down(link_interface_t l_i){
 	if (l_i->up_down_boolean == -2){
 		l_i->up_down_boolean = -1; // since now going to tell ip_node
 		return -1;

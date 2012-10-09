@@ -60,6 +60,8 @@ void link_interface_bringup(link_interface_t l_i);
 // queries whether interface up or down
 // returns 0 if status hasn't changed since it was last checked (since this function last called)
 // returns -1 for interface down, 1 for interface up if status has changed recently
+int link_interface_query_up_down(link_interface_t l_i);
+// simply returns link_interface up_down_boolean
 int link_interface_up_down(link_interface_t l_i);
 
 // prints out info

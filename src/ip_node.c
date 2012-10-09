@@ -244,7 +244,7 @@ void ip_node_start(ip_node_t ip_node){
 		/* STILL TODO *******
 		
 		if time elapsed > 5 s:
-			update_all_interfaces()	
+			update_all_interfaces(ip_note_t ip_node); <--- already written!	
 		**********************/
 			
 	}
@@ -289,7 +289,8 @@ static void _handle_query_interfaces(ip_node_t ip_node){
 		link_interface_t interface = socket_keyed->interface;
 		// check if interface status on whether up or down has changed since last checked
 		int up_down;
-		if((up_down = link_interface_up_down(interface)) != 0){
+		// Note: link_interface_query_up_down different than link_interface_up_down: the former keeps track of whether routing table must be updated
+		if((up_down = link_interface_query_up_down(interface)) != 0){
 			// up-down status changed -- must update routing table with struct routing_info info
 			if(up_down < 0){
 				info->entries[0].cost = 16;
@@ -304,18 +305,26 @@ static void _handle_query_interfaces(ip_node_t ip_node){
 	}
 	free(info);
 }
-/*
-struct routing_info{
-	uint16_t command;
-	uint16_t num_entries;
-	struct cost_address entries[];
-};
-struct cost_address{
-	uint32_t cost;
-	uint32_t address;
-};
-void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct routing_info* info, uint32_t next_hop_addr);
-*/
+/* Iterates through interfaces:  For each interface that is up -- sends out RIP_RESPONSE on interface */
+static void _update_all_interfaces(ip_node_t ip_node){
+	// create buffer to give to routing table to fill with routing info 
+	char* buffer_tofill = (char *)malloc(sizeof(char)*UDP_PACKET_MAX_SIZE - 20);
+	int data_len;
+	
+	if((data_len = routing_table_RIP_response(ip_node->routing_table, buffer_tofill)) > 0){	
+		// iterate through interfaces to send out RIP data on each interface
+		struct interface_socket_keyed *socket_keyed, *tmp;
+		HASH_ITER(hh, ip_node->socketToInterface, socket_keyed, tmp){
+			link_interface_t interface = socket_keyed->interface;
+			// only send out RIP message if interface up
+			if(link_interface_up_down(interface) > 0){
+			
+				ip_wrap_send_packet_RIP(buffer_tofill, data_len, interface);
+			}
+		}
+	}
+	free(buffer_tofill);	
+}
 
 /* takes in a uint32_t and says whether it's a local_ip or not. 
    returns:
@@ -381,13 +390,17 @@ static void _handle_user_command_up(ip_node_t ip_node, char* buffer){
 }
 /* _handle_user_command_send is a helper to _handle_user_command for handling 'send vip proto string' command */
 static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
+	puts("_handle_user_command_send: 0");
 	char* tmp = strtok(buffer, " ");
 	if(!strcmp(tmp, "send")){
 		// user using command: 'send vip proto string'
-		struct in_addr send_to;
+		struct in_addr send_to, send_from;
 		uint32_t send_to_vip;
 			
-		tmp = strtok(NULL, " ");
+		if((tmp = strtok(NULL, " ")) == NULL){
+			puts("Proper command: 'send vip proto string'");
+			return;
+		}
 		char* send_to_vip_string = tmp;
 			
 		if(inet_pton(AF_INET, send_to_vip_string, &send_to) < 0){
@@ -395,36 +408,47 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 			return;
 		}
 		send_to_vip = send_to.s_addr;
-			
-		tmp = strtok(NULL, " ");
+		printf("2: send_to_vip_string = %s\n", send_to_vip_string);	
+		if((tmp = strtok(NULL, " ")) == NULL){
+			puts("Proper command: 'send vip proto string'");
+			return;
+		}
+		
 		int proto = atoi(tmp);
 		if((proto == 0)&&(strcmp(tmp, "0"))){
 			puts("Proper command: 'send vip proto string' where proto is an integer");
 			return;
 		}
-		//char message[UDP_PACKET_MAX_SIZE-25];
-		tmp = strtok(NULL, " \0");
-		//message = tmp;
+		printf("3: proto = %d\n", proto);
+		
 		// get next hop for sending message to send_to_vip
 		uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
 		if(next_hop_addr < 0){
 			printf("Cannot reach address %s.\n", send_to_vip_string);
 			return;
 		}
+		printf("4: next_hop_addr: %u\n", next_hop_addr);
+		// get struct in_addr corresponding to next_hop_addr
+		send_from.s_addr = next_hop_addr;
+		// get interface to send out packet on -- interface corresponding to next_hop_addr
 		interface_ip_keyed_t address_keyed;
 		HASH_FIND_INT(ip_node->addressToInterface, &next_hop_addr, address_keyed);
 		if(!address_keyed){
-			puts("ERROR: forwarding_table local_vip as next hop with no corresponding interface entry in hashmap addressToInterface");
+			printf("Cannot reach address %s  -- TODO: MAKE SURE FIXED -- see _handle_user_command_send\n", send_to_vip_string);
 			return;
 		}
+		printf("5\n");
 		link_interface_t next_hop_interface = address_keyed->interface;
-		
-		// wrap message in IP packet
-		char to_send[UDP_PACKET_MAX_SIZE];
-		
+		// get message information
+		if((tmp = strtok(NULL, " \0")) == NULL){
+			puts("Proper command: 'send vip proto string' where proto is an integer");
+			return;
+		}			
+		char* message = tmp;
+		int message_len = (int)strlen(message) - 1; //take off NULL pointer on end
 				
-		// send IP packet
-				
+		// wrap and send IP packet
+		ip_wrap_send_packet(message, message_len, proto, send_from, send_to, next_hop_interface);		
 	}
 }
 /* _handle_user_command does exactly what it says. Note: this is only called 
@@ -486,22 +510,36 @@ static void _handle_selected_forward(ip_node_t ip_node, uint32_t dest_addr, char
 	interface_ip_keyed_t address_keyed;
 	HASH_FIND_INT(ip_node->addressToInterface, &next_hop, address_keyed);
 	if(!address_keyed){
-		puts("ERROR: forwarding_table local_vip as next hop with no corresponding interface entry in hashmap addressToInterface");
+		puts("Cannot forward packet to destination -- cannot reach destination");
 		return;
 	}
 	link_interface_t next_hop_interface = address_keyed->interface;
 	link_interface_send_packet(next_hop_interface, packet_buffer, bytes_read);
 }
 /* _handle_selected_RIP is a helper to _handle_selected:
-	
+struct routing_info{
+	uint16_t command;
+	uint16_t num_entries;
+	struct cost_address entries[];
+};
+struct cost_address{
+	uint32_t cost;
+	uint32_t address;
+};
 */
 static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, char* packet_unwrapped){
 	// cast packet data as routing_info
 	struct routing_info* info = (struct routing_info*) packet_unwrapped; 
 	
 	if((ntohs(info->command) == RIP_COMMAND_REQUEST)&&(ntohs(info->num_entries) == 0)){
-		//TODO: handle request 
-		
+		// create buffer to give to routing table to fill with routing info 
+		char* buffer_tofill = (char *)malloc(sizeof(char)*UDP_PACKET_MAX_SIZE - 20);
+		int data_len;
+		if((data_len = routing_table_RIP_response(ip_node->routing_table, buffer_tofill)) > 0){
+			// send out RIP data
+			ip_wrap_send_packet_RIP(buffer_tofill, data_len, interface);
+		}
+		free(buffer_tofill);
 	}
 	else if(ntohs(info->command) == RIP_COMMAND_RESPONSE){
 		update_routing_table(ip_node->routing_table, 
@@ -511,6 +549,7 @@ static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, 
 		puts("Bad RIP packet -- discarding packet");
 	}
 }
+
 /* _handle_selected is a dummy function for testing the functionality of the rest
    of the system (and not the implementation of the link_interface). This will be 
    done by linking to a dummy link_interface file that provides the same methods */
@@ -543,17 +582,15 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 	// else either RIP data or TEST_DATA to print:
 	char packet_unwrapped[packet_data_size];
 	int type = ip_unwrap_packet(packet_buffer, packet_unwrapped, packet_data_size);
+	
 	if(type == RIP_DATA){
 		_handle_selected_RIP(ip_node, interface, packet_unwrapped);
-		struct routing_info* info = (struct routing_info*) packet_unwrapped; 
-		update_routing_table(ip_node->routing_table, 
-		ip_node->forwarding_table, info, link_interface_get_local_virt_ip(interface));
 	}
 	else if (type == TEST_DATA){
 		printf("Message Received: %s\n", packet_unwrapped);
 	}
 	else{
-		puts("Error -- packet type neither RIP nor TEST_DATA: discarding packet");
+		printf("Received packet of type neither RIP nor TEST_DATA: %s\n", packet_unwrapped);
 	}
 	//// clean up
 	free(packet_buffer);
