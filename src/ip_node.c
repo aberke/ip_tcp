@@ -277,7 +277,7 @@ static void _handle_reading_sockets(ip_node_t ip_node){
 */
 static void _handle_query_interfaces(ip_node_t ip_node){
 	// create routing_info struct to fill with information as iterate through interfaces -- then send info to routing table
-	struct routing_info *info = (struct routing_info *)malloc(sizeof(struct routing_info) + sizeof(struct cost_address));
+	struct routing_info *info = (struct routing_info *)malloc(sizeof(struct routing_info) + 2*sizeof(struct cost_address));
 	// command and num_entries will be the same for each interface
 	info->command = 2;
 	info->num_entries = 1;
@@ -294,11 +294,14 @@ static void _handle_query_interfaces(ip_node_t ip_node){
 			// up-down status changed -- must update routing table with struct routing_info info
 			if(up_down < 0){
 				info->entries[0].cost = 16;
+				info->entries[1].cost = 16;
 			}
 			else{
 				info->entries[0].cost = 0;
+				info->entries[1].cost = 1;
 			}
-			info->entries[0].address = link_interface_get_remote_virt_ip(interface);
+			info->entries[0].address = link_interface_get_local_virt_ip(interface);
+			info->entries[1].address = link_interface_get_remote_virt_ip(interface);
 			next_hop_addr = link_interface_get_local_virt_ip(interface);
 			update_routing_table(ip_node->routing_table, ip_node->forwarding_table, info, next_hop_addr);
 		}
