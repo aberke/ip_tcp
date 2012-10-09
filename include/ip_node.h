@@ -3,7 +3,10 @@
 
 #include "util/list.h"
 
-
+#define RIP_DATA 200  
+#define TEST_DATA 0  
+#define IP_PACKET_MAX_SIZE 64000
+#define UDP_PACKET_MAX_SIZE 1400
 
 typedef struct ip_node* ip_node_t; 
 

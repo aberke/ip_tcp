@@ -4,6 +4,8 @@
 #include "uthash.h"
 
 #define HOP_COST 1
+#define RIP_COMMAND_REQUEST 1
+#define RIP_COMMAND_RESPONSE 2
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 
@@ -69,6 +71,7 @@ void routing_table_destroy(routing_table_t* rt){
 
 /* FUNCTIONALITY */
 
+
 void routing_table_update_entry(routing_table_t rt, routing_entry_t entry){
 	HASH_ADD_INT(rt->route_hash, address, entry); 
 }
@@ -96,6 +99,7 @@ void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct rout
 			HASH_DEL(rt->route_hash, entry);
 			routing_entry_free(entry);
 			routing_table_update_entry(rt, routing_entry_init(next_hop, cost, addr));
+			//TODO: CREATE RIP MESSAGE
 			forwarding_table_update_entry(ft, addr, next_hop); 
 		}	
 		else{
@@ -114,8 +118,43 @@ void routing_table_print(routing_table_t rt){
 		}
 	}
 }
-
-
+// Fills out buffer_tofill with routing_info struct -- with all the data in place
+// Returns size of routing_info struct it filled 
+int routing_table_RIP_response(routing_table_t rt, char* buffer_tofill){
+	int num_entries = HASH_COUNT(rt->route_hash);
+	if(num_entries*sizeof(struct cost_address) > UDP_PACKET_MAX_SIZE - 20){
+		puts("routing_table has more entries than there is space in UDP_PACKET_MAX_SIZE -- cannot send RIP DATA");
+		return -1;
+	}
+	int total_size = sizeof(struct routing_info) + sizeof(struct cost_address)*num_entries;
+	// fill in routing_info struct
+	struct routing_info* route_info = (struct routing_info *)malloc(total_size);
+	route_info->command = htons((uint16_t)RIP_COMMAND_RESPONSE);
+	route_info->num_entries = htons((uint16_t)num_entries);
+	
+	int i = 0;
+	routing_entry_t info, tmp;
+	HASH_ITER(hh, rt->route_hash, info, tmp){
+		route_info->entries[i].cost = info->cost;
+		route_info->entries[i].address = info->address;
+		i++;
+	}
+	// copy over route_info to buffer_tofill and free up route_info
+	memcpy(buffer_tofill, route_info, total_size);
+	free(route_info);
+	return total_size;
+}
+/*	
+struct routing_info{
+	uint16_t command;
+	uint16_t num_entries;
+	struct cost_address entries[];
+};
+struct cost_address{
+	uint32_t cost;
+	uint32_t address;
+};
+*/
 /* INTERROGATORS */
 /* 
 Parameters

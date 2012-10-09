@@ -140,8 +140,9 @@ uint32_t address;
 	
 
 //ALEX TODO:
-	make link_interface.c
-	make link_interface.h
+	finish _handle_command_send  -- have different handlers for different proto types
+	make sure ip_wrap_send_packet functioning
+
 
 	write handle selected
 	write wrap_ip_packet  // don't have to deal with fragmentation
@@ -156,6 +157,8 @@ uint32_t address;
 	git push
 	
 //NEIL TODO
+	write send function
 	write node.h file
 	write routing_table.c, .h
 	write forwarding_table.c, .h
+	

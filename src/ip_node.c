@@ -26,6 +26,8 @@
 /*for ip packet*/
 #define RIP_DATA 200  
 #define TEST_DATA 0   
+#define RIP_COMMAND_REQUEST 1
+#define RIP_COMMAND_RESPONSE 2
 
 /* Static functions for internal use */
 static void _update_select_list(ip_node_t node);
@@ -33,6 +35,9 @@ static void _handle_selected(ip_node_t node, link_interface_t interface);
 static void _handle_reading_sockets(ip_node_t node);
 static void _handle_user_command(ip_node_t node);
 static int _is_local_ip(ip_node_t ip_node, uint32_t ip);
+static void _handle_query_interfaces(ip_node_t ip_node);
+static void _handle_user_command_down(ip_node_t ip_node, char* buffer);
+static void _handle_user_command_send(ip_node_t ip_node, char* buffer);
 
 /* STRUCTS */
 
@@ -139,7 +144,7 @@ ip_node_t ip_node_init(list_t* links){
 	int index=0;
 	for(curr = links->head; curr != NULL; curr = curr->next){
 		link = (link_t*)curr->data;
-		if((interface = link_interface_create(link)) == NULL){
+		if((interface = link_interface_create(link, index)) == NULL){
 			//todo: add error handing for when socket doesn't bind
 			puts("link_interface didn't init properly");
 		}
@@ -223,6 +228,7 @@ void ip_node_start(ip_node_t ip_node){
 	struct timeval tv;
 	tv.tv_sec = SELECT_TIMEOUT;
 	tv.tv_usec = 0;	
+	// TODO: send out RIP request message
 
 	while(ip_node->running){
 		//// first update the list (rebuild it)
@@ -238,7 +244,7 @@ void ip_node_start(ip_node_t ip_node){
 		/* STILL TODO *******
 		
 		if time elapsed > 5 s:
-			update_all_interfaces()	
+			update_all_interfaces(ip_note_t ip_node); <--- already written!	
 		**********************/
 			
 	}
@@ -253,12 +259,8 @@ static void _handle_reading_sockets(ip_node_t ip_node){
 	if(FD_ISSET(STDIN, &(ip_node->read_fds))){
 		_handle_user_command(ip_node);
 	}
-	/* STILL TODO ***
-			query_interfaces()  // checks if each interface up/down
-				// handles updating_routing_table if necessary 
-				//-- which then handles updating about new info: update_all_interfaces
-
-	*********/
+	// iterate through interfaces to see if any have gone up or down since last checked -- in which case must update routing table
+	_handle_query_interfaces(ip_node);
 
 	struct interface_socket_keyed *socket_keyed, *tmp;
 	HASH_ITER(hh, ip_node->socketToInterface, socket_keyed, tmp){
@@ -266,6 +268,62 @@ static void _handle_reading_sockets(ip_node_t ip_node){
 			_handle_selected(ip_node, socket_keyed->interface);	
 		}	
 	}
+}
+/*  Recently added by Alex: _handle_query_interfaces()
+	iterates through interfaces to check if any interfaces have gone up or down since last checked.
+	link_interface_up_down(link_interface_t l_i) returns 0 if status hasn't changed since function last called
+	if status has recently changed: returns -1 if down, returns 1 if up -- in which case we need to update routing_table
+	This function handles checking each interface for a status changed and updating the routing table as needed
+*/
+static void _handle_query_interfaces(ip_node_t ip_node){
+	// create routing_info struct to fill with information as iterate through interfaces -- then send info to routing table
+	struct routing_info *info = (struct routing_info *)malloc(sizeof(struct routing_info) + sizeof(struct cost_address));
+	// command and num_entries will be the same for each interface
+	info->command = 2;
+	info->num_entries = 1;
+	// set up variables to iteration
+	uint32_t next_hop_addr;
+	struct interface_socket_keyed *socket_keyed, *tmp;
+	// iterate through interfaces in hashmap
+	HASH_ITER(hh, ip_node->socketToInterface, socket_keyed, tmp){
+		link_interface_t interface = socket_keyed->interface;
+		// check if interface status on whether up or down has changed since last checked
+		int up_down;
+		// Note: link_interface_query_up_down different than link_interface_up_down: the former keeps track of whether routing table must be updated
+		if((up_down = link_interface_query_up_down(interface)) != 0){
+			// up-down status changed -- must update routing table with struct routing_info info
+			if(up_down < 0){
+				info->entries[0].cost = 16;
+			}
+			else{
+				info->entries[0].cost = 0;
+			}
+			info->entries[0].address = link_interface_get_remote_virt_ip(interface);
+			next_hop_addr = link_interface_get_local_virt_ip(interface);
+			update_routing_table(ip_node->routing_table, ip_node->forwarding_table, info, next_hop_addr);
+		}
+	}
+	free(info);
+}
+/* Iterates through interfaces:  For each interface that is up -- sends out RIP_RESPONSE on interface */
+static void _update_all_interfaces(ip_node_t ip_node){
+	// create buffer to give to routing table to fill with routing info 
+	char* buffer_tofill = (char *)malloc(sizeof(char)*UDP_PACKET_MAX_SIZE - 20);
+	int data_len;
+	
+	if((data_len = routing_table_RIP_response(ip_node->routing_table, buffer_tofill)) > 0){	
+		// iterate through interfaces to send out RIP data on each interface
+		struct interface_socket_keyed *socket_keyed, *tmp;
+		HASH_ITER(hh, ip_node->socketToInterface, socket_keyed, tmp){
+			link_interface_t interface = socket_keyed->interface;
+			// only send out RIP message if interface up
+			if(link_interface_up_down(interface) > 0){
+			
+				ip_wrap_send_packet_RIP(buffer_tofill, data_len, interface);
+			}
+		}
+	}
+	free(buffer_tofill);	
 }
 
 /* takes in a uint32_t and says whether it's a local_ip or not. 
@@ -300,7 +358,99 @@ static void _update_select_list(ip_node_t ip_node){
 	}
 	ip_node->highsock = max_fd;
 }
-
+/* _handle_user_command_down is a helper to _handle_user_command for handling 'down <interface>' command */
+static void _handle_user_command_down(ip_node_t ip_node, char* buffer){
+	char* tmp = strtok(buffer, " ");
+	if(!strcmp(tmp, "down")){
+		tmp = strtok(NULL, " \0");
+		int interface_id = atoi(tmp);
+		if(((interface_id == 0)&&(strcmp(tmp, "0")))||(interface_id<0)||(interface_id >= ip_node->num_interfaces)){
+			puts("Proper command: 'down <integer>' where integer corresponds to interface id printed from command 'interfaces'");
+		}
+		else{
+			link_interface_t interface = ip_node->interfaces[interface_id];
+			link_interface_bringdown(interface);
+		}	
+	}
+}
+/* _handle_user_command_up is a helper to _handle_user_command for handling 'up <interface>' command */
+static void _handle_user_command_up(ip_node_t ip_node, char* buffer){
+	char* tmp = strtok(buffer, " ");
+	if(!strcmp(tmp, "down")){
+		tmp = strtok(NULL, " \0");
+		int interface_id = atoi(tmp);
+		if(((interface_id == 0)&&(strcmp(tmp, "0")))||(interface_id<0)||(interface_id >= ip_node->num_interfaces)){
+			puts("Proper command: 'down <integer>' where integer corresponds to interface id printed from command 'interfaces'");
+		}
+		else{
+			link_interface_t interface = ip_node->interfaces[interface_id];
+			link_interface_bringup(interface);
+		}	
+	}
+}
+/* _handle_user_command_send is a helper to _handle_user_command for handling 'send vip proto string' command */
+static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
+	puts("_handle_user_command_send: 0");
+	char* tmp = strtok(buffer, " ");
+	if(!strcmp(tmp, "send")){
+		// user using command: 'send vip proto string'
+		struct in_addr send_to, send_from;
+		uint32_t send_to_vip;
+			
+		if((tmp = strtok(NULL, " ")) == NULL){
+			puts("Proper command: 'send vip proto string'");
+			return;
+		}
+		char* send_to_vip_string = tmp;
+			
+		if(inet_pton(AF_INET, send_to_vip_string, &send_to) < 0){
+			puts("Proper command: 'send vip proto string' where vip is the destination virtual ip address in dotted quad notation.");
+			return;
+		}
+		send_to_vip = send_to.s_addr;
+		printf("2: send_to_vip_string = %s\n", send_to_vip_string);	
+		if((tmp = strtok(NULL, " ")) == NULL){
+			puts("Proper command: 'send vip proto string'");
+			return;
+		}
+		
+		int proto = atoi(tmp);
+		if((proto == 0)&&(strcmp(tmp, "0"))){
+			puts("Proper command: 'send vip proto string' where proto is an integer");
+			return;
+		}
+		printf("3: proto = %d\n", proto);
+		
+		// get next hop for sending message to send_to_vip
+		uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
+		if(next_hop_addr < 0){
+			printf("Cannot reach address %s.\n", send_to_vip_string);
+			return;
+		}
+		printf("4: next_hop_addr: %u\n", next_hop_addr);
+		// get struct in_addr corresponding to next_hop_addr
+		send_from.s_addr = next_hop_addr;
+		// get interface to send out packet on -- interface corresponding to next_hop_addr
+		interface_ip_keyed_t address_keyed;
+		HASH_FIND_INT(ip_node->addressToInterface, &next_hop_addr, address_keyed);
+		if(!address_keyed){
+			printf("Cannot reach address %s  -- TODO: MAKE SURE FIXED -- see _handle_user_command_send\n", send_to_vip_string);
+			return;
+		}
+		printf("5\n");
+		link_interface_t next_hop_interface = address_keyed->interface;
+		// get message information
+		if((tmp = strtok(NULL, " \0")) == NULL){
+			puts("Proper command: 'send vip proto string' where proto is an integer");
+			return;
+		}			
+		char* message = tmp;
+		int message_len = (int)strlen(message) - 1; //take off NULL pointer on end
+				
+		// wrap and send IP packet
+		ip_wrap_send_packet(message, message_len, proto, send_from, send_to, next_hop_interface);		
+	}
+}
 /* _handle_user_command does exactly what it says. Note: this is only called 
    if reading from STDIN won't block, so just do it already. 
 
@@ -310,7 +460,6 @@ static void _update_select_list(ip_node_t ip_node){
 		- quit/q     : stop everything
 
 */
-
 static void _handle_user_command(ip_node_t ip_node){
 	char* buffer = (char*) malloc(sizeof(char)*BUFFER_SIZE);
 	fgets(buffer, BUFFER_SIZE-1, stdin);
@@ -325,6 +474,15 @@ static void _handle_user_command(ip_node_t ip_node){
 
 	else if(!strcmp(buffer, "routes"))
 		routing_table_print(ip_node->routing_table);
+		
+	else if(buffer[0] == 'd')
+		_handle_user_command_down(ip_node, buffer);
+	
+	else if(buffer[0] == 'u')
+		_handle_user_command_up(ip_node, buffer);
+	
+	else if(buffer[0] == 's')
+		_handle_user_command_send(ip_node, buffer);
 
 	else if(utils_startswith(buffer, "send")){
 	
@@ -346,18 +504,55 @@ static void _handle_selected_printerror(int error, char* buffer){
 		printf("Got as result of checking validity: %d\n", ip_check_valid_packet(buffer, error));
 	}
 }
+/* Helper to _handle_selected:
+	Takes a packet that arrived but needs to be forwarded.  Handles the forwarding.
+*/
 static void _handle_selected_forward(ip_node_t ip_node, uint32_t dest_addr, char* packet_buffer, int bytes_read){
 	uint32_t next_hop = forwarding_table_get_next_hop(ip_node->forwarding_table, dest_addr);
 	
 	interface_ip_keyed_t address_keyed;
 	HASH_FIND_INT(ip_node->addressToInterface, &next_hop, address_keyed);
 	if(!address_keyed){
-		puts("ERROR: forwarding_table local_vip as next hop with no corresponding interface entry in hashmap addressToInterface");
+		puts("Cannot forward packet to destination -- cannot reach destination");
 		return;
 	}
 	link_interface_t next_hop_interface = address_keyed->interface;
 	link_interface_send_packet(next_hop_interface, packet_buffer, bytes_read);
 }
+/* _handle_selected_RIP is a helper to _handle_selected:
+struct routing_info{
+	uint16_t command;
+	uint16_t num_entries;
+	struct cost_address entries[];
+};
+struct cost_address{
+	uint32_t cost;
+	uint32_t address;
+};
+*/
+static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, char* packet_unwrapped){
+	// cast packet data as routing_info
+	struct routing_info* info = (struct routing_info*) packet_unwrapped; 
+	
+	if((ntohs(info->command) == RIP_COMMAND_REQUEST)&&(ntohs(info->num_entries) == 0)){
+		// create buffer to give to routing table to fill with routing info 
+		char* buffer_tofill = (char *)malloc(sizeof(char)*UDP_PACKET_MAX_SIZE - 20);
+		int data_len;
+		if((data_len = routing_table_RIP_response(ip_node->routing_table, buffer_tofill)) > 0){
+			// send out RIP data
+			ip_wrap_send_packet_RIP(buffer_tofill, data_len, interface);
+		}
+		free(buffer_tofill);
+	}
+	else if(ntohs(info->command) == RIP_COMMAND_RESPONSE){
+		update_routing_table(ip_node->routing_table, 
+			ip_node->forwarding_table, info, link_interface_get_local_virt_ip(interface));
+	}	
+	else{
+		puts("Bad RIP packet -- discarding packet");
+	}
+}
+
 /* _handle_selected is a dummy function for testing the functionality of the rest
    of the system (and not the implementation of the link_interface). This will be 
    done by linking to a dummy link_interface file that provides the same methods */
@@ -378,24 +573,27 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 		return;
 	}
 	uint32_t dest_addr = ip_get_dest_addr(packet_buffer);
-	if(!(_is_local_ip(ip_node, dest_addr))){
-		_handle_selected_forward(ip_node, dest_addr, packet_buffer, bytes_read);	
+	if(!(_is_local_ip(ip_node, dest_addr))){ 
+		// Must forward packet to destination -- first decrement TTL
+		if(ip_decrement_TTL(packet_buffer) > 0){ // if -1 returned, must drop packet instead of forwarding
+			// Time-to-live > 0: Forward packet to destination:
+			_handle_selected_forward(ip_node, dest_addr, packet_buffer, bytes_read);
+		}	
 		free(packet_buffer);
 		return;
 	}
 	// else either RIP data or TEST_DATA to print:
 	char packet_unwrapped[packet_data_size];
 	int type = ip_unwrap_packet(packet_buffer, packet_unwrapped, packet_data_size);
+	
 	if(type == RIP_DATA){
-		struct routing_info* info = (struct routing_info*) packet_unwrapped; 
-		update_routing_table(ip_node->routing_table, 
-		ip_node->forwarding_table, info, link_interface_get_local_virt_ip(interface));
+		_handle_selected_RIP(ip_node, interface, packet_unwrapped);
 	}
 	else if (type == TEST_DATA){
 		printf("Message Received: %s\n", packet_unwrapped);
 	}
 	else{
-		puts("Error -- discarding packet");
+		printf("Received packet of type neither RIP nor TEST_DATA: %s\n", packet_unwrapped);
 	}
 	//// clean up
 	free(packet_buffer);
