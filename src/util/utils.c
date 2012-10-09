@@ -29,3 +29,20 @@ void rtrim(char* str, const char* delim){
 	while(string_contains(delim, str[--i]));	
 	str[i+1] = '\0';
 }
+
+/* utils_startswith just checks if the first string starts
+   with the characters in the second string. Returns 1 if 
+   true, 0 otherwise */
+
+int utils_startswith(const char* s, const char* beginning){
+	if(strlen(s) < strlen(beginning))
+		return 0;
+
+	int i;
+	for(i=0;i<strlen(beginning);i++)
+	{	
+		if(s[i] != beginning[i]) return 0;
+	}
+
+	return 1;
+}	

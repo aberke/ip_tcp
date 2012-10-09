@@ -326,6 +326,9 @@ static void _handle_user_command(ip_node_t ip_node){
 	else if(!strcmp(buffer, "routes"))
 		routing_table_print(ip_node->routing_table);
 
+	else if(utils_startswith(buffer, "send")){
+	
+		
 	else
 		printf("Received unrecognized input from user: %s\n", buffer); 
 	

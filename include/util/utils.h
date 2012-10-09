@@ -11,5 +11,5 @@
 
 void error(const char* msg);
 void rtrim(char* s, const char* delim);
-
+int utils_startswith(const char* s, const char* starts);
 #endif // __UTILS_H__
