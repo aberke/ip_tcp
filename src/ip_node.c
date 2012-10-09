@@ -38,6 +38,7 @@ static int _is_local_ip(ip_node_t ip_node, uint32_t ip);
 static void _handle_query_interfaces(ip_node_t ip_node);
 static void _handle_user_command_down(ip_node_t ip_node, char* buffer);
 static void _handle_user_command_send(ip_node_t ip_node, char* buffer);
+static void _request_RIP(ip_node_t ip_node);
 
 /* STRUCTS */
 
@@ -228,7 +229,9 @@ void ip_node_start(ip_node_t ip_node){
 	struct timeval tv;
 	tv.tv_sec = SELECT_TIMEOUT;
 	tv.tv_usec = 0;	
-	// TODO: send out RIP request message
+	
+	// send out RIP request message on all interfaces
+	_request_RIP(ip_node);
 
 	while(ip_node->running){
 		//// first update the list (rebuild it)
@@ -320,7 +323,17 @@ struct routing_info{
 static void _request_RIP(ip_node_t ip_node){
 	struct routing_info* request = (struct routing_info *)malloc(sizeof(struct routing_info));
 	
+	request->command = htons(RIP_COMMAND_REQUEST);
+	request->num_entries = htons((uint16_t)0);
 	
+	// iterate through interfaces in hashmap
+	struct interface_socket_keyed *socket_keyed, *tmp;
+	HASH_ITER(hh, ip_node->socketToInterface, socket_keyed, tmp){
+		link_interface_t interface = socket_keyed->interface;
+		//send out RIP request on interface
+		ip_wrap_send_packet_RIP(request, sizeof(struct routing_info), interface);
+	}	
+	free(request);
 }
 /* Iterates through interfaces:  For each interface that is up -- sends out RIP_RESPONSE on interface */
 static void _update_all_interfaces(ip_node_t ip_node){
@@ -445,11 +458,11 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 	printf("2: send_to_vip_string = %s\n", send_to_vip_string);	
 	printf("3: proto = %d\n", protocol);
 	
-	// check if send_to_vip local:
-	/*	uint32_t dest_addr = ip_get_dest_addr(packet_buffer);
-	if(_is_local_ip(ip_node, dest_addr)){
-		//TODO
-	}*/
+	// check if send_to_vip local -- if so must just print
+	if(_is_local_ip(ip_node, send_to_vip)){
+		printf("Message received: %s\n", msg);
+		return;
+	}
 	
 	// get next hop for sending message to send_to_vip
 	printf("%d\n", send_to_vip);

@@ -21,8 +21,8 @@ int ip_decrement_TTL(char* packet);
 int ip_unwrap_packet(char* buffer, char* packet_unwrapped, int packet_data_size);
 
 // wraps ip header around data and sends through link_interface li to destination
-int ip_wrap_send_packet(char* data, int data_len, int protocol, struct in_addr ip_src, struct in_addr ip_dst, link_interface_t li);
+int ip_wrap_send_packet(void* data, int data_len, int protocol, struct in_addr ip_src, struct in_addr ip_dst, link_interface_t li);
 // helper to node -- to call for sending an RIP packet across an interface -- calls ip_wrap_send_packet
 // does work of filling in ip_src and ip_dst
-int ip_wrap_send_packet_RIP(char* data, int data_len, link_interface_t interface);
+int ip_wrap_send_packet_RIP(void* data, int data_len, link_interface_t interface);
 #endif //__LINK_INTERFACE__
