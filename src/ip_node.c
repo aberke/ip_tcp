@@ -277,7 +277,7 @@ static void _handle_reading_sockets(ip_node_t ip_node){
 */
 static void _handle_query_interfaces(ip_node_t ip_node){
 	// create routing_info struct to fill with information as iterate through interfaces -- then send info to routing table
-	struct routing_info *info = (struct routing_info *)malloc(sizeof(struct routing_info) + sizeof(struct cost_address));
+	struct routing_info *info = (struct routing_info *)malloc(sizeof(struct routing_info) + 2*sizeof(struct cost_address));
 	// command and num_entries will be the same for each interface
 	info->command = 2;
 	info->num_entries = 1;
@@ -294,11 +294,14 @@ static void _handle_query_interfaces(ip_node_t ip_node){
 			// up-down status changed -- must update routing table with struct routing_info info
 			if(up_down < 0){
 				info->entries[0].cost = 16;
+				info->entries[1].cost = 16;
 			}
 			else{
 				info->entries[0].cost = 0;
+				info->entries[1].cost = 1;
 			}
-			info->entries[0].address = link_interface_get_remote_virt_ip(interface);
+			info->entries[0].address = link_interface_get_local_virt_ip(interface);
+			info->entries[1].address = link_interface_get_remote_virt_ip(interface);
 			next_hop_addr = link_interface_get_local_virt_ip(interface);
 			update_routing_table(ip_node->routing_table, ip_node->forwarding_table, info, next_hop_addr);
 		}
@@ -451,7 +454,7 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 	// get next hop for sending message to send_to_vip
 	printf("%d\n", send_to_vip);
 	uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
-	if(next_hop_addr < 0){
+	if(next_hop_addr == -1){
 		printf("Cannot reach address %s.\n", send_to_vip_string);
 		return;
 	}
@@ -460,7 +463,7 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 	send_from.s_addr = next_hop_addr;
 	// get interface to send out packet on -- interface corresponding to next_hop_addr
 	interface_ip_keyed_t address_keyed;
-	HASH_FIND_INT(ip_node->addressToInterface, &next_hop_addr, address_keyed);
+	HASH_FIND(hh, ip_node->addressToInterface, &next_hop_addr, sizeof(uint32_t), address_keyed);
 	if(!address_keyed){
 		printf("Cannot reach address %s  -- TODO: MAKE SURE FIXED -- see _handle_user_command_send\n", send_to_vip_string);
 		return;
@@ -505,6 +508,14 @@ static void _handle_user_command(ip_node_t ip_node){
 	
 	else if(buffer[0] == 's')
 		_handle_user_command_send(ip_node, buffer);
+
+	else if(!strcmp(buffer, "fp")){
+		forwarding_table_print(ip_node->forwarding_table);	
+	}
+
+	else if(!strcmp(buffer, "print")){
+		ip_node_print(ip_node);
+	}
 
 	else if(utils_startswith(buffer, "send")){
 	
@@ -626,3 +637,12 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 	free(packet_buffer);
 }
 
+void ip_node_print(ip_node_t ip_node){
+	char* ip_buffer = malloc(sizeof(char)*INET_ADDRSTRLEN);
+
+	interface_ip_keyed_t ip_keyed, tmp;
+	HASH_ITER(hh, ip_node->addressToInterface, ip_keyed, tmp){
+		inet_ntop(AF_INET, (void*)&ip_keyed->ip, ip_buffer, INET_ADDRSTRLEN);
+		printf("%s\n", ip_buffer);
+	}
+}

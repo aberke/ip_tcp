@@ -73,38 +73,38 @@ void routing_table_destroy(routing_table_t* rt){
 
 
 void routing_table_update_entry(routing_table_t rt, routing_entry_t entry){
-	HASH_ADD_INT(rt->route_hash, address, entry); 
+	HASH_ADD(hh, rt->route_hash, address, sizeof(uint32_t), entry); 
 }
+
 // next_hop = local_virt_ip -- address of interface that received info
 void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct routing_info* info, uint32_t next_hop){
 	int i;
 	uint32_t addr,cost;
+
 	/* for each entry in info, see if you already have info for that address, or if
  		your current distance is better than the supposed distance (given distance + 1), 
 		and if either of these are false, update your talbe with the new info */
 	for(i=0;i<info->num_entries;i++){
+
 		/* pull out the address and cost of the current line in the info */
 		addr = info->entries[i].address;
 		cost = MIN(info->entries[i].cost + HOP_COST, INFINITY);		
 
 		/* now find the hash entry corresponding to that address, and run RIP */
 		routing_entry_t entry;
-		HASH_FIND_INT(rt->route_hash, &addr, entry); 		
+		HASH_FIND(hh, rt->route_hash, &addr, sizeof(uint32_t), entry); 		
+
 		if(!entry){
 			routing_table_update_entry(rt, routing_entry_init(next_hop, cost, addr));			
 			forwarding_table_update_entry(ft, addr, next_hop);
 		}	
-		else if(entry->cost > cost){
-			//printf("cost was more.\n");
+
+		else if(entry->cost > cost || entry->next_hop == next_hop ){
 			HASH_DEL(rt->route_hash, entry);
 			routing_entry_free(entry);
 			routing_table_update_entry(rt, routing_entry_init(next_hop, cost, addr));
-			//TODO: CREATE RIP MESSAGE
 			forwarding_table_update_entry(ft, addr, next_hop); 
 		}	
-		else{
-			//printf("Keeping key %d\n", addr);
-		}
 	}
 }
 
@@ -204,7 +204,7 @@ Returns
 	- -1 if that address does not have a place in the table */
 uint32_t routing_table_get_cost(routing_table_t rt, uint32_t address){
 	routing_entry_t entry;
-	HASH_FIND_INT(rt->route_hash, &address, entry);
+	HASH_FIND(hh, rt->route_hash, &address, sizeof(uint32_t), entry);
 	if(!entry) return -1;
 	else return entry->cost;	
 }

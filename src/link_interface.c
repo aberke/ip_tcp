@@ -77,8 +77,8 @@ link_interface_t link_interface_create(link_t *link, int id){
 	freeaddrinfo(local_addrinfo);
 	freeaddrinfo(remote_addrinfo); // free the linked-list
 
-	l_i->local_virt_ip = (link->local_virt_ip).s_addr;
-	l_i->remote_virt_ip = (link->remote_virt_ip).s_addr;
+	l_i->local_virt_ip = htonl((link->local_virt_ip).s_addr);
+	l_i->remote_virt_ip = htonl((link->remote_virt_ip).s_addr);
 	
 	return l_i;
 }
@@ -256,8 +256,8 @@ int link_interface_query_up_down(link_interface_t l_i){
 void link_interface_print(link_interface_t l_i){
 	char local_buffer[INET_ADDRSTRLEN], remote_buffer[INET_ADDRSTRLEN];
 	struct in_addr local, remote;
-	local.s_addr = htonl(l_i->local_virt_ip); 
-	remote.s_addr = ntohl(l_i->remote_virt_ip);
+	local.s_addr = l_i->local_virt_ip; 
+	remote.s_addr = l_i->remote_virt_ip;
 	char* up_down = "true";
 	if(l_i->up_down_boolean < 0){
 		up_down = "false";
