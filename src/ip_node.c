@@ -293,8 +293,8 @@ static void _handle_query_interfaces(ip_node_t ip_node){
 		if((up_down = link_interface_query_up_down(interface)) != 0){
 			// up-down status changed -- must update routing table with struct routing_info info
 			if(up_down < 0){
-				info->entries[0].cost = 16;
-				info->entries[1].cost = 16;
+				info->entries[0].cost = INFINITY;
+				info->entries[1].cost = INFINITY;
 			}
 			else{
 				info->entries[0].cost = 0;
@@ -446,10 +446,10 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 	printf("3: proto = %d\n", protocol);
 	
 	// check if send_to_vip local:
-		uint32_t dest_addr = ip_get_dest_addr(packet_buffer);
+	/*	uint32_t dest_addr = ip_get_dest_addr(packet_buffer);
 	if(_is_local_ip(ip_node, dest_addr)){
 		//TODO
-	}
+	}*/
 	
 	// get next hop for sending message to send_to_vip
 	printf("%d\n", send_to_vip);
