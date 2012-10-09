@@ -57,13 +57,13 @@ void forwarding_table_destroy(forwarding_table_t* ft){
 
 void forwarding_table_update_entry(forwarding_table_t ft, uint32_t addr, uint32_t next){
 	forwarding_info_t info;
-	HASH_FIND_INT(ft->entries,&addr, info);
+	HASH_FIND(hh,ft->entries,&addr,sizeof(uint32_t),info);
 	if(info){
 		HASH_DEL(ft->entries, info);	
 		forwarding_info_destroy(&info);
 	}
 	info = forwarding_info_init(addr, next);
-	HASH_ADD_INT(ft->entries, final_address,info); 
+	HASH_ADD(hh,ft->entries,final_address,sizeof(uint32_t),info); 
 } 
 
 void forwarding_table_print(forwarding_table_t ft){
@@ -86,9 +86,15 @@ Returns
 	- -1 if no such address can be found */
 uint32_t forwarding_table_get_next_hop(forwarding_table_t ft, uint32_t final_address){
 	forwarding_info_t info;
-	HASH_FIND_INT(ft->entries, &final_address, info);
-	if(!info) return -1;
-	else return info->next_hop;	
+	HASH_FIND(hh, ft->entries, &final_address, sizeof(uint32_t), info);
+	if(!info){
+		puts("returing -1");
+		return -1;
+	}
+	else{
+		puts("not returning -1");	
+ 		return info->next_hop;	
+	}
 }
 
 
