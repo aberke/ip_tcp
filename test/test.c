@@ -127,9 +127,9 @@ void test_sending_routing_info(){
 	
 	///////// TEST ///////////
 	int size;
-	struct routing_info* info_to_send = routing_table_RIP_response();
+	struct routing_info* info_to_send = routing_table_RIP_response(rt, next_hop,&size);
 
-	
+	TEST_EQ(info_to_send->num_entries,2,"Checking that there are the right number of entries");
 }
 
 void test_unknown(){

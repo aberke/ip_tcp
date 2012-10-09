@@ -415,6 +415,14 @@ static void _handle_user_command_up(ip_node_t ip_node, char* buffer){
 }
 /* _handle_user_command_send is a helper to _handle_user_command for handling 'send vip proto string' command */
 static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
+	char* address;
+	int protocol;
+	char* msg;
+
+	if(sscanf(buffer, "%s %d %s", address, &protocol, msg) != 3)
+		error	
+
+
 	puts("_handle_user_command_send: 0");
 	char* tmp = strtok(buffer, " ");
 	if(!strcmp(tmp, "send")){
@@ -428,7 +436,7 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 		}
 		char* send_to_vip_string = tmp;
 			
-		if(inet_pton(AF_INET, send_to_vip_string, &send_to) < 0){
+		if(inet_pton(AF_INET, send_to_vip_string, &send_to) <= 0){
 			puts("Proper command: 'send vip proto string' where vip is the destination virtual ip address in dotted quad notation.");
 			return;
 		}
@@ -447,6 +455,7 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 		printf("3: proto = %d\n", proto);
 		
 		// get next hop for sending message to send_to_vip
+		printf("%d\n", send_to_vip);
 		uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
 		if(next_hop_addr < 0){
 			printf("Cannot reach address %s.\n", send_to_vip_string);
