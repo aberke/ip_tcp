@@ -385,107 +385,91 @@ static void _update_select_list(ip_node_t ip_node){
 }
 /* _handle_user_command_down is a helper to _handle_user_command for handling 'down <interface>' command */
 static void _handle_user_command_down(ip_node_t ip_node, char* buffer){
-	char* tmp = strtok(buffer, " ");
-	if(!strcmp(tmp, "down")){
-		if((tmp = strtok(NULL, " \0")) == NULL){
-			puts("Proper command: 'down <integer>' where integer corresponds to interface id printed from command 'interfaces'");
-			return;
-		}
-		int interface_id = atoi(tmp);
-		if(((interface_id == 0)&&(strcmp(tmp, "0")))||(interface_id<0)||(interface_id >= ip_node->num_interfaces)){
-			puts("Proper command: 'down <integer>' where integer corresponds to interface id printed from command 'interfaces'");
-		}
-		else{
-			link_interface_t interface = ip_node->interfaces[interface_id];
-			link_interface_bringdown(interface);
-		}	
+	char down[50];
+	int interface_id;
+
+	if((sscanf(buffer, "%s %d", down, &interface_id)) != 2){
+		puts("Proper command: 'down <integer>' where integer corresponds to interface id printed from command 'interfaces'");
+		return;
+	}		
+
+	if((interface_id<0)||(interface_id >= ip_node->num_interfaces)){
+		puts("Proper command: 'down <integer>' where integer corresponds to interface id printed from command 'interfaces'");
 	}
+	else{
+		link_interface_t interface = ip_node->interfaces[interface_id];
+		link_interface_bringdown(interface);
+	}		
 }
 /* _handle_user_command_up is a helper to _handle_user_command for handling 'up <interface>' command */
 static void _handle_user_command_up(ip_node_t ip_node, char* buffer){
-	char* tmp = strtok(buffer, " ");
-	if(!strcmp(tmp, "down")){
-		if((tmp = strtok(NULL, " \0")) == NULL){
-			puts("Proper command: 'down <integer>' where integer corresponds to interface id printed from command 'interfaces'");
-			return;
-		}
-		int interface_id = atoi(tmp);
-		if(((interface_id == 0)&&(strcmp(tmp, "0")))||(interface_id<0)||(interface_id >= ip_node->num_interfaces)){
-			puts("Proper command: 'down <integer>' where integer corresponds to interface id printed from command 'interfaces'");
-		}
-		else{
-			link_interface_t interface = ip_node->interfaces[interface_id];
-			link_interface_bringup(interface);
-		}	
+	char up[50];
+	int interface_id;
+
+	if((sscanf(buffer, "%s %d", up, &interface_id)) != 2){
+		puts("Proper command: 'up <integer>' where integer corresponds to interface id printed from command 'interfaces'");
+		return;
+	}		
+
+	if((interface_id<0)||(interface_id >= ip_node->num_interfaces)){
+		puts("Proper command: 'up <integer>' where integer corresponds to interface id printed from command 'interfaces'");
 	}
+	else{
+		link_interface_t interface = ip_node->interfaces[interface_id];
+		link_interface_bringup(interface);
+	}		
 }
 /* _handle_user_command_send is a helper to _handle_user_command for handling 'send vip proto string' command */
 static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
-	char* address;
+	char send[50];
+	char send_to_vip_string[50];
 	int protocol;
-	char* msg;
-
-	puts("_handle_user_command_send: 0");
-	char* tmp = strtok(buffer, " ");
-	if(!strcmp(tmp, "send")){
-		// user using command: 'send vip proto string'
-		struct in_addr send_to, send_from;
-		uint32_t send_to_vip;
-			
-		if((tmp = strtok(NULL, " ")) == NULL){
-			puts("Proper command: 'send vip proto string'");
-			return;
-		}
-		char* send_to_vip_string = tmp;
-			
-		if(inet_pton(AF_INET, send_to_vip_string, &send_to) <= 0){
-			puts("Proper command: 'send vip proto string' where vip is the destination virtual ip address in dotted quad notation.");
-			return;
-		}
-		send_to_vip = send_to.s_addr;
-		printf("2: send_to_vip_string = %s\n", send_to_vip_string);	
-		if((tmp = strtok(NULL, " ")) == NULL){
-			puts("Proper command: 'send vip proto string'");
-			return;
-		}
-		
-		int proto = atoi(tmp);
-		if((proto == 0)&&(strcmp(tmp, "0"))){
-			puts("Proper command: 'send vip proto string' where proto is an integer");
-			return;
-		}
-		printf("3: proto = %d\n", proto);
-		
-		// get next hop for sending message to send_to_vip
-		printf("%d\n", send_to_vip);
-		uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
-		if(next_hop_addr == -1){
-			printf("Cannot reach address %s.\n", send_to_vip_string);
-			return;
-		}
-		printf("4: next_hop_addr: %u\n", next_hop_addr);
-		// get struct in_addr corresponding to next_hop_addr
-		send_from.s_addr = next_hop_addr;
-		// get interface to send out packet on -- interface corresponding to next_hop_addr
-		interface_ip_keyed_t address_keyed;
-		HASH_FIND_INT(ip_node->addressToInterface, &next_hop_addr, address_keyed);
-		if(!address_keyed){
-			printf("Cannot reach address %s  -- TODO: MAKE SURE FIXED -- see _handle_user_command_send\n", send_to_vip_string);
-			return;
-		}
-		printf("5\n");
-		link_interface_t next_hop_interface = address_keyed->interface;
-		// get message information
-		if((tmp = strtok(NULL, " \0")) == NULL){
-			puts("Proper command: 'send vip proto string' where proto is an integer");
-			return;
-		}			
-		char* message = tmp;
-		int message_len = (int)strlen(message) - 1; //take off NULL pointer on end
-				
-		// wrap and send IP packet
-		ip_wrap_send_packet(message, message_len, proto, send_from, send_to, next_hop_interface);		
+	char msg[UDP_PACKET_MAX_SIZE-IP_HEADER_SIZE];
+	
+	if(sscanf(buffer, "%s %s %d %s", send, send_to_vip_string, &protocol, msg) != 4){
+		puts("Proper command: 'send vip protocol message'");
+		return;
 	}
+	
+	if(strcmp(send, "send")){
+		puts("Proper command: 'send vip proto string'");
+		return;
+	}
+	struct in_addr send_to, send_from;
+	uint32_t send_to_vip;
+		
+	if(inet_pton(AF_INET, send_to_vip_string, &send_to) <= 0){
+		puts("Proper command: 'send vip proto string' where vip is the destination virtual ip address in dotted quad notation.");
+		return;
+	}
+	send_to_vip = send_to.s_addr;
+	printf("2: send_to_vip_string = %s\n", send_to_vip_string);	
+	printf("3: proto = %d\n", protocol);
+	
+	// get next hop for sending message to send_to_vip
+	printf("%d\n", send_to_vip);
+	uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
+	if(next_hop_addr < 0){
+		printf("Cannot reach address %s.\n", send_to_vip_string);
+		return;
+	}
+	printf("4: next_hop_addr: %u\n", next_hop_addr);
+	// get struct in_addr corresponding to next_hop_addr
+	send_from.s_addr = next_hop_addr;
+	// get interface to send out packet on -- interface corresponding to next_hop_addr
+	interface_ip_keyed_t address_keyed;
+	HASH_FIND_INT(ip_node->addressToInterface, &next_hop_addr, address_keyed);
+	if(!address_keyed){
+		printf("Cannot reach address %s  -- TODO: MAKE SURE FIXED -- see _handle_user_command_send\n", send_to_vip_string);
+		return;
+	}
+	link_interface_t next_hop_interface = address_keyed->interface;
+	
+	// get message information
+	int msg_len = (int)strlen(msg) - 1; //take off NULL pointer on end
+			
+	// wrap and send IP packet
+	ip_wrap_send_packet(msg, msg_len, protocol, send_from, send_to, next_hop_interface);			
 }
 /* _handle_user_command does exactly what it says. Note: this is only called 
    if reading from STDIN won't block, so just do it already. 
@@ -573,26 +557,7 @@ static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, 
 	// cast packet data as routing_info
 	struct routing_info* info = (struct routing_info*) packet_unwrapped; 
 	
-	/*
-	if((ntohs(info->command) == RIP_COMMAND_REQUEST)&&(ntohs(info->num_entries) == 0)){
-		// create buffer to give to routing table to fill with routing info 
-		char* buffer_tofill = (char *)malloc(sizeof(char)*UDP_PACKET_MAX_SIZE - 20);
-		int data_len;
-		if((data_len = routing_table_RIP_response(ip_node->routing_table, buffer_tofill)) > 0){
-			// send out RIP data
-			ip_wrap_send_packet_RIP(buffer_tofill, data_len, interface);
-		}
-		free(buffer_tofill);
-	}
-	else if(ntohs(info->command) == RIP_COMMAND_RESPONSE){
-		update_routing_table(ip_node->routing_table, 
-			ip_node->forwarding_table, info, link_interface_get_local_virt_ip(interface));
-	}	
-	else{
-		puts("Bad RIP packet -- discarding packet");
-	}
-	*/
-	if((ntohs(info->command) == RIP_COMMAND_REQUEST) && !info->num_entries){
+	if((ntohs(info->command) == RIP_COMMAND_REQUEST) && !ntohs(info->num_entries)){
 		struct routing_info* route_info;
 		int size;
 		uint32_t address;
