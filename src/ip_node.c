@@ -452,7 +452,7 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 	// get next hop for sending message to send_to_vip
 	printf("%d\n", send_to_vip);
 	uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
-	if(next_hop_addr < 0){
+	if(next_hop_addr == -1){
 		printf("Cannot reach address %s.\n", send_to_vip_string);
 		return;
 	}
@@ -461,7 +461,7 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 	send_from.s_addr = next_hop_addr;
 	// get interface to send out packet on -- interface corresponding to next_hop_addr
 	interface_ip_keyed_t address_keyed;
-	HASH_FIND_INT(ip_node->addressToInterface, &next_hop_addr, address_keyed);
+	HASH_FIND(hh, ip_node->addressToInterface, &next_hop_addr, sizeof(uint32_t), address_keyed);
 	if(!address_keyed){
 		printf("Cannot reach address %s  -- TODO: MAKE SURE FIXED -- see _handle_user_command_send\n", send_to_vip_string);
 		return;
@@ -510,6 +510,11 @@ static void _handle_user_command(ip_node_t ip_node){
 	else if(!strcmp(buffer, "fp")){
 		forwarding_table_print(ip_node->forwarding_table);	
 	}
+
+	else if(!strcmp(buffer, "print")){
+		ip_node_print(ip_node);
+	}
+
 	else if(utils_startswith(buffer, "send")){
 	
 	}	
@@ -630,3 +635,12 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 	free(packet_buffer);
 }
 
+void ip_node_print(ip_node_t ip_node){
+	char* ip_buffer = malloc(sizeof(char)*INET_ADDRSTRLEN);
+
+	interface_ip_keyed_t ip_keyed, tmp;
+	HASH_ITER(hh, ip_node->addressToInterface, ip_keyed, tmp){
+		inet_ntop(AF_INET, (void*)&ip_keyed->ip, ip_buffer, INET_ADDRSTRLEN);
+		printf("%s\n", ip_buffer);
+	}
+}
