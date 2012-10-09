@@ -387,7 +387,10 @@ static void _update_select_list(ip_node_t ip_node){
 static void _handle_user_command_down(ip_node_t ip_node, char* buffer){
 	char* tmp = strtok(buffer, " ");
 	if(!strcmp(tmp, "down")){
-		tmp = strtok(NULL, " \0");
+		if((tmp = strtok(NULL, " \0")) == NULL){
+			puts("Proper command: 'down <integer>' where integer corresponds to interface id printed from command 'interfaces'");
+			return;
+		}
 		int interface_id = atoi(tmp);
 		if(((interface_id == 0)&&(strcmp(tmp, "0")))||(interface_id<0)||(interface_id >= ip_node->num_interfaces)){
 			puts("Proper command: 'down <integer>' where integer corresponds to interface id printed from command 'interfaces'");
@@ -402,7 +405,10 @@ static void _handle_user_command_down(ip_node_t ip_node, char* buffer){
 static void _handle_user_command_up(ip_node_t ip_node, char* buffer){
 	char* tmp = strtok(buffer, " ");
 	if(!strcmp(tmp, "down")){
-		tmp = strtok(NULL, " \0");
+		if((tmp = strtok(NULL, " \0")) == NULL){
+			puts("Proper command: 'down <integer>' where integer corresponds to interface id printed from command 'interfaces'");
+			return;
+		}
 		int interface_id = atoi(tmp);
 		if(((interface_id == 0)&&(strcmp(tmp, "0")))||(interface_id<0)||(interface_id >= ip_node->num_interfaces)){
 			puts("Proper command: 'down <integer>' where integer corresponds to interface id printed from command 'interfaces'");
