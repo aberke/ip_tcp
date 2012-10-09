@@ -111,7 +111,7 @@ void test_util_string(){
 	rtrim(x, "e"); 
 	TEST_STR_EQ(x, "Hello there someon","");	
 }
-
+/*
 void test_sending_routing_info(){
 	routing_table_t rt = routing_table_init();
 	forwarding_table_t ft = forwarding_table_init();
@@ -131,6 +131,7 @@ void test_sending_routing_info(){
 
 	TEST_EQ(info_to_send->num_entries,2,"Checking that there are the right number of entries");
 }
+}*/
 
 void test_unknown(){
 	routing_table_t rt = routing_table_init();
