@@ -305,26 +305,22 @@ static void _handle_query_interfaces(ip_node_t ip_node){
 	}
 	free(info);
 }
+/* _request_RIP sends out RIP REQUEST on each of node's link_interfaces
+	Meant to be called at node_start, before entering select loop
+
+struct routing_info{
+	uint16_t command;
+	uint16_t num_entries;
+	struct cost_address entries[];
+};
+*/
+static void _request_RIP(ip_node_t ip_node){
+	struct routing_info* request = (struct routing_info *)malloc(sizeof(struct routing_info));
+	
+	
+}
 /* Iterates through interfaces:  For each interface that is up -- sends out RIP_RESPONSE on interface */
 static void _update_all_interfaces(ip_node_t ip_node){
-	/*
-	// create buffer to give to routing table to fill with routing info 
-	char* buffer_tofill = (char *)malloc(sizeof(char)*UDP_PACKET_MAX_SIZE - 20);
-	int data_len;
-	if((data_len = routing_table_RIP_response(ip_node->routing_table, buffer_tofill)) > 0){	
-		// iterate through interfaces to send out RIP data on each interface
-		struct interface_socket_keyed *socket_keyed, *tmp;
-		HASH_ITER(hh, ip_node->socketToInterface, socket_keyed, tmp){
-			link_interface_t interface = socket_keyed->interface;
-			// only send out RIP message if interface up
-			if(link_interface_up_down(interface) > 0){
-			
-				ip_wrap_send_packet_RIP(buffer_tofill, data_len, interface);
-			}
-		}
-	}
-	free(buffer_tofill);
-	*/
 
 	int size;
 	uint32_t ip;
@@ -345,9 +341,9 @@ static void _update_all_interfaces(ip_node_t ip_node){
 		   ie we don't actually care whether it gets sent here, so lets just try to send it
            and if the interface is down it just won't get it out. */
 		if(route_info){
-			ip_wrap_send_packet_RIP((char*)route_info, size, interface);	
-			free(route_info);
-		}
+			ip_wrap_send_packet_RIP((char*)route_info, size, interface);
+		}	
+		free(route_info);
 	}
 }
 
@@ -445,6 +441,12 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 	send_to_vip = send_to.s_addr;
 	printf("2: send_to_vip_string = %s\n", send_to_vip_string);	
 	printf("3: proto = %d\n", protocol);
+	
+	// check if send_to_vip local:
+		uint32_t dest_addr = ip_get_dest_addr(packet_buffer);
+	if(_is_local_ip(ip_node, dest_addr)){
+		//TODO
+	}
 	
 	// get next hop for sending message to send_to_vip
 	printf("%d\n", send_to_vip);
