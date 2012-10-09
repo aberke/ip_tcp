@@ -307,10 +307,10 @@ static void _handle_query_interfaces(ip_node_t ip_node){
 }
 /* Iterates through interfaces:  For each interface that is up -- sends out RIP_RESPONSE on interface */
 static void _update_all_interfaces(ip_node_t ip_node){
+	/*
 	// create buffer to give to routing table to fill with routing info 
 	char* buffer_tofill = (char *)malloc(sizeof(char)*UDP_PACKET_MAX_SIZE - 20);
 	int data_len;
-	
 	if((data_len = routing_table_RIP_response(ip_node->routing_table, buffer_tofill)) > 0){	
 		// iterate through interfaces to send out RIP data on each interface
 		struct interface_socket_keyed *socket_keyed, *tmp;
@@ -323,7 +323,32 @@ static void _update_all_interfaces(ip_node_t ip_node){
 			}
 		}
 	}
-	free(buffer_tofill);	
+	free(buffer_tofill);
+	*/
+
+	int size;
+	uint32_t ip;
+	struct routing_info* route_info;
+	interface_ip_keyed_t ip_keyed, tmp;
+	link_interface_t interface;
+
+	//// iterate through the ip_keyed interfaces (need to pull out their ip, so why not?)
+	HASH_ITER(hh, ip_node->addressToInterface, ip_keyed, tmp){
+		interface = ip_keyed->interface;
+		ip = ip_keyed->ip;		
+
+		/* get routing_info */
+		route_info = routing_table_RIP_response(ip_node->routing_table, ip, &size);
+		
+		/* if it's not null (nothing to send) and the interface is up, then send it out.
+		   although I think we should leave the check of up/down to the interface itself.
+		   ie we don't actually care whether it gets sent here, so lets just try to send it
+           and if the interface is down it just won't get it out. */
+		if(route_info){
+			ip_wrap_send_packet_RIP((char*)route_info, size, interface);	
+			free(route_info);
+		}
+	}
 }
 
 /* takes in a uint32_t and says whether it's a local_ip or not. 
@@ -486,7 +511,7 @@ static void _handle_user_command(ip_node_t ip_node){
 
 	else if(utils_startswith(buffer, "send")){
 	
-		
+	}	
 	else
 		printf("Received unrecognized input from user: %s\n", buffer); 
 	
@@ -534,6 +559,7 @@ static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, 
 	// cast packet data as routing_info
 	struct routing_info* info = (struct routing_info*) packet_unwrapped; 
 	
+	/*
 	if((ntohs(info->command) == RIP_COMMAND_REQUEST)&&(ntohs(info->num_entries) == 0)){
 		// create buffer to give to routing table to fill with routing info 
 		char* buffer_tofill = (char *)malloc(sizeof(char)*UDP_PACKET_MAX_SIZE - 20);
@@ -551,7 +577,30 @@ static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, 
 	else{
 		puts("Bad RIP packet -- discarding packet");
 	}
-}
+	*/
+	if((ntohs(info->command) == RIP_COMMAND_REQUEST) && !info->num_entries){
+		struct routing_info* route_info;
+		int size;
+		uint32_t address;
+
+		address = link_interface_get_local_virt_ip(interface);
+		
+		//// get the info from the routing_table
+		route_info = routing_table_RIP_response(ip_node->routing_table,address,&size);
+		if(route_info){
+			ip_wrap_send_packet_RIP((char*)route_info, size, interface);
+			free(route_info);
+		}	
+	}
+	else if(ntohs(info->command) == RIP_COMMAND_RESPONSE){
+		update_routing_table(ip_node->routing_table, 
+			ip_node->forwarding_table, info, link_interface_get_local_virt_ip(interface));
+	}	
+	else{
+		puts("Bad RIP packet -- discarding packet");
+	}
+ }
+
 
 /* _handle_selected is a dummy function for testing the functionality of the rest
    of the system (and not the implementation of the link_interface). This will be 

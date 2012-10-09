@@ -20,13 +20,24 @@
 #define DEFAULT_VERBOSE 0
 #define DEFAULT_COMMAND 0
 
-#define TEST_STR_EQ(e1,e2)													\
+#define ANNOTATE(annotation)\
+do{							\
+	if(strlen(annotation)) printf("%s # %s %s\n", ANSI_COLOR_BLUE, annotation, ANSI_COLOR_RESET);\
+	else printf("\n");		\
+}							\
+while(0) 
+
+#define TEST_STR_EQ(e1,e2,annotation)										\
 do{																			\
 	printf("%-50s == %-20s\t\t", (#e1), (#e2));								\
-	if(!strcmp(e1,e2)) printf("%sGood%s\n", ANSI_COLOR_GREEN, ANSI_COLOR_RESET);\
+	if(!strcmp(e1,e2)){														\
+		printf("%sGood%s\n", ANSI_COLOR_GREEN, ANSI_COLOR_RESET);			\
+		ANNOTATE(annotation);												\
+	}																		\
 	else {																	\
 		printf("%sBad\n", ANSI_COLOR_RED);									\
-		printf("RESULTS:\n");												\
+		ANNOTATE(annotation);												\
+		printf("RESULTS @ %s:%d\n", __FILE__, __LINE__);					\
 		printf("%s = %s\n", (#e1), e1);										\
 		printf("\t\t\t%s = %s\n", (#e2), e2);								\
 		printf("%s", ANSI_COLOR_RESET);										\
@@ -34,13 +45,17 @@ do{																			\
 }																			\
 while(0)
 
-#define TEST_EQ(e1,e2)													\
+#define TEST_EQ(e1,e2,annotation)										\
 do{																		\
 	printf("%-50s == %-20s\t\t", (#e1), (#e2));							\
-	if(e1==e2) printf("%sGood%s\n", ANSI_COLOR_GREEN, ANSI_COLOR_RESET);\
+	if(e1==e2){															\
+		printf("%sGood%s", ANSI_COLOR_GREEN, ANSI_COLOR_RESET);			\
+		ANNOTATE(annotation);											\
+	}																	\
 	else {																\
-		printf("%sBad\n", ANSI_COLOR_RED);							\
-		printf("RESULTS:\n");											\
+		printf("%sBad", ANSI_COLOR_RED);								\
+		ANNOTATE(annotation);											\
+		printf("RESULTS @ %s:%d\n", __FILE__, __LINE__);				\
 		printf("%s = %f\n", (#e1), (float)e1);							\
 		printf("\t\t\t%s = %f\n", (#e2), (float)e2);					\
 		printf("%s", ANSI_COLOR_RESET);									\
@@ -94,7 +109,55 @@ void test_util_string(){
 	char* x = malloc(sizeof(char)*BUFFER_SIZE);
 	strcpy(x, "Hello there someoneee");
 	rtrim(x, "e"); 
-	TEST_STR_EQ(x, "Hello there someon");	
+	TEST_STR_EQ(x, "Hello there someon","");	
+}
+
+void test_sending_routing_info(){
+	routing_table_t rt = routing_table_init();
+	forwarding_table_t ft = forwarding_table_init();
+
+	int num_entries = 2;
+	uint32_t costs[5] = {5,6};
+	uint32_t addrs[5] = {0,1};
+
+	uint32_t next_hop = 3;
+	struct routing_info* info = fill_routing_info(num_entries, costs, addrs);
+
+	debug_update_routing_table(rt, ft, info, next_hop);
+	
+	///////// TEST ///////////
+	int size;
+	struct routing_info* info_to_send = routing_table_RIP_response();
+
+	
+}
+
+void test_unknown(){
+	routing_table_t rt = routing_table_init();
+	forwarding_table_t ft = forwarding_table_init();
+
+/* FIRST INFO */
+	int num_entries = 2;
+	uint32_t costs[5] = {5, 6};
+	uint32_t addrs[5] = {0, 1};
+
+	uint32_t next_hop = 3;
+	struct routing_info* info = fill_routing_info(num_entries, costs, addrs);
+
+	debug_update_routing_table(rt, ft, info, next_hop);
+
+	TEST_EQ(routing_table_get_cost(rt,0),6,"checking correctness");
+	TEST_EQ(routing_table_get_cost(rt,2),-1,"checking unknown destination for forwarding table");
+	TEST_EQ(routing_table_get_cost(rt,100000),-1,"checking (large) unknown destination");
+
+	TEST_EQ(forwarding_table_get_next_hop(ft,0),3,"");
+	TEST_EQ(forwarding_table_get_next_hop(ft,2),-1,"checking unknown destination for routing table");
+
+	/* CLEAN UP */
+	free(info);
+
+	forwarding_table_destroy(&ft);
+	routing_table_destroy(&rt);
 }
 
 void test_small(){
@@ -123,14 +186,15 @@ void test_small(){
 // Now check that you got what you expected
 
 	// for the routing table
-	TEST_EQ(routing_table_get_cost(rt, 0),4);
-	TEST_EQ(routing_table_get_cost(rt, 1),7);
-	TEST_EQ(routing_table_get_cost(rt, 2),8);
+	TEST_EQ(routing_table_get_cost(rt, 0),4, "checking correctness");
+	TEST_EQ(routing_table_get_cost(rt, 1),7,"");
+	TEST_EQ(routing_table_get_cost(rt, 2),7,"");
 
 	// for the forwarding_table
-	TEST_EQ(forwarding_table_get_next_hop(ft,2),4);
-	TEST_EQ(forwarding_table_get_next_hop(ft,1),3);
-	TEST_EQ(forwarding_table_get_next_hop(ft,0),4);
+	TEST_EQ(forwarding_table_get_next_hop(ft,2),4,"");
+	TEST_EQ(forwarding_table_get_next_hop(ft,1),3,"");
+	TEST_EQ(forwarding_table_get_next_hop(ft,0),4,"");
+	TEST_EQ(forwarding_table_get_next_hop(ft,3),-1,"");
 
 	/* CLEAN UP */
 	free(info); free(info2);
@@ -167,15 +231,15 @@ void test_basic_routing(){
 // Now test that you got what you expected
 
 	// for the routing table
-	TEST_EQ(routing_table_get_cost(rt, 4),10);
-	TEST_EQ(routing_table_get_cost(rt, 1),7);
-	TEST_EQ(routing_table_get_cost(rt, 6),13);
+	TEST_EQ(routing_table_get_cost(rt, 4),10, "");
+	TEST_EQ(routing_table_get_cost(rt, 1),7, "");
+	TEST_EQ(routing_table_get_cost(rt, 6),13,"");
 
 	// for the forwarding table
-	TEST_EQ(forwarding_table_get_next_hop(ft, 6),4);
-	TEST_EQ(forwarding_table_get_next_hop(ft, 7),-1);
-	TEST_EQ(forwarding_table_get_next_hop(ft, 4),4);
-	TEST_EQ(forwarding_table_get_next_hop(ft, 1),3);
+	TEST_EQ(forwarding_table_get_next_hop(ft, 6),4,"");
+	TEST_EQ(forwarding_table_get_next_hop(ft, 7),-1,"");
+	TEST_EQ(forwarding_table_get_next_hop(ft, 4),4,"");
+	TEST_EQ(forwarding_table_get_next_hop(ft, 1),3,"");
 	
 
 	/* CLEAN UP */
@@ -210,10 +274,11 @@ void parse_arguments(int argc,char** argv){
 int main(int argc, char** argv){
 	parse_arguments(argc,argv);	
 
-	//TEST(test_util_string);
+	TEST(test_util_string);
 
 	TEST(test_small);
-	//TEST(test_basic_routing);
+	TEST(test_basic_routing);
+	TEST(test_unknown);
 
 	/* RETURN */
 	return(0);

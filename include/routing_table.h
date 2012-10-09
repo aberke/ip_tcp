@@ -10,6 +10,8 @@
 #define TEST_DATA 0  
 #define IP_PACKET_MAX_SIZE 64000
 #define UDP_PACKET_MAX_SIZE 1400
+#define IP_HEADER_SIZE 20
+#define ROUTING_INFO_HEADER_SIZE 4
 
 struct cost_address{
 	uint32_t cost;
@@ -33,6 +35,7 @@ void routing_table_print(routing_table_t rt);
 uint32_t routing_table_get_cost(routing_table_t rt, uint32_t addr);
 // Fills out buffer_tofill with routing_info struct -- with all the data in place
 // Returns size of routing_info struct it filled 
-int routing_table_RIP_response(routing_table_t rt, char* buffer_tofill);
+//int routing_table_RIP_response(routing_table_t rt, char* buffer_tofill);
+struct routing_info* routing_table_RIP_response(routing_table_t rt, uint32_t ip, int* size);
 
 #endif // __ROUTING_TABLE_H__

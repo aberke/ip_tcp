@@ -120,9 +120,9 @@ void routing_table_print(routing_table_t rt){
 }
 // Fills out buffer_tofill with routing_info struct -- with all the data in place
 // Returns size of routing_info struct it filled 
-int routing_table_RIP_response(routing_table_t rt, char* buffer_tofill){
+/*int routing_table_RIP_response(routing_table_t rt, char* buffer_tofill){
 	int num_entries = HASH_COUNT(rt->route_hash);
-	if(num_entries*sizeof(struct cost_address) > UDP_PACKET_MAX_SIZE - 20){
+	if(num_entries*sizeof(struct cost_address) > UDP_PACKET_MAX_SIZE - 20){ // why -20? what about the command/num_entries
 		puts("routing_table has more entries than there is space in UDP_PACKET_MAX_SIZE -- cannot send RIP DATA");
 		return -1;
 	}
@@ -143,7 +143,45 @@ int routing_table_RIP_response(routing_table_t rt, char* buffer_tofill){
 	memcpy(buffer_tofill, route_info, total_size);
 	free(route_info);
 	return total_size;
+}*/
+
+
+// Fills out buffer_tofill with routing_info struct -- with all the data in place
+// Returns size of routing_info struct it filled 
+struct routing_info* routing_table_RIP_response(routing_table_t rt, uint32_t to, int* size){
+	int num_entries = HASH_COUNT(rt->route_hash);
+	if(num_entries*sizeof(struct cost_address) > UDP_PACKET_MAX_SIZE - IP_HEADER_SIZE - ROUTING_INFO_HEADER_SIZE){ // why -20? what about the command/num_entries
+		puts("routing_table has more entries than there is space in UDP_PACKET_MAX_SIZE -- cannot send RIP DATA");
+		return NULL;
+	}
+
+	int total_size = sizeof(struct routing_info) + sizeof(struct cost_address)*num_entries;
+	// fill in routing_info struct
+	struct routing_info* route_info = (struct routing_info *)malloc(total_size);
+	route_info->command = htons((uint16_t)RIP_COMMAND_RESPONSE);
+	route_info->num_entries = htons((uint16_t)num_entries);
+	
+	int i = 0;
+	uint32_t cost;
+	routing_entry_t info, tmp;
+	HASH_ITER(hh, rt->route_hash, info, tmp){
+		route_info->entries[i].address = info->address;
+
+		/* split horizon with poison reverse */
+		if( to==info->next_hop )
+			cost = INFINITY;
+		else
+			cost = info->cost;
+	
+		route_info->entries[i].cost = cost;
+		i++;
+	}
+	
+	//// also let the caller know of the size
+	*size = total_size;
+	return route_info;
 }
+
 /*	
 struct routing_info{
 	uint16_t command;

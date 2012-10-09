@@ -72,7 +72,6 @@ link:
 build: validate $(OBJS) link
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
-	@echo "compiling $<"
 	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@
 
 clean: 
