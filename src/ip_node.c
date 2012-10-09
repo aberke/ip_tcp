@@ -425,10 +425,6 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 	int protocol;
 	char* msg;
 
-	if(sscanf(buffer, "%s %d %s", address, &protocol, msg) != 3)
-		error	
-
-
 	puts("_handle_user_command_send: 0");
 	char* tmp = strtok(buffer, " ");
 	if(!strcmp(tmp, "send")){
@@ -463,7 +459,7 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 		// get next hop for sending message to send_to_vip
 		printf("%d\n", send_to_vip);
 		uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
-		if(next_hop_addr < 0){
+		if(next_hop_addr == -1){
 			printf("Cannot reach address %s.\n", send_to_vip_string);
 			return;
 		}
@@ -524,6 +520,9 @@ static void _handle_user_command(ip_node_t ip_node){
 	else if(buffer[0] == 's')
 		_handle_user_command_send(ip_node, buffer);
 
+	else if(!strcmp(buffer, "fp")){
+		forwarding_table_print(ip_node->forwarding_table);	
+	}
 	else if(utils_startswith(buffer, "send")){
 	
 	}	

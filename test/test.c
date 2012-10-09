@@ -27,6 +27,8 @@ do{							\
 }							\
 while(0) 
 
+#define TEST_OUTPUT_BAD(msg) printf("%s%s%s\n", ANSI_COLOR_RED, msg, ANSI_COLOR_RESET);
+
 #define TEST_STR_EQ(e1,e2,annotation)										\
 do{																			\
 	printf("%-50s == %-20s\t\t", (#e1), (#e2));								\
@@ -111,27 +113,93 @@ void test_util_string(){
 	rtrim(x, "e"); 
 	TEST_STR_EQ(x, "Hello there someon","");	
 }
-/*
-void test_sending_routing_info(){
+
+void test_routing_info(){
+	routing_table_t rt = routing_table_init();
+	forwarding_table_t ft = forwarding_table_init();
+
+	//// init the information
+	int num_entries = 2;
+	uint32_t costs[2] = {5,6};
+	uint32_t addrs[2] = {0,1};
+
+	uint32_t next_hop = 3;
+	struct routing_info* info = fill_routing_info(num_entries, costs, addrs);
+
+	int num_entries2 = 1;
+	uint32_t costs2[1] = {4};
+	uint32_t addrs2[1] = {0};
+
+	uint32_t next_hop2 = 4;
+	struct routing_info* info2 = fill_routing_info(num_entries2, costs2, addrs2); 
+
+	//// fill the routing table
+	debug_update_routing_table(rt, ft, info, next_hop);
+	debug_update_routing_table(rt, ft, info2, next_hop2);
+	
+	///////// TEST ///////////
+	int size;
+	struct routing_info* info_to_send = routing_table_RIP_response(rt,next_hop,&size);
+	struct cost_address *cost_info1, *cost_info2;	
+
+	TEST_EQ(info_to_send->num_entries,ntohs(2),"Checking that there are the right number of entries");
+
+	cost_info1 = &info_to_send->entries[0];
+	cost_info2 = &info_to_send->entries[1];
+
+	if(cost_info1->address == 1){
+		TEST_EQ(cost_info2->cost,5,"checking that we're not poisoning good values");
+		TEST_EQ(cost_info1->cost,INFINITY,"checking that poison reverse is working");
+	}
+	else if(cost_info2->address == 1){
+		TEST_EQ(cost_info1->cost,5,"checking taht we're not poisoning good values");
+		TEST_EQ(cost_info2->cost,INFINITY,"checking that poison reverse is working");
+	}
+	else{
+		TEST_OUTPUT_BAD("Unable to find info for address 1");
+	}
+	
+	/* CLEANUP */
+	free(info_to_send);
+	free(cost_info1); free(cost_info2);
+	routing_table_destroy(&rt);
+	forwarding_table_destroy(&ft);
+}
+
+void test_overflow(){
 	routing_table_t rt = routing_table_init();
 	forwarding_table_t ft = forwarding_table_init();
 
 	int num_entries = 2;
-	uint32_t costs[5] = {5,6};
-	uint32_t addrs[5] = {0,1};
+	uint32_t costs[1] = {8};
+	uint32_t addrs[1] = {8000000000000};
 
 	uint32_t next_hop = 3;
 	struct routing_info* info = fill_routing_info(num_entries, costs, addrs);
 
 	debug_update_routing_table(rt, ft, info, next_hop);
-	
-	///////// TEST ///////////
-	int size;
-	struct routing_info* info_to_send = routing_table_RIP_response(rt, next_hop,&size);
 
-	TEST_EQ(info_to_send->num_entries,2,"Checking that there are the right number of entries");
+	TEST_EQ(forwarding_table_get_next_hop(ft, 0), -1, "empty forwarding table");
+	TEST_EQ(forwarding_table_get_next_hop(ft, 1000000000000), -1, "");
+
+	forwarding_table_print(ft);
+	routing_table_print(rt);
+	
+	free(info);
+	routing_table_destroy(&rt);
+	forwarding_table_destroy(&ft);
 }
-}*/
+
+void test_empty(){
+	routing_table_t rt = routing_table_init();
+	forwarding_table_t ft = forwarding_table_init();
+
+	TEST_EQ(forwarding_table_get_next_hop(ft, 0), -1, "empty forwarding table");
+	TEST_EQ(forwarding_table_get_next_hop(ft, 10000), -1, "");
+
+	routing_table_destroy(&rt);
+	forwarding_table_destroy(&ft);
+}
 
 void test_unknown(){
 	routing_table_t rt = routing_table_init();
@@ -275,11 +343,15 @@ void parse_arguments(int argc,char** argv){
 int main(int argc, char** argv){
 	parse_arguments(argc,argv);	
 
-	TEST(test_util_string);
-
+/*	TEST(test_util_string);
+	TEST(test_routing_info);
 	TEST(test_small);
 	TEST(test_basic_routing);
 	TEST(test_unknown);
+*/
+
+	TEST(test_empty);
+	TEST(test_overflow);
 
 	/* RETURN */
 	return(0);

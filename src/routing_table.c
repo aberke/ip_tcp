@@ -73,7 +73,7 @@ void routing_table_destroy(routing_table_t* rt){
 
 
 void routing_table_update_entry(routing_table_t rt, routing_entry_t entry){
-	HASH_ADD_INT(rt->route_hash, address, entry); 
+	HASH_ADD(hh, rt->route_hash, address, sizeof(uint32_t), entry); 
 }
 // next_hop = local_virt_ip -- address of interface that received info
 void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct routing_info* info, uint32_t next_hop){
@@ -89,7 +89,7 @@ void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct rout
 
 		/* now find the hash entry corresponding to that address, and run RIP */
 		routing_entry_t entry;
-		HASH_FIND_INT(rt->route_hash, &addr, entry); 		
+		HASH_FIND(hh, rt->route_hash, &addr, sizeof(uint32_t), entry); 		
 		if(!entry){
 			routing_table_update_entry(rt, routing_entry_init(next_hop, cost, addr));			
 			forwarding_table_update_entry(ft, addr, next_hop);
@@ -204,7 +204,7 @@ Returns
 	- -1 if that address does not have a place in the table */
 uint32_t routing_table_get_cost(routing_table_t rt, uint32_t address){
 	routing_entry_t entry;
-	HASH_FIND_INT(rt->route_hash, &address, entry);
+	HASH_FIND(hh, rt->route_hash, &address, sizeof(uint32_t), entry);
 	if(!entry) return -1;
 	else return entry->cost;	
 }
