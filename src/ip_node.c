@@ -148,6 +148,12 @@ ip_node_t ip_node_init(list_t* links){
 		if((interface = link_interface_create(link, index)) == NULL){
 			//todo: add error handing for when socket doesn't bind
 			puts("link_interface didn't init properly");
+			
+			// get out while you can
+			ip_node->num_interfaces--;
+			ip_node_destroy(&ip_node);
+			free_links(links);
+			return NULL;
 		}
 		ip_node->interfaces[index] = interface;
 	
