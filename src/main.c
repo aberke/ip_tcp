@@ -17,6 +17,10 @@ int main(int argc, char *argv[]){
 	//initiate ip_node_t which will create factory and use linkedlist
 	ip_node_t ip_node = ip_node_init(linkedlist);
 
+	if(!ip_node)
+		return 1;
+
+
 	// This should probably be done in node-destroy
 	//free_links(linkedlist);
 

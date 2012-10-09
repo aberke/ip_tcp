@@ -85,7 +85,7 @@ directory/%:
 
 rebuild: clean build
 
-run: 
+run: rebuild
 	@./$(EXEC_FILE) $(DEFAULT_ARGS)
 
 valgrind: rebuild

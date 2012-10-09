@@ -59,10 +59,13 @@ link_interface_t link_interface_create(link_t *link, int id){
     // fill  remote_addrinfo
     if (getaddrinfo(link->remote_phys_host, remote_port, &hints, &remote_addrinfo) != 0){
 		perror("Error in getaddrinfo");
+		freeaddrinfo(local_addrinfo);
 		return NULL;
     }
     // create and bind socket_fd	
 	if((socket_fd = link_interface_bind_socket(link->local_phys_host, local_port, local_addrinfo)) < 0){
+		freeaddrinfo(local_addrinfo);
+		freeaddrinfo(remote_addrinfo);
 		//failed
 		return NULL;
 	}
