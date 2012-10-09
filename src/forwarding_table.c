@@ -88,11 +88,9 @@ uint32_t forwarding_table_get_next_hop(forwarding_table_t ft, uint32_t final_add
 	forwarding_info_t info;
 	HASH_FIND(hh, ft->entries, &final_address, sizeof(uint32_t), info);
 	if(!info){
-		puts("returing -1");
 		return -1;
 	}
 	else{
-		puts("not returning -1");	
  		return info->next_hop;	
 	}
 }

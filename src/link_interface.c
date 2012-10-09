@@ -37,7 +37,6 @@ int link_interface_bind_socket(char *localhost, char *localport, struct addrinfo
     return sfd;
 }
 link_interface_t link_interface_create(link_t *link, int id){
-	printf("Creating interface with id %d\n", id);
 
 	int socket_fd;
 	// convert ports from link to character strings for link_interface
