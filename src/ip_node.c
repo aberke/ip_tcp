@@ -421,75 +421,55 @@ static void _handle_user_command_up(ip_node_t ip_node, char* buffer){
 }
 /* _handle_user_command_send is a helper to _handle_user_command for handling 'send vip proto string' command */
 static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
-	char* address;
+	char send[50];
+	char send_to_vip_string[50];
 	int protocol;
-	char* msg;
-
-	if(sscanf(buffer, "%s %d %s", address, &protocol, msg) != 3)
-		error	
-
-
-	puts("_handle_user_command_send: 0");
-	char* tmp = strtok(buffer, " ");
-	if(!strcmp(tmp, "send")){
-		// user using command: 'send vip proto string'
-		struct in_addr send_to, send_from;
-		uint32_t send_to_vip;
-			
-		if((tmp = strtok(NULL, " ")) == NULL){
-			puts("Proper command: 'send vip proto string'");
-			return;
-		}
-		char* send_to_vip_string = tmp;
-			
-		if(inet_pton(AF_INET, send_to_vip_string, &send_to) <= 0){
-			puts("Proper command: 'send vip proto string' where vip is the destination virtual ip address in dotted quad notation.");
-			return;
-		}
-		send_to_vip = send_to.s_addr;
-		printf("2: send_to_vip_string = %s\n", send_to_vip_string);	
-		if((tmp = strtok(NULL, " ")) == NULL){
-			puts("Proper command: 'send vip proto string'");
-			return;
-		}
-		
-		int proto = atoi(tmp);
-		if((proto == 0)&&(strcmp(tmp, "0"))){
-			puts("Proper command: 'send vip proto string' where proto is an integer");
-			return;
-		}
-		printf("3: proto = %d\n", proto);
-		
-		// get next hop for sending message to send_to_vip
-		printf("%d\n", send_to_vip);
-		uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
-		if(next_hop_addr < 0){
-			printf("Cannot reach address %s.\n", send_to_vip_string);
-			return;
-		}
-		printf("4: next_hop_addr: %u\n", next_hop_addr);
-		// get struct in_addr corresponding to next_hop_addr
-		send_from.s_addr = next_hop_addr;
-		// get interface to send out packet on -- interface corresponding to next_hop_addr
-		interface_ip_keyed_t address_keyed;
-		HASH_FIND_INT(ip_node->addressToInterface, &next_hop_addr, address_keyed);
-		if(!address_keyed){
-			printf("Cannot reach address %s  -- TODO: MAKE SURE FIXED -- see _handle_user_command_send\n", send_to_vip_string);
-			return;
-		}
-		printf("5\n");
-		link_interface_t next_hop_interface = address_keyed->interface;
-		// get message information
-		if((tmp = strtok(NULL, " \0")) == NULL){
-			puts("Proper command: 'send vip proto string' where proto is an integer");
-			return;
-		}			
-		char* message = tmp;
-		int message_len = (int)strlen(message) - 1; //take off NULL pointer on end
-				
-		// wrap and send IP packet
-		ip_wrap_send_packet(message, message_len, proto, send_from, send_to, next_hop_interface);		
+	char msg[UDP_PACKET_MAX_SIZE-IP_HEADER_SIZE];
+	puts("0");
+	if(sscanf(buffer, "%s %s %d %s", send, send_to_vip_string, &protocol, msg) != 4){
+		puts("Proper command: 'send vip protocol message'");
+		return;
 	}
+	puts("1");
+	if(strcmp(send, "send")){
+		puts("Proper command: 'send vip proto string'");
+		return;
+	}
+	struct in_addr send_to, send_from;
+	uint32_t send_to_vip;
+		
+	if(inet_pton(AF_INET, send_to_vip_string, &send_to) <= 0){
+		puts("Proper command: 'send vip proto string' where vip is the destination virtual ip address in dotted quad notation.");
+		return;
+	}
+	send_to_vip = send_to.s_addr;
+	printf("2: send_to_vip_string = %s\n", send_to_vip_string);	
+	printf("3: proto = %d\n", protocol);
+	
+	// get next hop for sending message to send_to_vip
+	printf("%d\n", send_to_vip);
+	uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
+	if(next_hop_addr < 0){
+		printf("Cannot reach address %s.\n", send_to_vip_string);
+		return;
+	}
+	printf("4: next_hop_addr: %u\n", next_hop_addr);
+	// get struct in_addr corresponding to next_hop_addr
+	send_from.s_addr = next_hop_addr;
+	// get interface to send out packet on -- interface corresponding to next_hop_addr
+	interface_ip_keyed_t address_keyed;
+	HASH_FIND_INT(ip_node->addressToInterface, &next_hop_addr, address_keyed);
+	if(!address_keyed){
+		printf("Cannot reach address %s  -- TODO: MAKE SURE FIXED -- see _handle_user_command_send\n", send_to_vip_string);
+		return;
+	}
+	link_interface_t next_hop_interface = address_keyed->interface;
+	
+	// get message information
+	int msg_len = (int)strlen(msg) - 1; //take off NULL pointer on end
+			
+	// wrap and send IP packet
+	ip_wrap_send_packet(msg, msg_len, protocol, send_from, send_to, next_hop_interface);			
 }
 /* _handle_user_command does exactly what it says. Note: this is only called 
    if reading from STDIN won't block, so just do it already. 
