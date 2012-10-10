@@ -322,12 +322,8 @@ static void _handle_query_interfaces(ip_node_t ip_node){
 			// up-down status changed -- must update routing table with struct routing_info info
 			if(up_down < 0){
 				routing_table_bring_down(ip_node->routing_table, link_interface_get_local_virt_ip(interface));
-			/*	puts("up_down < 0");
-				info->entries[0].cost = htons(0);// beacuse you can still reach the interface! just not the other side
-				info->entries[1].cost = htons(INFINITY);*/
 			}
 			else{
-				puts("up_down >= 0");
 				info->entries[0].cost = htons(0); 
 			
 	
@@ -400,7 +396,7 @@ static int _is_local_ip(ip_node_t ip_node, uint32_t vip){
 
 /* This will handle updating the fdset that the ip_node uses in order
    to read from each of the interfaces. It checks that each interface
-   is up before adding it (#DESIGN-DECISION) */ 
+   is up before adding it  */ 
 
 static void _update_select_list(ip_node_t ip_node){
 	FD_ZERO(&(ip_node->read_fds));
@@ -410,6 +406,9 @@ static void _update_select_list(ip_node_t ip_node){
 	
 	int i;
 	for(i=0;i<ip_node->num_interfaces;i++){
+		if( link_interface_up_down(ip_node->interfaces[i])<0 )
+			continue;
+
 		sfd = link_interface_get_sfd(ip_node->interfaces[i]);
 		max_fd = (sfd > max_fd ? sfd : max_fd);
 		FD_SET(sfd, &(ip_node->read_fds));
@@ -619,7 +618,6 @@ static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, 
 		link_interface_reset_timer(interface);
 		update_routing_table(ip_node->routing_table, 
 			ip_node->forwarding_table, info, link_interface_get_local_virt_ip(interface), EXTERNAL_INFORMATION);
-		puts("updated routing table");
 		//routing_table_print(ip_node->routing_table);
 	}	
 	else{
