@@ -64,11 +64,10 @@ int link_interface_query_up_down(link_interface_t l_i);
 // simply returns link_interface up_down_boolean
 int link_interface_up_down(link_interface_t l_i);
 
-// resets the lastHeard from timer
-void link_interface_reset_timer(link_interface_t l_i);
 
 // prints out info
 void link_interface_print(link_interface_t l_i);	
+
 
 
 #endif //__LINK_INTERFACE__

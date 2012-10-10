@@ -12,6 +12,8 @@ void forwarding_table_update_entry(forwarding_table_t ft, uint32_t address, uint
 
 uint32_t forwarding_table_get_next_hop(forwarding_table_t ft, uint32_t address);
 
+void forwarding_table_delete(forwarding_table_t ft, uint32_t address);
+
 void forwarding_table_print(forwarding_table_t ft);
 
 #endif // __FORWARDING_TABLE_H__

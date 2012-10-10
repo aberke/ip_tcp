@@ -93,7 +93,7 @@ runB: rebuild
 	@./$(EXEC_FILE) $(B_ARGS)
 
 HELPER_FILES_DIR=$(TEST_DIR)/helper_files
-DEFAULT_NETWORK_ARGS=ABC.net
+DEFAULT_NETWORK_ARGS=loop.net
 
 runNetwork: rebuild
 	cp $(EXEC_FILE) $(HELPER_FILES_DIR)

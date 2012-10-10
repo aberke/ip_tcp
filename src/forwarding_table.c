@@ -62,14 +62,25 @@ void forwarding_table_destroy(forwarding_table_t* ft){
 
 void forwarding_table_update_entry(forwarding_table_t ft, uint32_t addr, uint32_t next){
 	forwarding_info_t info;
-	HASH_FIND(hh,ft->entries,&addr,sizeof(uint32_t),info);
+	HASH_FIND(hh, ft->entries, &addr, sizeof(uint32_t), info);
+	if(!info){
+		info = forwarding_info_init(addr, next); 
+		HASH_ADD(hh, ft->entries, final_address, sizeof(uint32_t), info);
+	}
+	else{
+		info->next_hop = next;
+	}
+} 
+
+void forwarding_table_delete(forwarding_table_t ft, uint32_t addr){
+	forwarding_info_t info;
+	HASH_FIND(hh, ft->entries, &addr, sizeof(uint32_t), info);
+	
 	if(info){
 		HASH_DEL(ft->entries, info);	
-		forwarding_info_destroy(&info);
+		forwarding_info_free(info);
 	}
-	info = forwarding_info_init(addr, next);
-	HASH_ADD(hh,ft->entries,final_address,sizeof(uint32_t),info); 
-} 
+}
 
 void forwarding_table_print(forwarding_table_t ft){
 	forwarding_info_t info, tmp;	

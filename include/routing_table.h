@@ -37,6 +37,8 @@ uint32_t routing_table_get_cost(routing_table_t rt, uint32_t addr);
 //int routing_table_RIP_response(routing_table_t rt, char* buffer_tofill);
 struct routing_info* routing_table_RIP_response(routing_table_t rt, uint32_t ip, int* size, int response_type);
 
-void routing_table_bring_down(routing_table_t rt, uint32_t local_ip_dead_interface);
+void routing_table_bring_down(routing_table_t rt, forwarding_table_t ft, uint32_t local_ip_dead_interface);
+
+void routing_table_check_timers(routing_table_t rt, forwarding_table_t ft);
 
 #endif // __ROUTING_TABLE_H__
