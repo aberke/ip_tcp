@@ -633,10 +633,6 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 	char* packet_buffer = (char*)malloc(sizeof(char)*IP_PACKET_MAX_SIZE + 1);
 	int bytes_read = link_interface_read_packet(interface, packet_buffer, IP_PACKET_MAX_SIZE);
 
-	/*puts("RECEIVED PACKET-------------------------");
-	print_packet(packet_buffer, bytes_read);
-	puts("----------------------------------------");*/
-
 	if(bytes_read < 0){
 		//Error -- discard packet
 		_handle_selected_printerror(bytes_read, packet_buffer);
@@ -661,6 +657,8 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 		return;
 	}
 	// else either RIP data or TEST_DATA to print:
+	
+	
 	char packet_unwrapped[packet_data_size+1];
 	int type = ip_unwrap_packet(packet_buffer, packet_unwrapped, packet_data_size);
 	
@@ -668,10 +666,11 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 		_handle_selected_RIP(ip_node, interface, packet_unwrapped);
 	}
 	else if (type == TEST_DATA){
-		packet_unwrapped[packet_data_size] = '\0';
+		packet_unwrapped[packet_data_size] = '\0'; //null terminate string so that it prints nicely
 		printf("Message Received: %s\n", packet_unwrapped);
 	}
 	else{
+		packet_unwrapped[packet_data_size] = '/0'; // null terminate string so that it prints nicely
 		printf("Received packet of type neither RIP nor TEST_DATA: %s\n", packet_unwrapped);
 	}
 	//// clean up
