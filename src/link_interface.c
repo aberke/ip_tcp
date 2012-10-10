@@ -1,11 +1,12 @@
-
-
+#include <time.h>
 #include "util/list.h"
 #include "util/parselinks.h"
 #include "link_interface.h"
 
 #define HOST_MAX_LENGTH 256 // RFC 2181
+#define UPDATE_INTERFACES_TIMEOUT 12
 
+static void _check_time_elapsed(link_interface_t l_i);
 
 //wrapper around link_t structure parsed from .lnx file
 //abstracts udp link layer
@@ -20,6 +21,8 @@ struct link_interface{
 	
 	uint32_t local_virt_ip;
 	uint32_t remote_virt_ip;
+	
+	time_t last_heard;// from neighor
 };
 
 // helper to link_interface_create
@@ -36,6 +39,7 @@ int link_interface_bind_socket(char *localhost, char *localport, struct addrinfo
     }
     return sfd;
 }
+
 link_interface_t link_interface_create(link_t *link, int id){
 	printf("Creating interface with id %d\n", id);
 
@@ -84,6 +88,8 @@ link_interface_t link_interface_create(link_t *link, int id){
 
 	l_i->local_virt_ip = htonl((link->local_virt_ip).s_addr);
 	l_i->remote_virt_ip = htonl((link->remote_virt_ip).s_addr);
+	
+	time(&l_i->last_heard);
 	
 	return l_i;
 }
@@ -248,6 +254,9 @@ int link_interface_up_down(link_interface_t l_i){
 // returns 0 if status hasn't changed since this function was last called
 // if status has recently changed: returns -1 if down, returns 1 if up
 int link_interface_query_up_down(link_interface_t l_i){
+	//// first check if too much time has elapsed, but only if you're not already dead 
+	if( l_i->up_down_boolean > 0 ) _check_time_elapsed(l_i);
+
 	if (l_i->up_down_boolean == -2){
 		l_i->up_down_boolean = -1; // since now going to tell ip_node
 		return -1;
@@ -259,6 +268,10 @@ int link_interface_query_up_down(link_interface_t l_i){
 	//else ((l_i->up_down_boolean == -1) || (l_i->up_down_boolean == 1)){
 	// status hasn't changed since last queried -- return 0;
 	return 0;
+}
+
+void link_interface_reset_timer(link_interface_t l_i){
+	time(&l_i->last_heard);
 }
 
 //// added by neil
@@ -283,3 +296,16 @@ void link_interface_print(link_interface_t l_i){
 		ntohs((*(struct sockaddr_in*)(&l_i->remote)).sin_port),
 		inet_ntop(AF_INET, &remote, remote_buffer, INET_ADDRSTRLEN));
 }
+
+static void _check_time_elapsed(link_interface_t l_i){
+	time_t now;
+	time(&now);		
+	
+	/// if we wanted to be a little better about this we wouldn't be stuffing 
+	/// a struct timeval onto the stack every time, but whatever
+	if(difftime(now, l_i->last_heard) > UPDATE_INTERFACES_TIMEOUT){
+		link_interface_bringdown(l_i);
+	}	
+	/// else you're good!
+}
+

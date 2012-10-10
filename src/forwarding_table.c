@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <arpa/inet.h>
 
 #include "forwarding_table.h"
 #include "uthash.h"
@@ -33,7 +34,11 @@ void forwarding_info_free(forwarding_info_t info){
 }
 
 void forwarding_info_print(forwarding_info_t info){
-	printf("forwarding info: <final-address:%d> <next-hop:%d>\n", info->final_address, info->next_hop);
+	char final_address[INET_ADDRSTRLEN], next_hop[INET_ADDRSTRLEN];
+	inet_ntop(AF_INET, &info->final_address, final_address, INET_ADDRSTRLEN*sizeof(char));
+	inet_ntop(AF_INET, &info->next_hop, next_hop, INET_ADDRSTRLEN*sizeof(char));
+
+	printf("forwarding info: <final-address:%s> <next-hop:%s>\n", final_address, next_hop);
 } 
 
 forwarding_table_t forwarding_table_init(){
@@ -87,14 +92,12 @@ Returns
 uint32_t forwarding_table_get_next_hop(forwarding_table_t ft, uint32_t final_address){
 	forwarding_info_t info;
 	HASH_FIND(hh, ft->entries, &final_address, sizeof(uint32_t), info);
-	if(!info){
-		puts("returing -1");
+	if(!info)
 		return -1;
-	}
-	else{
-		puts("not returning -1");	
+	
+	else
  		return info->next_hop;	
-	}
+
 }
 
 

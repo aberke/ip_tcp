@@ -19,8 +19,8 @@
 #define INTERFACE_ERROR_WRONG_ADDRESS -1
 #define INTERFACE_ERROR_FATAL -2
 
-#define IP_PACKET_MAX_SIZE 64000
-#define UDP_PACKET_MAX_SIZE 1400
+/*#define IP_PACKET_MAX_SIZE 64000
+#define UDP_PACKET_MAX_SIZE 1400*/
 
 /// Some configuration
 #define DISCARD_ON_WRONG_ADDRESS 1
@@ -64,7 +64,11 @@ int link_interface_query_up_down(link_interface_t l_i);
 // simply returns link_interface up_down_boolean
 int link_interface_up_down(link_interface_t l_i);
 
+// resets the lastHeard from timer
+void link_interface_reset_timer(link_interface_t l_i);
+
 // prints out info
 void link_interface_print(link_interface_t l_i);	
+
 
 #endif //__LINK_INTERFACE__

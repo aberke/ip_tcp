@@ -2,10 +2,14 @@
 #define __IP_UTILS_H__
 
 #include "link_interface.h"
+#include <netinet/ip.h>
+
 #define RIP_DATA 200  
 #define TEST_DATA 0  
 #define IP_PACKET_MAX_SIZE 64000
+#define IP_HEADER_SIZE sizeof(struct ip)
 #define UDP_PACKET_MAX_SIZE 1400
+#define ROUTING_INFO_HEADER_SIZE 4
 
 //Param: buffer read in, number of bytes read in
 //Return value: bytes of data within packet on success, -1 on error
@@ -25,4 +29,7 @@ int ip_wrap_send_packet(void* data, int data_len, int protocol, struct in_addr i
 // helper to node -- to call for sending an RIP packet across an interface -- calls ip_wrap_send_packet
 // does work of filling in ip_src and ip_dst
 int ip_wrap_send_packet_RIP(void* data, int data_len, link_interface_t interface);
+
+void print_packet(char* data, int data_len);
+
 #endif //__LINK_INTERFACE__

@@ -1,5 +1,6 @@
 #include <inttypes.h>
 #include <netinet/ip.h>
+#include <time.h>
 
 #include "ip_node.h"
 #include "ip_utils.h"
@@ -28,10 +29,13 @@
 #define TEST_DATA 0   
 #define RIP_COMMAND_REQUEST 1
 #define RIP_COMMAND_RESPONSE 2
+#define UPDATE_INTERFACES_HZ 5
 
 /* Static functions for internal use */
 static void _update_select_list(ip_node_t node);
+static void _update_all_interfaces(ip_node_t node);
 static void _handle_selected(ip_node_t node, link_interface_t interface);
+static void _handle_reading_stdin(ip_node_t node);
 static void _handle_reading_sockets(ip_node_t node);
 static void _handle_user_command(ip_node_t node);
 static int _is_local_ip(ip_node_t ip_node, uint32_t ip);
@@ -104,7 +108,6 @@ void interface_socket_keyed_destroy(interface_socket_keyed_t* sock_keyed){
 	free(*sock_keyed);
 	*sock_keyed = NULL;
 }
-
 
 interface_ip_keyed_t interface_ip_keyed_init(link_interface_t interface){
 	interface_ip_keyed_t ip_keyed = malloc(sizeof(struct interface_ip_keyed));
@@ -236,10 +239,18 @@ void ip_node_start(ip_node_t ip_node){
 	tv.tv_sec = SELECT_TIMEOUT;
 	tv.tv_usec = 0;	
 	
+	// do this to init the forwarding tables/routing tables
+	_handle_query_interfaces(ip_node);
+
 	// send out RIP request message on all interfaces
 	_request_RIP(ip_node);
 
+	time_t last_update,now;
+	time(&last_update);
 	while(ip_node->running){
+		//// query all the interfaces to make sure they're still up
+		_handle_query_interfaces(ip_node);
+
 		//// first update the list (rebuild it)
 		_update_select_list(ip_node);
 
@@ -247,30 +258,35 @@ void ip_node_start(ip_node_t ip_node){
 		retval = select(ip_node->highsock + 1, &(ip_node->read_fds), NULL, NULL, &tv);
 		if (retval == -1)
 			{ error("select()"); } // #DESIGN-DECISION 	
-		else if (retval)	
+		else if (retval){	
+			_handle_reading_stdin(ip_node);			
+			_handle_query_interfaces(ip_node); // in case the user shut down a node
 			_handle_reading_sockets(ip_node);
-		
-		/* STILL TODO *******
-		
-		if time elapsed > 5 s:
-			update_all_interfaces(ip_note_t ip_node); <--- already written!	
-		**********************/
-			
+		}	 
+		else{
+			_handle_query_interfaces(ip_node); 
+		}
+	
+		time(&now);
+		if(difftime(now, last_update) > UPDATE_INTERFACES_HZ){
+			_update_all_interfaces(ip_node);
+			time(&last_update);
+		}
 	}
 }
 /*************************** INTERNAL ******************************/
+/* just reads from stdin if its FD_ISSET */
+static void _handle_reading_stdin(ip_node_t ip_node){
+	if(FD_ISSET(STDIN, &(ip_node->read_fds))){
+		_handle_user_command(ip_node);
+	}
+}
+
 /* _handle_reading_sockets is an internal function for dealing with the 
    effect of a select call. This will get called only if there is a fd to
    read from. First check STDIN, and handle that command. Then check all 
    of the interface sockets by iterating over the hashmap of sockets to interfaces. */
 static void _handle_reading_sockets(ip_node_t ip_node){
-	//// if there's incoming data from the user, pass off to _handle_user_command
-	if(FD_ISSET(STDIN, &(ip_node->read_fds))){
-		_handle_user_command(ip_node);
-	}
-	// iterate through interfaces to see if any have gone up or down since last checked -- in which case must update routing table
-	_handle_query_interfaces(ip_node);
-
 	struct interface_socket_keyed *socket_keyed, *tmp;
 	HASH_ITER(hh, ip_node->socketToInterface, socket_keyed, tmp){
 		if(FD_ISSET(socket_keyed->socket, &(ip_node->read_fds))){
@@ -286,13 +302,16 @@ static void _handle_reading_sockets(ip_node_t ip_node){
 */
 static void _handle_query_interfaces(ip_node_t ip_node){
 	// create routing_info struct to fill with information as iterate through interfaces -- then send info to routing table
-	struct routing_info *info = (struct routing_info *)malloc(sizeof(struct routing_info) + 2*sizeof(struct cost_address));
+	struct routing_info *info = (struct routing_info *)malloc(sizeof(struct routing_info) + sizeof(struct cost_address)*2);
+
 	// command and num_entries will be the same for each interface
-	info->command = 2;
-	info->num_entries = 1;
+	info->command = htons(2);
+	info->num_entries = htons(1);
+
 	// set up variables to iteration
 	uint32_t next_hop_addr;
 	struct interface_socket_keyed *socket_keyed, *tmp;
+
 	// iterate through interfaces in hashmap
 	HASH_ITER(hh, ip_node->socketToInterface, socket_keyed, tmp){
 		link_interface_t interface = socket_keyed->interface;
@@ -302,30 +321,26 @@ static void _handle_query_interfaces(ip_node_t ip_node){
 		if((up_down = link_interface_query_up_down(interface)) != 0){
 			// up-down status changed -- must update routing table with struct routing_info info
 			if(up_down < 0){
-				info->entries[0].cost = INFINITY;
-				info->entries[1].cost = INFINITY;
+				routing_table_bring_down(ip_node->routing_table, link_interface_get_local_virt_ip(interface));
+			/*	puts("up_down < 0");
+				info->entries[0].cost = htons(0);// beacuse you can still reach the interface! just not the other side
+				info->entries[1].cost = htons(INFINITY);*/
 			}
 			else{
-				info->entries[0].cost = 0;
-				info->entries[1].cost = 1;
+				puts("up_down >= 0");
+				info->entries[0].cost = htons(0); 
+			
+	
+				info->entries[0].address = link_interface_get_local_virt_ip(interface);
+				next_hop_addr = link_interface_get_local_virt_ip(interface);
+
+				update_routing_table(ip_node->routing_table, ip_node->forwarding_table, info, next_hop_addr, INTERNAL_INFORMATION);
 			}
-			info->entries[0].address = link_interface_get_local_virt_ip(interface);
-			info->entries[1].address = link_interface_get_remote_virt_ip(interface);
-			next_hop_addr = link_interface_get_local_virt_ip(interface);
-			update_routing_table(ip_node->routing_table, ip_node->forwarding_table, info, next_hop_addr);
 		}
 	}
 	free(info);
 }
-/* _request_RIP sends out RIP REQUEST on each of node's link_interfaces
-	Meant to be called at node_start, before entering select loop
 
-struct routing_info{
-	uint16_t command;
-	uint16_t num_entries;
-	struct cost_address entries[];
-};
-*/
 static void _request_RIP(ip_node_t ip_node){
 	struct routing_info* request = (struct routing_info *)malloc(sizeof(struct routing_info));
 	
@@ -341,9 +356,9 @@ static void _request_RIP(ip_node_t ip_node){
 	}	
 	free(request);
 }
+
 /* Iterates through interfaces:  For each interface that is up -- sends out RIP_RESPONSE on interface */
 static void _update_all_interfaces(ip_node_t ip_node){
-
 	int size;
 	uint32_t ip;
 	struct routing_info* route_info;
@@ -356,7 +371,7 @@ static void _update_all_interfaces(ip_node_t ip_node){
 		ip = ip_keyed->ip;		
 
 		/* get routing_info */
-		route_info = routing_table_RIP_response(ip_node->routing_table, ip, &size);
+		route_info = routing_table_RIP_response(ip_node->routing_table, ip, &size, EXTERNAL_INFORMATION);
 		
 		/* if it's not null (nothing to send) and the interface is up, then send it out.
 		   although I think we should leave the check of up/down to the interface itself.
@@ -495,6 +510,7 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 	// wrap and send IP packet
 	ip_wrap_send_packet(msg, msg_len, protocol, send_from, send_to, next_hop_interface);			
 }
+
 /* _handle_user_command does exactly what it says. Note: this is only called 
    if reading from STDIN won't block, so just do it already. 
 
@@ -531,6 +547,10 @@ static void _handle_user_command(ip_node_t ip_node){
 	else if(!strcmp(buffer, "fp")){
 		forwarding_table_print(ip_node->forwarding_table);	
 	}
+	
+	else if(!strcmp(buffer, "rp")){
+		routing_table_print(ip_node->routing_table);
+	}
 
 	else if(!strcmp(buffer, "print")){
 		ip_node_print(ip_node);
@@ -544,6 +564,7 @@ static void _handle_user_command(ip_node_t ip_node){
 	
 	free(buffer); 
 }
+
 /* Helper to _handle_selected to clean up code -- just does the error printing */
 static void _handle_selected_printerror(int error, char* buffer){
 	if(error == INTERFACE_ERROR_WRONG_ADDRESS){
@@ -556,6 +577,7 @@ static void _handle_selected_printerror(int error, char* buffer){
 		printf("Got as result of checking validity: %d\n", ip_check_valid_packet(buffer, error));
 	}
 }
+
 /* Helper to _handle_selected:
 	Takes a packet that arrived but needs to be forwarded.  Handles the forwarding.
 */
@@ -571,20 +593,13 @@ static void _handle_selected_forward(ip_node_t ip_node, uint32_t dest_addr, char
 	link_interface_t next_hop_interface = address_keyed->interface;
 	link_interface_send_packet(next_hop_interface, packet_buffer, bytes_read);
 }
-/* _handle_selected_RIP is a helper to _handle_selected:
-struct routing_info{
-	uint16_t command;
-	uint16_t num_entries;
-	struct cost_address entries[];
-};
-struct cost_address{
-	uint32_t cost;
-	uint32_t address;
-};
-*/
+
 static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, char* packet_unwrapped){
 	// cast packet data as routing_info
 	struct routing_info* info = (struct routing_info*) packet_unwrapped; 
+
+//	printf("ntohs(info->command): %d\n", ntohs(info->command));
+//	printf("num_entries         : %d\n", ntohs(info->num_entries));
 	
 	if((ntohs(info->command) == RIP_COMMAND_REQUEST) && !ntohs(info->num_entries)){
 		struct routing_info* route_info;
@@ -593,19 +608,26 @@ static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, 
 
 		address = link_interface_get_local_virt_ip(interface);
 		
-		//// get the info from the routing_table
-		route_info = routing_table_RIP_response(ip_node->routing_table,address,&size);
+		//// get the info from the routing_table, but not the normal info
+		//// that you send out every 5 seconds. Because you just received a request,
+		//// probably from your neihbor, you need to tell them the truth. If you 
+		//// didn't, for instance, and you sent them a poisoned-reverse response,
+		//// then how would they ever know that you're their neighbor?
+		route_info = routing_table_RIP_response(ip_node->routing_table,address,&size,INTERNAL_INFORMATION);
 		if(route_info){
 			ip_wrap_send_packet_RIP((char*)route_info, size, interface);
 			free(route_info);
 		}	
 	}
 	else if(ntohs(info->command) == RIP_COMMAND_RESPONSE){
+		link_interface_reset_timer(interface);
 		update_routing_table(ip_node->routing_table, 
-			ip_node->forwarding_table, info, link_interface_get_local_virt_ip(interface));
+			ip_node->forwarding_table, info, link_interface_get_local_virt_ip(interface), EXTERNAL_INFORMATION);
+		puts("updated routing table");
+		//routing_table_print(ip_node->routing_table);
 	}	
 	else{
-		puts("Bad RIP packet -- discarding packet");
+		printf("Bad RIP packet: command=%d\n", ntohs(info->command));
 	}
  }
 
@@ -616,6 +638,11 @@ static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, 
 static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 	char* packet_buffer = (char*)malloc(sizeof(char)*IP_PACKET_MAX_SIZE + 1);
 	int bytes_read = link_interface_read_packet(interface, packet_buffer, IP_PACKET_MAX_SIZE);
+
+	/*puts("RECEIVED PACKET-------------------------");
+	print_packet(packet_buffer, bytes_read);
+	puts("----------------------------------------");*/
+
 	if(bytes_read < 0){
 		//Error -- discard packet
 		_handle_selected_printerror(bytes_read, packet_buffer);

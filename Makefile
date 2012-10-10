@@ -3,6 +3,7 @@ SRC_DIR=src
 BUILD_DIR=build
 INC_DIR=include
 DEFAULT_ARGS=test/helper_files/A.lnx
+B_ARGS=test/helper_files/B.lnx
 
 ## uthash
 UTHASH_DIR=lib/uthash-1.9.6
@@ -87,6 +88,17 @@ rebuild: clean build
 
 run: rebuild
 	@./$(EXEC_FILE) $(DEFAULT_ARGS)
+
+runB: rebuild
+	@./$(EXEC_FILE) $(B_ARGS)
+
+HELPER_FILES_DIR=$(TEST_DIR)/helper_files
+DEFAULT_NETWORK_ARGS=ABC.net
+
+runNetwork: rebuild
+	cp $(EXEC_FILE) $(HELPER_FILES_DIR)
+	cd $(HELPER_FILES_DIR); ./runNetwork $(DEFAULT_NETWORK_ARGS)
+	@echo "done."
 
 valgrind: rebuild
 	valgrind --leak-check=full ./$(EXEC_FILE) $(DEFAULT_ARGS)

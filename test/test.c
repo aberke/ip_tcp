@@ -78,13 +78,13 @@ int verbose = DEFAULT_VERBOSE;
 
 struct routing_info* fill_routing_info(int num_entries, uint32_t* costs, uint32_t* addrs){
 	struct routing_info* info = malloc(sizeof(struct routing_info) + num_entries*sizeof(struct cost_address));
-	info->command = DEFAULT_COMMAND;
-	info->num_entries = (uint32_t)num_entries;
+	info->command = ntohs(DEFAULT_COMMAND);
+	info->num_entries = ntohs((uint32_t)num_entries);
 	
 	int i;
 	for(i=0;i<num_entries;i++){
 		struct cost_address ca;
-		ca.cost = costs[i];
+		ca.cost = ntohs(costs[i]);
 		ca.address = addrs[i];
 		memcpy(&info->entries[i], &ca, sizeof(struct cost_address));
 	}
