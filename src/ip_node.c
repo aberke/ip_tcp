@@ -400,7 +400,7 @@ static int _is_local_ip(ip_node_t ip_node, uint32_t vip){
 
 /* This will handle updating the fdset that the ip_node uses in order
    to read from each of the interfaces. It checks that each interface
-   is up before adding it (#DESIGN-DECISION) */ 
+   is up before adding it  */ 
 
 static void _update_select_list(ip_node_t ip_node){
 	FD_ZERO(&(ip_node->read_fds));
@@ -410,6 +410,9 @@ static void _update_select_list(ip_node_t ip_node){
 	
 	int i;
 	for(i=0;i<ip_node->num_interfaces;i++){
+		if( link_interface_up_down(ip_node->interfaces[i])<0 )
+			continue;
+
 		sfd = link_interface_get_sfd(ip_node->interfaces[i]);
 		max_fd = (sfd > max_fd ? sfd : max_fd);
 		FD_SET(sfd, &(ip_node->read_fds));

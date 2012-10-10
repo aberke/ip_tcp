@@ -93,10 +93,11 @@ void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct rout
 		/* pull out the address and cost of the current line in the info */
 		addr = info->entries[i].address;
 
-		if(addr == next_hop && information_type == EXTERNAL_INFORMATION)
+		if(addr == next_hop && information_type == EXTERNAL_INFORMATION){
 			// what do other people know about your own vips that you don't? remember, next_hop
 			// is a LOCAL ip
 			continue; 
+		}
 
 		if(information_type == INTERNAL_INFORMATION)
 			cost = info->entries[i].cost;
@@ -105,14 +106,14 @@ void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct rout
 
 		char address[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &addr, address, INET_ADDRSTRLEN*sizeof(char));
-		printf("address: %s, cost: %d, next-hop o -->", address, ntohs(cost));
+		//printf("address: %s, cost: %d, next-hop o -->", address, ntohs(cost));
 
 		/* now find the hash entry corresponding to that address, and run RIP */
 		routing_entry_t entry;
 		HASH_FIND(hh, rt->route_hash, &addr, sizeof(uint32_t), entry); 		
 
 		if(!entry){
-			puts("Entry didn't already exist. Adding...");
+			//puts("Entry didn't already exist. Adding...");
 			routing_table_update_entry(rt, routing_entry_init(next_hop, cost, addr));
 			forwarding_table_update_entry(ft, addr, next_hop);
 		}	
@@ -120,9 +121,9 @@ void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct rout
 		else if( entry->cost > cost || information_type == INTERNAL_INFORMATION || entry->next_hop==next_hop ){
 			char nh_address[INET_ADDRSTRLEN];
 			inet_ntop(AF_INET, &entry->next_hop, nh_address, INET_ADDRSTRLEN);
-			printf("entry->next-hop: %s", nh_address);
+			//printf("entry->next-hop: %s", nh_address);
 
-			puts("Entry->cost > cost || internal info || this is the next hop of the path");
+			//puts("Entry->cost > cost || internal info || this is the next hop of the path");
 			HASH_DEL(rt->route_hash, entry);
 			routing_entry_free(entry);
 			routing_table_update_entry(rt, routing_entry_init(next_hop, cost, addr));
@@ -131,7 +132,7 @@ void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct rout
 		else{
 			char nh_address[INET_ADDRSTRLEN];
 			inet_ntop(AF_INET, &entry->next_hop, nh_address, INET_ADDRSTRLEN);
-			printf("entry->next-hop: %s, discarding\n", nh_address);
+			//printf("entry->next-hop: %s, discarding\n", nh_address);
 		}
 	}
 }
@@ -225,10 +226,12 @@ struct routing_info* routing_table_RIP_response(routing_table_t rt, uint32_t to,
 }
 
 void routing_table_bring_down(routing_table_t rt, uint32_t dead_local_ip){
+	puts("bringing down");
 	routing_entry_t entry,tmp;
 	HASH_ITER(hh, rt->route_hash, entry, tmp){
-		if( entry->next_hop == dead_local_ip ){
-			entry->cost = INFINITY;
+		puts("down");
+		if( entry->address != dead_local_ip && entry->next_hop == dead_local_ip ){
+			entry->cost = htons(INFINITY);
 		}
 	}
 }
