@@ -105,6 +105,7 @@ int link_interface_send_packet(link_interface_t li, void* data, int data_len){
 		// interface down -- can't send packet
 		return -1;
 	}
+	
 	int socket_fd = li->sfd;
 	struct sockaddr remoteaddr = li->remote;
 	socklen_t size = sizeof(remoteaddr);

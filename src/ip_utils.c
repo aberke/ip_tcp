@@ -38,14 +38,18 @@ int ip_check_valid_packet(char* buffer, int bytes_read){
 	//run checksum
 	checksum = ntohs(ip_header->ip_sum);
 	ip_header->ip_sum = 0; // !! because we're computing it! 
+	int ttl = ip_header->ip_ttl;
+	ip_header->ip_ttl = 0;
 	
 	if(checksum != ip_sum((char*)ip_header, IP_HEADER_SIZE)){  
 		puts("Packet ip_sum != actually checksum");
 		ip_header->ip_sum = checksum; // set it back
+		ip_header->ip_ttl = ttl;
 		return -1;
 	}
 
 	ip_header->ip_sum = checksum; // set it back
+	ip_header->ip_ttl = ttl;
 	//make sure as long as its supposed to be
 	u_short ip_len;
 	ip_len = ntohs(ip_header->ip_len);
@@ -125,18 +129,22 @@ int ip_wrap_send_packet(void* data, int data_len, int protocol, struct in_addr i
 	ip_header->ip_v = 4;
 	ip_header->ip_hl = 5;
 	ip_header->ip_len = htons(data_len + IP_HEADER_SIZE); //add header length to packet length
-	ip_header->ip_ttl = 15;
+	// wait to set ip_ttl for sake of computing checksum
 	ip_header->ip_p = protocol;
 	ip_header->ip_src = ip_src;
 	ip_header->ip_dst = ip_dst;
+	ip_header->ip_sum = 0;
 	ip_header->ip_sum = htons(ip_sum((char *)ip_header, IP_HEADER_SIZE));
+	ip_header->ip_ttl = 15;
 	
 	char* to_send = (char*) malloc(sizeof(char)*(data_len + IP_HEADER_SIZE));
 	//copy header and data into to_send
 	memcpy(to_send, ip_header, IP_HEADER_SIZE);
 	memcpy(to_send+IP_HEADER_SIZE, data, data_len);
 
-
+	char* msg = (char *)data;
+	printf("sending msg: %s\n", msg);
+	printf("strlen(msg) = %d, data_len = %d\n", (int)strlen(msg), data_len);
 	// send on link interface
 	link_interface_send_packet(li, to_send, data_len+IP_HEADER_SIZE);
 	// free packet	

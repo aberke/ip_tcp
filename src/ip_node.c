@@ -501,7 +501,7 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 	link_interface_t next_hop_interface = address_keyed->interface;
 	
 	// get message information
-	int msg_len = (int)strlen(msg) - 1; //take off NULL pointer on end
+	int msg_len = (int)strlen(msg); 
 			
 	// wrap and send IP packet
 	ip_wrap_send_packet(msg, msg_len, protocol, send_from, send_to, next_hop_interface);			
