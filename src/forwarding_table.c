@@ -92,12 +92,12 @@ Returns
 uint32_t forwarding_table_get_next_hop(forwarding_table_t ft, uint32_t final_address){
 	forwarding_info_t info;
 	HASH_FIND(hh, ft->entries, &final_address, sizeof(uint32_t), info);
-	if(!info)
+	if(!info){
 		return -1;
-	
-	else
+	}
+	else{
  		return info->next_hop;	
-
+	}
 }
 
 

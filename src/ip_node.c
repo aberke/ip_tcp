@@ -476,9 +476,7 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 		return;
 	}
 	send_to_vip = send_to.s_addr;
-	printf("2: send_to_vip_string = %s\n", send_to_vip_string);	
-	printf("3: proto = %d\n", protocol);
-	
+
 	// check if send_to_vip local -- if so must just print
 	if(_is_local_ip(ip_node, send_to_vip)){
 		printf("Message received: %s\n", msg);
@@ -486,13 +484,11 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 	}
 	
 	// get next hop for sending message to send_to_vip
-	printf("%d\n", send_to_vip);
 	uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
 	if(next_hop_addr == -1){
 		printf("Cannot reach address %s.\n", send_to_vip_string);
 		return;
 	}
-	printf("4: next_hop_addr: %u\n", next_hop_addr);
 	// get struct in_addr corresponding to next_hop_addr
 	send_from.s_addr = next_hop_addr;
 	// get interface to send out packet on -- interface corresponding to next_hop_addr
