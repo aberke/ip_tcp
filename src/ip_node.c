@@ -256,6 +256,7 @@ void ip_node_start(ip_node_t ip_node){
 
 		//// make sure you didn't error out, otherwise pass off to _handle_reading_sockets
 		retval = select(ip_node->highsock + 1, &(ip_node->read_fds), NULL, NULL, &tv);
+		routing_table_check_timers(ip_node->routing_table, ip_node->forwarding_table);
 		if (retval == -1)
 			{ error("select()"); } 
 		else if (retval){	
@@ -322,11 +323,12 @@ static void _handle_query_interfaces(ip_node_t ip_node){
 		if((up_down = link_interface_query_up_down(interface)) != 0){
 			// up-down status changed -- must update routing table with struct routing_info info
 			if(up_down < 0){
-				routing_table_bring_down(ip_node->routing_table, link_interface_get_local_virt_ip(interface));
+				puts("<0");
+				routing_table_bring_down(ip_node->routing_table, ip_node->forwarding_table, link_interface_get_local_virt_ip(interface));
 			}
 			else{
+				puts(">=0");
 				info->entries[0].cost = htons(0); 
-			
 	
 				info->entries[0].address = link_interface_get_local_virt_ip(interface);
 				next_hop_addr = link_interface_get_local_virt_ip(interface);
