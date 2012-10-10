@@ -257,7 +257,7 @@ void ip_node_start(ip_node_t ip_node){
 		//// make sure you didn't error out, otherwise pass off to _handle_reading_sockets
 		retval = select(ip_node->highsock + 1, &(ip_node->read_fds), NULL, NULL, &tv);
 		if (retval == -1)
-			{ error("select()"); } // #DESIGN-DECISION 	
+			{ error("select()"); } 
 		else if (retval){	
 			_handle_reading_stdin(ip_node);			
 			_handle_query_interfaces(ip_node); // in case the user shut down a node
@@ -294,6 +294,7 @@ static void _handle_reading_sockets(ip_node_t ip_node){
 		}	
 	}
 }
+
 /*  Recently added by Alex: _handle_query_interfaces()
 	iterates through interfaces to check if any interfaces have gone up or down since last checked.
 	link_interface_up_down(link_interface_t l_i) returns 0 if status hasn't changed since function last called
@@ -406,9 +407,6 @@ static void _update_select_list(ip_node_t ip_node){
 	
 	int i;
 	for(i=0;i<ip_node->num_interfaces;i++){
-		if( link_interface_up_down(ip_node->interfaces[i])<0 )
-			continue;
-
 		sfd = link_interface_get_sfd(ip_node->interfaces[i]);
 		max_fd = (sfd > max_fd ? sfd : max_fd);
 		FD_SET(sfd, &(ip_node->read_fds));
@@ -458,7 +456,7 @@ static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
 	int protocol;
 	char msg[UDP_PACKET_MAX_SIZE-IP_HEADER_SIZE];
 	
-	if(sscanf(buffer, "%s %s %d %s", send, send_to_vip_string, &protocol, msg) != 4){
+	if(sscanf(buffer, "%s %s %d %[^\t\n]", send, send_to_vip_string, &protocol, msg) != 4){
 		puts("Proper command: 'send vip protocol message'");
 		return;
 	}
@@ -615,7 +613,6 @@ static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, 
 		}	
 	}
 	else if(ntohs(info->command) == RIP_COMMAND_RESPONSE){
-		link_interface_reset_timer(interface);
 		update_routing_table(ip_node->routing_table, 
 			ip_node->forwarding_table, info, link_interface_get_local_virt_ip(interface), EXTERNAL_INFORMATION);
 		//routing_table_print(ip_node->routing_table);

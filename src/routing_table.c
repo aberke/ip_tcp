@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <time.h>
 
 #include "routing_table.h"
 #include "ip_utils.h"
@@ -7,6 +8,7 @@
 #define HOP_COST 1
 #define RIP_COMMAND_REQUEST 1
 #define RIP_COMMAND_RESPONSE 2
+#define REFRESHED_TIMEOUT 12
 
 #define MIN(a,b) ((a) < (b) ? (a) : (b))
 
@@ -15,6 +17,7 @@ struct routing_entry {
 	uint32_t cost;
 	uint32_t address;
 	uint32_t next_hop;
+	time_t last_refreshed;
 
 	UT_hash_handle hh;
 };
@@ -34,6 +37,7 @@ routing_entry_t routing_entry_init(uint32_t next_hop,
 	entry->next_hop = next_hop;
 	entry->cost = cost;
 	entry->address = address;
+	time(&entry->last_refreshed);
 	return entry;
 }
 
@@ -75,6 +79,17 @@ void routing_table_destroy(routing_table_t* rt){
 
 /* FUNCTIONALITY */
 
+void routing_table_check_timers(routing_table_t rt){
+	time_t now;
+	time(&now);		
+
+	routing_entry_t entry, tmp;
+	HASH_ITER(hh, rt->route_hash, entry, tmp){
+		if(difftime(now, entry->last_refreshed) > REFRESHED_TIMEOUT){			
+			entry->cost = htons(INFINITY);
+		}
+	}
+}
 
 void routing_table_update_entry(routing_table_t rt, routing_entry_t entry){
 	HASH_ADD(hh, rt->route_hash, address, sizeof(uint32_t), entry); 
@@ -117,22 +132,23 @@ void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct rout
 			routing_table_update_entry(rt, routing_entry_init(next_hop, cost, addr));
 			forwarding_table_update_entry(ft, addr, next_hop);
 		}	
-
-		else if( entry->cost > cost || information_type == INTERNAL_INFORMATION || entry->next_hop==next_hop ){
-			char nh_address[INET_ADDRSTRLEN];
-			inet_ntop(AF_INET, &entry->next_hop, nh_address, INET_ADDRSTRLEN);
-			//printf("entry->next-hop: %s", nh_address);
-
-			//puts("Entry->cost > cost || internal info || this is the next hop of the path");
-			HASH_DEL(rt->route_hash, entry);
-			routing_entry_free(entry);
-			routing_table_update_entry(rt, routing_entry_init(next_hop, cost, addr));
-			forwarding_table_update_entry(ft, addr, next_hop); 
-		}	
 		else{
-			char nh_address[INET_ADDRSTRLEN];
-			inet_ntop(AF_INET, &entry->next_hop, nh_address, INET_ADDRSTRLEN);
-			//printf("entry->next-hop: %s, discarding\n", nh_address);
+			time(&entry->last_refreshed);
+			if( entry->cost > cost || information_type == INTERNAL_INFORMATION || entry->next_hop==next_hop ){
+				char nh_address[INET_ADDRSTRLEN];
+				inet_ntop(AF_INET, &entry->next_hop, nh_address, INET_ADDRSTRLEN);
+				//printf("entry->next-hop: %s", nh_address);
+
+				//puts("Entry->cost > cost || internal info || this is the next hop of the path");
+				HASH_DEL(rt->route_hash, entry);
+				routing_entry_free(entry);
+				routing_table_update_entry(rt, routing_entry_init(next_hop, cost, addr));
+				forwarding_table_update_entry(ft, addr, next_hop); 
+			}	
+			else{
+				char nh_address[INET_ADDRSTRLEN];
+				inet_ntop(AF_INET, &entry->next_hop, nh_address, INET_ADDRSTRLEN);
+			}
 		}
 	}
 }
