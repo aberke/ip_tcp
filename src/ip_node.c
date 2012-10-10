@@ -661,13 +661,14 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 		return;
 	}
 	// else either RIP data or TEST_DATA to print:
-	char packet_unwrapped[packet_data_size];
+	char packet_unwrapped[packet_data_size+1];
 	int type = ip_unwrap_packet(packet_buffer, packet_unwrapped, packet_data_size);
 	
 	if(type == RIP_DATA){
 		_handle_selected_RIP(ip_node, interface, packet_unwrapped);
 	}
 	else if (type == TEST_DATA){
+		packet_unwrapped[packet_data_size] = '\0';
 		printf("Message Received: %s\n", packet_unwrapped);
 	}
 	else{
