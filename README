@@ -43,6 +43,7 @@ ARCHITECTURE (design decisions):
 
 TESTING: 
 
+We used several means of testing our project. The first one was for unit tests. For this, we wrote a testing harness under test/test.c that uses several homemade testing macros that allows us to test individual aspects of our project, and pretty prints the results upon failures, etc. This was helpful for testing the project in incremental steps, although was not helpful for testing comprehensively. For more comprehensive testing, we wrote a python script that inits a UDP socket and tries to communicate with our program (in test/pyLink.py and test/pyUtils.py). These helped a lot for some of the earlier stages of debugging, but later on we had to manually test the entire network in order to determine that the routing tables were updating correctly, and that the shortest path was taken, as well as that changes in topology were percolated accurately throughout the network. 
 
 BUGS:
 There are no known bugs in our project

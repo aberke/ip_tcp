@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
+#include <netinet/in.h>
 
 #include "util/utils.h"
 #include "routing_table.h"
@@ -93,7 +93,7 @@ struct routing_info* fill_routing_info(int num_entries, uint32_t* costs, uint32_
 }
 
 void debug_update_routing_table(routing_table_t rt, forwarding_table_t ft, struct routing_info* info, uint32_t next_hop){
-	update_routing_table(rt, ft, info, next_hop);
+	update_routing_table(rt, ft, info, next_hop,EXTERNAL_INFORMATION);
 
 	if(verbose)
 	{	
@@ -139,7 +139,7 @@ void test_routing_info(){
 	
 	///////// TEST ///////////
 	int size;
-	struct routing_info* info_to_send = routing_table_RIP_response(rt,next_hop,&size);
+	struct routing_info* info_to_send = routing_table_RIP_response(rt,next_hop,&size,EXTERNAL_INFORMATION);
 	struct cost_address *cost_info1, *cost_info2;	
 
 	TEST_EQ(info_to_send->num_entries,ntohs(2),"Checking that there are the right number of entries");
@@ -148,12 +148,12 @@ void test_routing_info(){
 	cost_info2 = &info_to_send->entries[1];
 
 	if(cost_info1->address == 1){
-		TEST_EQ(cost_info2->cost,5,"checking that we're not poisoning good values");
-		TEST_EQ(cost_info1->cost,INFINITY,"checking that poison reverse is working");
+		TEST_EQ(cost_info2->cost,htons(5),"checking that we're not poisoning good values");
+		TEST_EQ(cost_info1->cost,htons(INFINITY),"checking that poison reverse is working");
 	}
 	else if(cost_info2->address == 1){
-		TEST_EQ(cost_info1->cost,5,"checking taht we're not poisoning good values");
-		TEST_EQ(cost_info2->cost,INFINITY,"checking that poison reverse is working");
+		TEST_EQ(cost_info1->cost,htons(5),"checking taht we're not poisoning good values");
+		TEST_EQ(cost_info2->cost,htons(INFINITY),"checking that poison reverse is working");
 	}
 	else{
 		TEST_OUTPUT_BAD("Unable to find info for address 1");
@@ -161,7 +161,6 @@ void test_routing_info(){
 	
 	/* CLEANUP */
 	free(info_to_send);
-	free(cost_info1); free(cost_info2);
 	routing_table_destroy(&rt);
 	forwarding_table_destroy(&ft);
 }
@@ -172,7 +171,7 @@ void test_overflow(){
 
 	int num_entries = 2;
 	uint32_t costs[1] = {8};
-	uint32_t addrs[1] = {8000000000000};
+	uint32_t addrs[1] = {10000};
 
 	uint32_t next_hop = 3;
 	struct routing_info* info = fill_routing_info(num_entries, costs, addrs);
@@ -180,7 +179,7 @@ void test_overflow(){
 	debug_update_routing_table(rt, ft, info, next_hop);
 
 	TEST_EQ(forwarding_table_get_next_hop(ft, 0), -1, "empty forwarding table");
-	TEST_EQ(forwarding_table_get_next_hop(ft, 1000000000000), -1, "");
+	TEST_EQ(forwarding_table_get_next_hop(ft, 1000034), -1, "");
 
 	forwarding_table_print(ft);
 	routing_table_print(rt);
@@ -206,7 +205,8 @@ void test_unknown(){
 	forwarding_table_t ft = forwarding_table_init();
 
 /* FIRST INFO */
-	int num_entries = 2;
+	int num_entries = 2;;TEST(test_util_string);
+IN
 	uint32_t costs[5] = {5, 6};
 	uint32_t addrs[5] = {0, 1};
 
@@ -215,7 +215,7 @@ void test_unknown(){
 
 	debug_update_routing_table(rt, ft, info, next_hop);
 
-	TEST_EQ(routing_table_get_cost(rt,0),6,"checking correctness");
+	TEST_EQ(routing_table_get_cost(rt,0),ntohs(6),"checking correctness");
 	TEST_EQ(routing_table_get_cost(rt,2),-1,"checking unknown destination for forwarding table");
 	TEST_EQ(routing_table_get_cost(rt,100000),-1,"checking (large) unknown destination");
 
@@ -250,14 +250,14 @@ void test_small(){
 	struct routing_info* info2 = fill_routing_info(num_entries2, costs2, addrs2);
 
 	debug_update_routing_table(rt, ft, info, next_hop);
-	debug_update_routing_table(rt, ft, info2, next_hop2);
+	debug_update_routing_table(rt, ft, info2, next_hop2);IN
 	
 // Now check that you got what you expected
 
 	// for the routing table
-	TEST_EQ(routing_table_get_cost(rt, 0),4, "checking correctness");
-	TEST_EQ(routing_table_get_cost(rt, 1),7,"");
-	TEST_EQ(routing_table_get_cost(rt, 2),7,"");
+	TEST_EQ(routing_table_get_cost(rt, 0),htons(4), "checking correctness");
+	TEST_EQ(routing_table_get_cost(rt, 1),htons(7),"");
+	TEST_EQ(routing_table_get_cost(rt, 2),htons(7),"");
 
 	// for the forwarding_table
 	TEST_EQ(forwarding_table_get_next_hop(ft,2),4,"");
@@ -272,23 +272,23 @@ void test_small(){
 	routing_table_destroy(&rt);
 }
 
-void test_basic_routing(){
+void test_basic_routing_2(){
 	routing_table_t rt = routing_table_init();
 	forwarding_table_t ft = forwarding_table_init();
 
 
 /* FIRST INFO */
-	int num_entries = 5;
-	uint32_t costs[5] = {5, 6, 19, 12, 20};
-	uint32_t addrs[5] = {0, 1, 2, 3, 4};
+	int num_entries = 1;
+	uint32_t costs[1] = {5};
+	uint32_t addrs[1] = {0};
 
 	uint32_t next_hop = 3;
 	struct routing_info* info = fill_routing_info(num_entries, costs, addrs);
 
 /* SECOND INFO */
-	int num_entries2 = 7;
-	uint32_t costs2[7] = {3,9,6, 100, 9, 24, 12};
-	uint32_t addrs2[7] = {0,1,2,3,4,5,6};
+	int num_entries2 = 1;
+	uint32_t costs2[1] = {3};
+	uint32_t addrs2[1] = {0};
 	
 	uint32_t next_hop2 = 4;
 	struct routing_info* info2 = fill_routing_info(num_entries2, costs2, addrs2);
@@ -300,15 +300,55 @@ void test_basic_routing(){
 // Now test that you got what you expected
 
 	// for the routing table
-	TEST_EQ(routing_table_get_cost(rt, 4),10, "");
-	TEST_EQ(routing_table_get_cost(rt, 1),7, "");
-	TEST_EQ(routing_table_get_cost(rt, 6),13,"");
+	TEST_EQ(routing_table_get_cost(rt, 0), htons(4), "");
+
+	TEST_EQ(forwarding_table_get_next_hop(ft, 0), 4, "");
+	
+
+	/* CLEAN UP */
+	forwarding_table_destroy(&ft);
+	routing_table_destroy(&rt);
+}
+
+
+
+void test_basic_routing(){
+	routing_table_t rt = routing_table_init();
+	forwarding_table_t ft = forwarding_table_init();
+
+IN
+/* FIRST INFO */
+	int num_entries = 5;
+	uint32_t costs[5] = {5, 6, 19, 12, 20};
+	uint32_t addrs[5] = {0, 1, 2, 3, 4};
+
+	uint32_t next_hop = 11;
+	struct routing_info* info = fill_routing_info(num_entries, costs, addrs);
+
+/* SECOND INFO */
+	int num_entries2 = 7;
+	uint32_t costs2[7] = {3,9,6, 100, 9, 24, 12};
+	uint32_t addrs2[7] = {0,1,2,3,4,5,6};
+	
+	uint32_t next_hop2 = 12;
+	struct routing_info* info2 = fill_routing_info(num_entries2, costs2, addrs2);
+
+	debug_update_routing_table(rt, ft, info, next_hop);
+	debug_update_routing_table(rt, ft, info2, next_hop2);
+	
+
+// Now test that you got what you expected
+
+	// for the routing table
+	TEST_EQ(routing_table_get_cost(rt, 4),htons(10), "");
+	TEST_EQ(routing_table_get_cost(rt, 1),htons(7), "");
+	TEST_EQ(routing_table_get_cost(rt, 6),htons(13),"");
 
 	// for the forwarding table
-	TEST_EQ(forwarding_table_get_next_hop(ft, 6),4,"");
+	TEST_EQ(forwarding_table_get_next_hop(ft, 6),12,"");
 	TEST_EQ(forwarding_table_get_next_hop(ft, 7),-1,"");
-	TEST_EQ(forwarding_table_get_next_hop(ft, 4),4,"");
-	TEST_EQ(forwarding_table_get_next_hop(ft, 1),3,"");
+	TEST_EQ(forwarding_table_get_next_hop(ft, 4),2,"");
+	TEST_EQ(forwarding_table_get_next_hop(ft, 1),11,"");
 	
 
 	/* CLEAN UP */
@@ -343,12 +383,12 @@ void parse_arguments(int argc,char** argv){
 int main(int argc, char** argv){
 	parse_arguments(argc,argv);	
 
-/*	TEST(test_util_string);
+	TEST(test_util_string);
 	TEST(test_routing_info);
 	TEST(test_small);
 	TEST(test_basic_routing);
+	TEST(test_basic_routing_2);
 	TEST(test_unknown);
-*/
 
 	TEST(test_empty);
 	TEST(test_overflow);
