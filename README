@@ -1,8 +1,45 @@
 ARCHITECTURE (design decisions):
 
---routing--
+-- Flow of control -- 
+
+    Our node operates on a single thread.  Main initiates the node with the list of links, at which point node creates a 
+    'link_interface_t', which is our link abstraction struct, for each link, and stores an array of its link_interfaces.
+    Our node also stores two hashmaps, one mapping socket file descriptor to link_interface, and one mapping virtual ip address
+    to link_interface.
+    
+    After initialization, main tells the node to start running.  Node queries information from its interfaces and initalizes
+    its routing and forwarding tables with the information of its local addresses.  Node sends out a RIP request.
+    Node then goes into a loop where at each pass through the loop it:
+        updates its its list of socket file descriptors for select()
+        uses select to listen for packets on each of its links (and stdin).  Select blocking times out after 1 second.
+        When it breaks out, it first handles reading from stdin.
+        It then again queries its interfaces to see if any have gone up or down -- in which case routing/forwarding tables
+            must be updated.  
+        It then uses its hashmap mapping socket file descriptors to link_interfaces to identify which link_interfaces
+        need to read.  Reading from the link_interface is handled.
+        
+        It then checks if 5 seconds have passed.  If this is true, it sends out an RIP resonds on each of its link_interfaces
 
 --interfaces--
+
+    Our abstraction for the link layer was to define structs link_interface_t to handle all of the UDP protocol.
+    When a node comes online, it creates a link_interface_t for each of its links.  The link_interface_t stores and handles
+    all the information necessary to reach and receive messages from other links on other nodes.
+
+    A link_interface_t knows the following information and has functions that wrap around this information to handle it for the node:
+        It's own personal id -- id corresponds to index where link_interface_t is stored in ip_node's array of link_interface_t's
+        The socket file descriptor on which it is listening
+        Boolean as to whether it is 'up' or 'down'
+        It's own local virtual ip
+        It's remote virtual ip -- the virtual ip on the other side of the link
+        sockaddr information necessary for reading and sending on the link -- its send and receive functions wrap around these
+
+    If a link_interface_t is instructed to send or receive a packet by the node and the link is down,
+    (perhaps the node's routing/forwarding tables have not yet been updated after the link went down), the link_interface_t drops
+    the packet.
+
+    Once the node initializes an interface, it no longers knows about any of those fields itself -- it delets the list of links
+    and just stores an array (and necessary hashmaps) of link_interface_t's that handle reading and sending for their given link.
 
 TESTING: 
 

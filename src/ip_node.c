@@ -149,7 +149,6 @@ ip_node_t ip_node_init(list_t* links){
 	for(curr = links->head; curr != NULL; curr = curr->next){
 		link = (link_t*)curr->data;
 		if((interface = link_interface_create(link, index)) == NULL){
-			//todo: add error handing for when socket doesn't bind
 			puts("link_interface didn't init properly");
 			
 			// get out while you can
