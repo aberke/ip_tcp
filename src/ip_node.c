@@ -547,9 +547,6 @@ static void _handle_user_command(ip_node_t ip_node){
 		ip_node_print(ip_node);
 	}
 
-	else if(utils_startswith(buffer, "send")){
-	
-	}	
 	else
 		printf("Received unrecognized input from user: %s\n", buffer); 
 	
