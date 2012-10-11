@@ -106,3 +106,8 @@ runNetwork: rebuild
 
 valgrind: rebuild
 	valgrind --leak-check=full ./$(EXEC_FILE) $(DEFAULT_ARGS)
+	
+valgrindRunNetwork: rebuild
+	cp $(EXEC_FILE) $(HELPER_FILES_DIR)
+	cd $(HELPER_FILES_DIR); valgrind --leak-check=full ./runNetwork $(DEFAULT_NETWORK_ARGS)
+	@echo "done."

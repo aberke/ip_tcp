@@ -13,7 +13,9 @@ uint32_t address;
 ip_node_t ip_node_init(list_t* links):
 	//todo: add error handing for when socket doesn't bind
 	
+-- double check with valgrind
 
+-- test out 'routes' command
 
 
 	
