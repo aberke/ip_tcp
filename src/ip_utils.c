@@ -45,6 +45,7 @@ int ip_check_valid_packet(char* buffer, int bytes_read){
 		puts("Packet ip_sum != actually checksum");
 		ip_header->ip_sum = checksum; // set it back
 		ip_header->ip_ttl = ttl;
+		free(ip_header);
 		return -1;
 	}
 
@@ -56,12 +57,14 @@ int ip_check_valid_packet(char* buffer, int bytes_read){
 	if(bytes_read < ip_len){
 		//didn't read in entire packet -- error
 		puts("bytes read in less than packet length");
+		free(ip_header);
 		return -1;
 	}
 	u_int header_length;
 	header_length = ip_header->ip_hl*4;
 	int data_len = ip_len - header_length;
 
+	free(ip_header);
 	return data_len;
 }
 
