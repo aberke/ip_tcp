@@ -4,6 +4,7 @@ BUILD_DIR=build
 INC_DIR=include
 DEFAULT_ARGS=test/helper_files/A.lnx
 B_ARGS=test/helper_files/B.lnx
+C_ARGS=test/helper_files/C.lnx
 
 ## uthash
 UTHASH_DIR=lib/uthash-1.9.6
@@ -91,6 +92,9 @@ run: rebuild
 
 runB: rebuild
 	@./$(EXEC_FILE) $(B_ARGS)
+	
+runC: rebuild
+	@./$(EXEC_FILE) $(C_ARGS)
 
 HELPER_FILES_DIR=$(TEST_DIR)/helper_files
 DEFAULT_NETWORK_ARGS=loop.net

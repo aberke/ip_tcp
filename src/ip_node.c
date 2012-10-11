@@ -248,9 +248,6 @@ void ip_node_start(ip_node_t ip_node){
 	time_t last_update,now;
 	time(&last_update);
 	while(ip_node->running){
-		//// query all the interfaces to make sure they're still up
-		_handle_query_interfaces(ip_node);
-
 		//// first update the list (rebuild it)
 		_update_select_list(ip_node);
 
@@ -323,11 +320,9 @@ static void _handle_query_interfaces(ip_node_t ip_node){
 		if((up_down = link_interface_query_up_down(interface)) != 0){
 			// up-down status changed -- must update routing table with struct routing_info info
 			if(up_down < 0){
-				puts("<0");
 				routing_table_bring_down(ip_node->routing_table, ip_node->forwarding_table, link_interface_get_local_virt_ip(interface));
 			}
 			else{
-				puts(">=0");
 				info->entries[0].cost = htons(0); 
 	
 				info->entries[0].address = link_interface_get_local_virt_ip(interface);
@@ -409,9 +404,11 @@ static void _update_select_list(ip_node_t ip_node){
 	
 	int i;
 	for(i=0;i<ip_node->num_interfaces;i++){
-		sfd = link_interface_get_sfd(ip_node->interfaces[i]);
-		max_fd = (sfd > max_fd ? sfd : max_fd);
-		FD_SET(sfd, &(ip_node->read_fds));
+		if(link_interface_up_down(ip_node->interfaces[i]) > 0){
+			sfd = link_interface_get_sfd(ip_node->interfaces[i]);
+			max_fd = (sfd > max_fd ? sfd : max_fd);
+			FD_SET(sfd, &(ip_node->read_fds));
+		}
 	}
 	ip_node->highsock = max_fd;
 }
@@ -568,6 +565,9 @@ static void _handle_selected_printerror(int error, char* buffer){
 	else if(error == INTERFACE_ERROR_FATAL){
 		puts("Fatal error in the interface."); 
 	}
+	else if(error == INTERFACE_DOWN){
+		return;
+	}
 	else{
 		printf("Got as result of checking validity: %d\n", ip_check_valid_packet(buffer, error));
 	}
@@ -592,9 +592,6 @@ static void _handle_selected_forward(ip_node_t ip_node, uint32_t dest_addr, char
 static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, char* packet_unwrapped){
 	// cast packet data as routing_info
 	struct routing_info* info = (struct routing_info*) packet_unwrapped; 
-
-//	printf("ntohs(info->command): %d\n", ntohs(info->command));
-//	printf("num_entries         : %d\n", ntohs(info->num_entries));
 	
 	if((ntohs(info->command) == RIP_COMMAND_REQUEST) && !ntohs(info->num_entries)){
 		struct routing_info* route_info;
@@ -617,7 +614,6 @@ static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, 
 	else if(ntohs(info->command) == RIP_COMMAND_RESPONSE){
 		update_routing_table(ip_node->routing_table, 
 			ip_node->forwarding_table, info, link_interface_get_local_virt_ip(interface), EXTERNAL_INFORMATION);
-		//routing_table_print(ip_node->routing_table);
 	}	
 	else{
 		printf("Bad RIP packet: command=%d\n", ntohs(info->command));
@@ -655,9 +651,7 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 		free(packet_buffer);
 		return;
 	}
-	// else either RIP data or TEST_DATA to print:
-	
-	
+	// else either RIP data or TEST_DATA to print:	
 	char packet_unwrapped[packet_data_size+1];
 	int type = ip_unwrap_packet(packet_buffer, packet_unwrapped, packet_data_size);
 	
@@ -669,7 +663,7 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 		printf("Message Received: %s\n", packet_unwrapped);
 	}
 	else{
-		packet_unwrapped[packet_data_size] = '/0'; // null terminate string so that it prints nicely
+		packet_unwrapped[packet_data_size] = '\0'; // null terminate string so that it prints nicely
 		printf("Received packet of type neither RIP nor TEST_DATA: %s\n", packet_unwrapped);
 	}
 	//// clean up

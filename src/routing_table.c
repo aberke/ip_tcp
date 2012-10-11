@@ -54,7 +54,11 @@ void routing_entry_print(routing_entry_t entry){
 	char address[INET_ADDRSTRLEN], next_hop[INET_ADDRSTRLEN];
 	inet_ntop(AF_INET, &entry->address, address, INET_ADDRSTRLEN*sizeof(char));
 	inet_ntop(AF_INET, &entry->next_hop, next_hop, INET_ADDRSTRLEN*sizeof(char));
-	printf("Routing entry: <address:%s> <next-hop:%s> <cost:%d>\n", address, next_hop, ntohs(entry->cost));
+	char* isLocal = "";
+	if(entry->local == LOCAL){
+		isLocal = "LOCAL";
+	}
+	printf("Routing entry: <address:%s> <next-hop:%s> <cost:%d>  --%s--\n", address, next_hop, ntohs(entry->cost), isLocal);
 }
 
 void routing_entry_destroy(routing_entry_t* info){
@@ -77,7 +81,7 @@ void routing_table_destroy(routing_table_t* rt){
 	routing_entry_t info, tmp;
 
 	HASH_ITER(hh, (*rt)->route_hash, info, tmp){
-		//routing_entry_print(info);
+		
 		HASH_DEL((*rt)->route_hash, info);
 		routing_entry_destroy(&info);
 	}
@@ -101,9 +105,9 @@ void routing_table_check_timers(routing_table_t rt, forwarding_table_t ft){
 
 	routing_entry_t entry, tmp;
 	HASH_ITER(hh, rt->route_hash, entry, tmp){
-		if(entry->cost == ntohs(0)) continue; // becaus you're yourself!
-		else if(difftime(now, entry->last_refreshed) > REFRESHED_TIMEOUT){			
-			_set_to_infinity(rt, ft, entry);
+		if(!(entry->local == LOCAL)){ 
+			if(difftime(now, entry->last_refreshed) > REFRESHED_TIMEOUT)			
+				_set_to_infinity(rt, ft, entry);
 		}
 	}
 }
@@ -140,35 +144,28 @@ void update_routing_table(routing_table_t rt, forwarding_table_t ft, struct rout
 		routing_entry_t entry;
 		HASH_FIND(hh, rt->route_hash, &addr, sizeof(uint32_t), entry); 		
 
+		int type = (information_type == INTERNAL_INFORMATION ? LOCAL : FOREIGN);
+		
 		if(!entry){
-			int type = (information_type == INTERNAL_INFORMATION ? LOCAL : FOREIGN);
 			routing_table_update_entry(rt, routing_entry_init(next_hop, cost, addr, type));
-			forwarding_table_update_entry(ft, addr, next_hop);
+			if(cost != INFINITY){
+				forwarding_table_update_entry(ft, addr, next_hop);
+			}
 		}	
-		else{
-			if(entry->local == LOCAL) continue;
-
-			if(cost == htons(INFINITY))
-				_set_to_infinity(rt, ft, entry);
-			
-			/// you've been refreshed. Ahhh
+		else if( entry->cost > cost || information_type == INTERNAL_INFORMATION || entry->next_hop==next_hop ){
+				
 			time(&entry->last_refreshed);
-	
-			if( entry->cost > cost || information_type == INTERNAL_INFORMATION || entry->next_hop==next_hop ){
-				char nh_address[INET_ADDRSTRLEN];
-				inet_ntop(AF_INET, &entry->next_hop, nh_address, INET_ADDRSTRLEN);
-				//printf("entry->next-hop: %s", nh_address);
-
-				//puts("Entry->cost > cost || internal info || this is the next hop of the path");
+			
+			if(cost == htons(INFINITY)){
+				//our entry's source is giving us an update on that entry -- iff that node set entry to INFINITY, we do too
+				_set_to_infinity(rt, ft, entry);
+			}
+			else{
 				HASH_DEL(rt->route_hash, entry);
 				routing_entry_free(entry);
-
-				routing_table_update_entry(rt, routing_entry_init(next_hop, cost, addr, FOREIGN));
+	
+				routing_table_update_entry(rt, routing_entry_init(next_hop, cost, addr, type));
 				forwarding_table_update_entry(ft, addr, next_hop); 
-			}	
-			else{
-				char nh_address[INET_ADDRSTRLEN];
-				inet_ntop(AF_INET, &entry->next_hop, nh_address, INET_ADDRSTRLEN);
 			}
 		}
 	}
@@ -181,46 +178,22 @@ void routing_table_print(routing_table_t rt){
 		routing_entry_t info,tmp;
 		char address[INET_ADDRSTRLEN], next_hop[INET_ADDRSTRLEN];
 		HASH_ITER(hh, rt->route_hash, info, tmp){
+			char* isLocal = "";
+			if(info->local == LOCAL){
+				isLocal = "LOCAL";
+			}
 			inet_ntop(AF_INET, &info->address, address, sizeof(char)*INET_ADDRSTRLEN);
 			inet_ntop(AF_INET, &info->next_hop, next_hop, sizeof(char)*INET_ADDRSTRLEN);
-			printf("route entry: <address:%s> <cost:%d> <next-hop:%s>\n", address, ntohs(info->cost), next_hop);
+			printf("route entry: <address:%s> <cost:%d> <next-hop:%s>  -%s-\n", address, ntohs(info->cost), next_hop, isLocal);
 		}
 	}
 }
 // Fills out buffer_tofill with routing_info struct -- with all the data in place
 // Returns size of routing_info struct it filled 
-/*int routing_table_RIP_response(routing_table_t rt, char* buffer_tofill){
-	int num_entries = HASH_COUNT(rt->route_hash);
-	if(num_entries*sizeof(struct cost_address) > UDP_PACKET_MAX_SIZE - 20){ // why -20? what about the command/num_entries
-		puts("routing_table has more entries than there is space in UDP_PACKET_MAX_SIZE -- cannot send RIP DATA");
-		return -1;
-	}
-	int total_size = sizeof(struct routing_info) + sizeof(struct cost_address)*num_entries;
-	// fill in routing_info struct
-	struct routing_info* route_info = (struct routing_info *)malloc(total_size);
-	route_info->command = htons((uint16_t)RIP_COMMAND_RESPONSE);
-	route_info->num_entries = htons((uint16_t)num_entries);
-	
-	int i = 0;
-	routing_entry_t info, tmp;
-	HASH_ITER(hh, rt->route_hash, info, tmp){
-		route_info->entries[i].cost = info->cost;
-		route_info->entries[i].address = info->address;
-		i++;
-	}
-	// copy over route_info to buffer_tofill and free up route_info
-	memcpy(buffer_tofill, route_info, total_size);
-	free(route_info);
-	return total_size;
-}*/
-
-
-// Fills out buffer_tofill with routing_info struct -- with all the data in place
-// Returns size of routing_info struct it filled 
 struct routing_info* routing_table_RIP_response(routing_table_t rt, uint32_t to, int* size, int request_type){
 	int num_entries = HASH_COUNT(rt->route_hash);
 	//printf("num_entries: %d\n", num_entries);
-	if(num_entries*sizeof(struct cost_address) > UDP_PACKET_MAX_SIZE - IP_HEADER_SIZE - ROUTING_INFO_HEADER_SIZE){ // why -20? what about the command/num_entries
+	if(num_entries*sizeof(struct cost_address) > UDP_PACKET_MAX_SIZE - IP_HEADER_SIZE - ROUTING_INFO_HEADER_SIZE){ 
 		puts("routing_table has more entries than there is space in UDP_PACKET_MAX_SIZE -- cannot send RIP DATA");
 		return NULL;
 	}
@@ -241,17 +214,12 @@ struct routing_info* routing_table_RIP_response(routing_table_t rt, uint32_t to,
 		route_info->entries[i].address = info->address;
 
 		/* split horizon with poison reverse */
-		if( to==info->next_hop && ntohs(info->cost) != 0){
+		if(to==info->next_hop && ntohs(info->cost) != 0){
 			cost = htons(INFINITY);
 		}
 		else{
 			cost = info->cost;
 		}
-	
-		char address[INET_ADDRSTRLEN];
-		inet_ntop(AF_INET, &info->address, address, INET_ADDRSTRLEN);
-		//printf("address: %s, cost: %d\n", address, ntohs(cost));	
-	
 		route_info->entries[i].cost = cost;
 
 		i++;
@@ -263,11 +231,9 @@ struct routing_info* routing_table_RIP_response(routing_table_t rt, uint32_t to,
 }
 
 void routing_table_bring_down(routing_table_t rt, forwarding_table_t ft, uint32_t dead_local_ip){
-	puts("bringing down");
 	routing_entry_t entry,tmp;
 	HASH_ITER(hh, rt->route_hash, entry, tmp){
-		puts("down");
-		if( entry->address != dead_local_ip && entry->next_hop == dead_local_ip ){
+		if(entry->next_hop == dead_local_ip ){
 			_set_to_infinity(rt, ft, entry);
 		}
 	}

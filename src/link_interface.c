@@ -183,6 +183,11 @@ int compare_remote_addr(struct sockaddr* a1, struct sockaddr* a2){
 // reads into buffer
 // returns bytes_read on success, -1 in error
 int link_interface_read_packet(link_interface_t l_i, char* buffer, int buffer_len){
+	if(link_interface_up_down(l_i) < 0){
+		puts("link_interface_read_packet: reading but interface down");
+		//interface down -- drop packet
+		return INTERFACE_DOWN;
+	}
 	int bytes_read, sfd;
 	sfd = link_interface_get_sfd(l_i);
 	struct sockaddr remote_addr_in, remote_addr;

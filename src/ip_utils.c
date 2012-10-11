@@ -142,7 +142,6 @@ int ip_wrap_send_packet(void* data, int data_len, int protocol, struct in_addr i
 	memcpy(to_send, ip_header, IP_HEADER_SIZE);
 	memcpy(to_send+IP_HEADER_SIZE, data, data_len);
 
-	char* msg = (char *)data;
 	// send on link interface
 	link_interface_send_packet(li, to_send, data_len+IP_HEADER_SIZE);
 	// free packet	
