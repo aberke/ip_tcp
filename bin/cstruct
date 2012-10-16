@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# Purpose: 
+#
+# This is a pretty trivial utility just designed to not rewrite these 20 
+# lines a bajillion times because it always take me some time to do it and
+# I hate it. Anyway, just give it the name of the struct, say myStruct, and
+# it will generate a template in two files myStruct.c and myStruct.h that are
+# filled with the appropriate boiler plate for defining a struct. I checked 
+# that it compiles with gcc -c myStruct.c. 
+
+# Parameters (by position)
+#
+# struct name -- name of the struct you're creating
+# source_file -- (optional) file to write to .c, defaults to struct_name.c
+# header_file -- (optional) file to write the .h, defaults to struct_name.h
+
+
+EXPECTED_ARGS=1
+
+[ $# -lt $EXPECTED_ARGS ] && echo "Usage: $0 <struct-name> [ <file.c> <file.h> ]" && exit 1 
+
+struct=$1
+
+[ $# -ge 2 ] && src_file=$2    || src_file="${struct}.c"
+[ $# -ge 3 ] && header_file=$3 || header_file="${struct}.h"
+
+[ -e $src_file ] || [ -e $header_file ] && echo "One of the files already exists." && exit 1
+
+
+# helper variables
+HEADER_H="__$(echo $struct | tr '[:lower:]' '[:upper:]')_H__"
+
+
+echo \
+"#ifndef $HEADER_H 
+#define $HEADER_H
+
+typedef struct $struct* ${struct}_t;
+
+${struct}_t ${struct}_init( /* ARGUMENTS */ );
+void ${struct}_destroy(${struct}_t* ${struct});
+
+#endif // $HEADER_H" > $header_file
+
+echo \
+"#include <stdlib.h>
+
+#include \"$header_file\"
+
+struct ${struct}{
+	/* ENTER FIELDS HERE */
+};
+
+${struct}_t ${struct}_init(/* ARGUMENTS */ ){
+	${struct}_t ${struct} = (struct $struct*)malloc(sizeof(struct ${struct}));
+	/* INITIALIZE FIELDS HERE */
+
+	return $struct;
+}
+
+void ${struct}_destroy(${struct}_t* ${struct}){
+	/* DESTROY FIELDS */
+
+	free(*(${struct}));
+	*${struct} = NULL;
+}
+
+" > $src_file
+
+
+exit
