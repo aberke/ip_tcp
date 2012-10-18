@@ -21,6 +21,13 @@ What are your feelings on this potential architecture:
 	
 	Why I believe one ip_node should serve all of the tcp connections:
 		The specs say that even when a socket 'bind()'s' to a port, it should bind to all interfaces, etc
+		Consider one ip_node serving all the tcp_connections so that when a TCP_DATA packet is received, 
+			the ip_node passes off the packet to our tcp_node, tcp_node unwraps the packet, and based on 
+			the destination port specified in the tcp-header, decides which struct tcp_connection the 
+			packet was intended for.
+			What are your thoughts?
+			
+	We should think about what having only one ip_node means for the sliding window protocol (if only want one ip_node).
 
 	tcp_node owns the following table:
 		_________________________________ __ __ __
@@ -36,6 +43,13 @@ What are your feelings on this potential architecture:
 				- assignment to port necessary for when receiving/sending tcp packets
 					-- when handler calls on us to handle packet, we should know socket_id/tcp_connection
 						 it corresponds to based on the tcp packet's destination port matching port in table
+
+
+	struct tcp_connection:  (file added to git).
+		handles own sliding window protocol?
+		handles own state machine?
+		has wrapper functions for sending packet and receiving packet
+				
 
 
 NEIL:
