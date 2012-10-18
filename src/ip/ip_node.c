@@ -25,6 +25,7 @@
 #define SELECT_TIMEOUT 1
 
 /*for ip packet*/
+#define TCP_DATA 6
 #define RIP_DATA 200  
 #define TEST_DATA 0   
 #define RIP_COMMAND_REQUEST 1
@@ -653,6 +654,12 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 	
 	if(type == RIP_DATA){
 		_handle_selected_RIP(ip_node, interface, packet_unwrapped);
+	}
+	else if(type == TCP_DATA){
+		//TODO HANDLE WITH TCP
+		
+		packet_unwrapped[packet_data_size] = '\0'; //null terminate string so that it prints nicely
+		printf("Message Received: %s\n", packet_unwrapped);		
 	}
 	else if (type == TEST_DATA){
 		packet_unwrapped[packet_data_size] = '\0'; //null terminate string so that it prints nicely
