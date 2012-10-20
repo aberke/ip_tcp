@@ -52,7 +52,7 @@ What are your feelings on this potential architecture:
 		tcp_socket_address_t remote_addr;			its pair {(local ip, local port), (remote ip, remote port)}
 			where:
 				 struct tcp_socket_address{
-					uint32_t virt_ip;
+					uint32_t virt_ip;	<--- what does this mean if listening on all interfaces??????
 					uint16_t virt_port;
 				};
 		
@@ -60,9 +60,14 @@ What are your feelings on this potential architecture:
 		handles own state machine?
 		
 		has wrapper functions for sending packet and receiving packet
+		
+		to send a packet:
+			sliding window protocol and the state machine need to somehow work in coordination
+			the state machine has to be able to decide whether or not sending given packet in given way (connect() send())
+				is legal
+			-- how should this be done?
+			- lastly the packet should go through a helper method that just wraps it appropriately in tcp_utils
 				
-
-
 NEIL:
 
 TODO: THINK ABOUT DESIGN AND COMMUNICATE WITH ALEX PLEASE

@@ -37,6 +37,8 @@ tcp_node_t tcp_node_init(list_t* links){
 	if(!ip_node)
 		return NULL;
 	//TODO: START IP_NODE IN A THREAD to communicate with tcp_node
+	
+	// create kernal table
 
 }
 
