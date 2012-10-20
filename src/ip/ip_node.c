@@ -657,6 +657,7 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 	}
 	else if(type == TCP_DATA){
 		//TODO HANDLE WITH TCP
+		// return packet_unwrapped and virt_ip from link_interface
 		
 		packet_unwrapped[packet_data_size] = '\0'; //null terminate string so that it prints nicely
 		printf("Message Received: %s\n", packet_unwrapped);		

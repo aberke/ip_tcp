@@ -18,6 +18,9 @@
 #define DBG_NET         DBG_MODE(2)
 #define DBG_UTIL        DBG_MODE(3)
 #define DBG_ROUTE       DBG_MODE(4)
+#define DBG_TCP         DBG_MODE(5)
+#define DBG_TCPVERB     DBG_MODE(6)
+#define DBG_TCPWIN      DBG_MODE(7)
 #define DBG_DEFAULT     DBG_ERROR
 
 /// There can be no white space in these strings
@@ -29,6 +32,9 @@
 { "net", DBG_NET }, \
 { "util", DBG_UTIL }, \
 { "route", DBG_ROUTE }, \
+{ "tcp", DBG_TCP }, \
+{ "tcpverb", DBG_TCPVERB }, \
+{ "tcpwin", DBG_TCPWIN }, \
 { NULL,         0 } 
 
 #define DBG_COLORTAB \
@@ -36,7 +42,10 @@
 { DBG_LINK, _RED_ }, \
 { DBG_NET, _BRED_ }, \
 { DBG_UTIL, _MAGENTA_ }, \
-{ DBG_ROUTE, _MAGENTA_ }
+{ DBG_ROUTE, _MAGENTA_ }, \
+{ DBG_TCP, _BRED_ }, \
+{ DBG_TCPVERB, _RED_ }, \
+{ DBG_TCPWIN, _MAGENTA_ }
 
 #define DBG_ENV         "DBG_MODES"
 

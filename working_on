@@ -3,6 +3,7 @@ Change Alex made to IP: We have added a type: TCP_DATA=6  which is the protocol 
 
 BIG QUESTION:
 	Can/should our tcp driver 'own' an ip_node (rather than the *node executable)?  
+		- if owns *node exe. use popen? or use fopen?  why is this so badly documented on the internet???
 	This could make our lives easier in the following way:
 		- tp_driver could pass in a reference to itself so that the handler (when ip_node receives TCP_DATA)
 				can directly call tcp_driver methods to handle the incoming packet.
@@ -46,13 +47,26 @@ What are your feelings on this potential architecture:
 
 
 	struct tcp_connection:  (file added to git).
+		int socket_id;
+		tcp_socket_address_t local_addr;		-- it seems a socket is generally defined by 
+		tcp_socket_address_t remote_addr;			its pair {(local ip, local port), (remote ip, remote port)}
+			where:
+				 struct tcp_socket_address{
+					uint32_t virt_ip;
+					uint16_t virt_port;
+				};
+		
 		handles own sliding window protocol?
 		handles own state machine?
+		
 		has wrapper functions for sending packet and receiving packet
 				
 
 
 NEIL:
+
+TODO: THINK ABOUT DESIGN AND COMMUNICATE WITH ALEX PLEASE
+please accomodate for new util files: circular_buffer.c, bqueue.c, node_readline.c, bq_list.h, node.c etc in makefile
 
 
 ALEX:

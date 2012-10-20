@@ -32,4 +32,4 @@ int ip_wrap_send_packet_RIP(void* data, int data_len, link_interface_t interface
 
 void print_packet(char* data, int data_len);
 
-#endif //__LINK_INTERFACE__
+#endif //__IP_UTILS__

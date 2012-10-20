@@ -16,6 +16,7 @@ extern "C" {
 #include <string.h>
 #include <stdlib.h>
 #include <stdarg.h>
+#include <sys/time.h>
 
 #include "dbg_modes.h"
 
@@ -44,7 +45,11 @@ const char* DCOLOR(unsigned long long d_mode);
 
 #define dbg(mode, args...) do { if(!dbg_initiated) dbg_init();  \
                             if (dbg_modes & (mode)) { \
-			      fprintf(stderr, "%s", DCOLOR(mode));       \
+                              struct timeval t; \
+                              double ft; \
+                              gettimeofday(&t, NULL); \
+                              ft = (t.tv_sec%10) + (t.tv_usec / 1000000.0); \
+			      fprintf(stderr, "%s%lf: ", DCOLOR(mode), ft); \
 			      fprintf(stderr, ## args);                  \
 			      fprintf(stderr, "%s", _NORMAL_);           \
 			    } \
@@ -53,7 +58,7 @@ const char* DCOLOR(unsigned long long d_mode);
 
 #else
 
-#define dbg(mode, arg) 
+#define dbg(mode, arg...) 
 #define dbg_active(mode) false
 
 #endif
