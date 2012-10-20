@@ -9,6 +9,10 @@
 #include <pthread.h>
 #include <unistd.h>
 #include <fcntl.h>
+#include "util/utils.h"
+#include "util/list.h"
+#include "util/parselinks.h"
+#include "tcp_node.h"
 
 #define FILE_BUF_SIZE	1024
 
@@ -650,10 +654,19 @@ int main(int argc, char **argv){
     fprintf(stderr, "usage: %s <linkfile>\n", argv[0]);
     return -1;
   }
-
   // TODO initialization!
+  
+  // start of tcp_node which in turn starts up ip_node running in a thread
+  // get linked-list of link_t's
+  list_t* linkedlist = parse_links(argv[1]);
+  
+  tcp_node_t tcp_node = tcp_node_init(linkedlist);
+
+  if(!tcp_node)
+  	 return 1;
 
   driver();
+  // handles calling further tcp_node functions like start()
 
   return 0;
 }
