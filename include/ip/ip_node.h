@@ -1,7 +1,7 @@
 #ifndef __IP_NODE_H__
 #define __IP_NODE_H__
 
-#include "util/list.h"
+#include "list.h"
 
 /*#define RIP_DATA 200  
 #define TEST_DATA 0  

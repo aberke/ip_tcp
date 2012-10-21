@@ -2,70 +2,79 @@ EXEC_FILE=node
 SRC_DIR=src
 BUILD_DIR=build
 INC_DIR=include
-DEFAULT_ARGS=test/helper_files/A.lnx
-B_ARGS=test/helper_files/B.lnx
-C_ARGS=test/helper_files/C.lnx
+
+IP_DIR=ip
+TCP_DIR=tcp
+UTIL_DIR=util
+
+CC=gcc
+CFLAGS=-g -Wall
+
+
 
 ## uthash
 UTHASH_DIR=lib/uthash-1.9.6
 UTHASH_INC=$(UTHASH_DIR)/src #not a mistake
 
-CC=gcc
-CFLAGS=-g -Wall
 
-_OBJS=main.o ip_node.o routing_table.o forwarding_table.o ip_utils.o link_interface.o util/ipsum.o util/parselinks.o util/utils.o util/list.o 
-OBJS=$(patsubst %.o, $(BUILD_DIR)/%.o, $(_OBJS))
 
-_INCLUDE=$(INC_DIR) $(UTHASH_INC)
+
+
+_IP_OBJS=ip_node.o routing_table.o forwarding_table.o ip_utils.o link_interface.o 
+_TCP_OBJS=
+_UTIL_OBJS=ipsum.o parselinks.o utils.o list.o state_machine.o
+
+
+IP_OBJS=$(patsubst %.o, $(IP_DIR)/%.o, $(_IP_OBJS))
+TCP_OBJS=$(patsubst %.o, $(TCP_DIR)/%.o, $(_TCP_OBJS))
+UTIL_OBJS=$(patsubst %.o, $(UTIL_DIR)/%.o, $(_UTIL_OBJS))
+
+OBJS=$(patsubst %.o, $(BUILD_DIR)/%.o, $(IP_OBJS) $(TCP_OBJS) $(UTIL_OBJS))
+
+_INCLUDE=$(INC_DIR) $(INC_DIR)/$(IP_DIR) $(INC_DIR)/$(TCP_DIR) $(INC_DIR)/$(UTIL_DIR) $(UTHASH_INC)
 INCLUDE=$(patsubst %, -I%, $(_INCLUDE))
 
-_DEPENDENT_DIRS=build build/util 
+_DEPENDENT_DIRS=build build/util build/ip build/tcp test/build test/build/tcp
 DEPENDENT_DIRS=$(patsubst %, directory/%, $(_DEPENDENT_DIRS))
 
 #default target
 default: build
 
-# TESTING
+#-=--=-=-=-=-=-=-=-=-=-= TESTING -=-=-=-=-=-=-=-=-=-=-=-=-==-#
 TEST_EXEC_FILE=testing
 TEST_DIR=test
 TEST_BUILD_DIR=$(TEST_DIR)/build
 TEST_DEFAULT_ARGS=
 PYTEST=pyLink.py
 
-_TEST_OBJS=test.o
-_TEST_DEP_OBJS=routing_table.o forwarding_table.o util/utils.o
+_TEST_OBJS=test.o tcp/test_states.o
+_TEST_DEP_OBJS=ip/routing_table.o ip/forwarding_table.o util/utils.o util/state_machine.o
 TEST_OBJS=$(patsubst %.o, $(TEST_BUILD_DIR)/%.o, $(_TEST_OBJS)) $(patsubst %.o, $(BUILD_DIR)/%.o, $(_TEST_DEP_OBJS))
+
+_TEST_INCLUDE=$(TEST_DIR)/include
+TEST_INCLUDE=$(patsubst %, -I%, $(_TEST_INCLUDE)) $(INCLUDE)
 
 test_link:
 	$(CC) $(CFLAGS) -o $(TEST_EXEC_FILE) $(TEST_OBJS)
 
-test_build: test_validate $(TEST_OBJS) test_link
+test_build: validate $(TEST_OBJS) test_link
 
 $(TEST_BUILD_DIR)/%.o: $(TEST_DIR)/%.c
-	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@
+	$(CC) $(CFLAGS) $(TEST_INCLUDE) -c $< -o $@
 
 test_clean:
-	@echo "------------------Cleaning------------------"
 	rm -f $(TEST_EXEC_FILE)
 	rm -f $(TEST_BUILD_DIR)/*.o
-	@echo ""
 
-test_validate:
-	@[ -d $(TEST_BUILD_DIR) ] || ( echo "Creating directory $(TEST_BUILD_DIR)..." && mkdir $(TEST_BUILD_DIR))
+test_rebuild: test_clean test_build
 
-echo_compile:
-	@echo "******************Compiling*****************"
-
-test_rebuild: test_clean echo_compile test_build
-
-pyTest:
-	./$(TEST_DIR)/$(PYTEST) $(DEFAULT_ARGS)
+test_valgrind: test_rebuild
+	valgrind ./$(TEST_EXEC_FILE) $(TEST_DEFAULT_ARGS)
 
 test: test_rebuild
-	@echo ""
-	@echo "==================Testing==================="
 	@./$(TEST_EXEC_FILE) $(TEST_DEFAULT_ARGS)
-	@echo ""
+#-=--=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-==-#
+
 
 # MAIN TARGETS
 link: 
@@ -77,7 +86,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(CFLAGS) $(INCLUDE) -c $< -o $@
 
 clean: 
-	rm -f $(BUILD_DIR)/*.o
+	rm -f `find $(BUILD_DIR) | grep .o`
 	rm -f $(EXEC_FILE)
 
 validate: $(DEPENDENT_DIRS)
@@ -90,24 +99,3 @@ rebuild: clean build
 run: rebuild
 	@./$(EXEC_FILE) $(DEFAULT_ARGS)
 
-runB: rebuild
-	@./$(EXEC_FILE) $(B_ARGS)
-	
-runC: rebuild
-	@./$(EXEC_FILE) $(C_ARGS)
-
-HELPER_FILES_DIR=$(TEST_DIR)/helper_files
-DEFAULT_NETWORK_ARGS=loop.net
-
-runNetwork: rebuild
-	cp $(EXEC_FILE) $(HELPER_FILES_DIR)
-	cd $(HELPER_FILES_DIR); ./runNetwork $(DEFAULT_NETWORK_ARGS)
-	@echo "done."
-
-valgrind: rebuild
-	valgrind --leak-check=full ./$(EXEC_FILE) $(DEFAULT_ARGS)
-	
-valgrindRunNetwork: rebuild
-	cp $(EXEC_FILE) $(HELPER_FILES_DIR)
-	cd $(HELPER_FILES_DIR); valgrind --leak-check=full ./runNetwork $(DEFAULT_NETWORK_ARGS)
-	@echo "done."

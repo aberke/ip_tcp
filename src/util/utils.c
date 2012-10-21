@@ -2,7 +2,7 @@
 
 #include "stdlib.h"
 #include "stdio.h"
-#include "util/utils.h"
+#include "utils.h"
 
 void error(const char* msg){
 	perror(msg);
