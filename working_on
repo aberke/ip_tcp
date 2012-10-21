@@ -55,6 +55,8 @@ What are your feelings on this potential architecture:
 					uint32_t virt_ip;	<--- what does this mean if listening on all interfaces??????
 					uint16_t virt_port;
 				};
+			// doesn't need to know local ip
+				needs to know remote ip for sending to ipnode
 		
 		handles own sliding window protocol?
 		handles own state machine?
@@ -67,6 +69,35 @@ What are your feelings on this potential architecture:
 				is legal
 			-- how should this be done?
 			- lastly the packet should go through a helper method that just wraps it appropriately in tcp_utils
+
+start():
+
+	create queue to_send	  --- tcp data for ip to send
+	create queue to_receive   --- tcp data that ip pushes on to queue for tcp to handle
+
+
+	select loop:
+
+		select ip_node stuff   ---  pops off items from to_send and sends
+									pushes on to to_receive queue for tcp to then handle
+		_______________________
+		
+		select tcp_node stuff   
+			-- handles items on to_receive queue
+			-- takes in user input, handles, creates new packets
+				-- queues new packets on to to_send queue for ip_node to then handle
+	
+
+
+
+
+
+
+
+
+
+
+
 				
 NEIL:
 
