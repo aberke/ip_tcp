@@ -75,7 +75,6 @@ do{													\
 }													\
 while(0)										
 
-
 int verbose = DEFAULT_VERBOSE;
 
 struct routing_info* fill_routing_info(int num_entries, uint32_t* costs, uint32_t* addrs){
