@@ -7,9 +7,9 @@
 #include "forwarding_table.h"
 #include "routing_table.h"
 #include "link_interface.h"
-#include "util/parselinks.h"
-#include "util/list.h"
-#include "util/utils.h"
+#include "parselinks.h"
+#include "list.h"
+#include "utils.h"
 
 //// select
 #include <sys/types.h>

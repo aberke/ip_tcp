@@ -1,3 +1,7 @@
+NEIL:
+state_machine -- done
+window        -- struct that implements a very abstract, high-level version of the sliding window protocol -- almost done
+
 Change Alex made to IP: We have added a type: TCP_DATA=6  which is the protocol number in the IP packet for TCP
 					This is now defined where RIP_DATA and TEST_DATA defined
 

@@ -3,8 +3,10 @@
 #include <string.h>
 #include <netinet/in.h>
 
-#include "util/utils.h"
+#include "utils.h"
 #include "routing_table.h"
+#include "state_machine.h"
+#include "config.h"
 
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
@@ -106,6 +108,32 @@ void debug_update_routing_table(routing_table_t rt, forwarding_table_t ft, struc
 	}
 }
 
+//// Testing the state machine
+void test_state_machine(){
+	state_machine_t machine = state_machine_init();
+
+	// current state
+	print_state( state_machine_get_state(machine) );
+
+	// transition with T1, should --> S2
+	state_machine_transition(machine, T1);
+	print_state( state_machine_get_state(machine) );
+
+	// transition with T2, should --> S3
+	state_machine_transition(machine, T1);
+	print_state( state_machine_get_state(machine) );
+
+	// nothing should change anymore
+	state_machine_transition(machine, T1);
+	print_state( state_machine_get_state(machine) );
+	
+	// ditto
+	state_machine_transition(machine, T2);	
+	print_state( state_machine_get_state(machine) );
+
+	state_machine_destroy(&machine);	
+}
+
 //// Testing for utils
 void test_util_string(){
 	char* x = malloc(sizeof(char)*BUFFER_SIZE);
@@ -205,8 +233,7 @@ void test_unknown(){
 	forwarding_table_t ft = forwarding_table_init();
 
 /* FIRST INFO */
-	int num_entries = 2;;TEST(test_util_string);
-IN
+	int num_entries = 2;
 	uint32_t costs[5] = {5, 6};
 	uint32_t addrs[5] = {0, 1};
 
@@ -250,7 +277,7 @@ void test_small(){
 	struct routing_info* info2 = fill_routing_info(num_entries2, costs2, addrs2);
 
 	debug_update_routing_table(rt, ft, info, next_hop);
-	debug_update_routing_table(rt, ft, info2, next_hop2);IN
+	debug_update_routing_table(rt, ft, info2, next_hop2);
 	
 // Now check that you got what you expected
 
@@ -316,7 +343,6 @@ void test_basic_routing(){
 	routing_table_t rt = routing_table_init();
 	forwarding_table_t ft = forwarding_table_init();
 
-IN
 /* FIRST INFO */
 	int num_entries = 5;
 	uint32_t costs[5] = {5, 6, 19, 12, 20};
@@ -347,7 +373,7 @@ IN
 	// for the forwarding table
 	TEST_EQ(forwarding_table_get_next_hop(ft, 6),12,"");
 	TEST_EQ(forwarding_table_get_next_hop(ft, 7),-1,"");
-	TEST_EQ(forwarding_table_get_next_hop(ft, 4),2,"");
+	TEST_EQ(forwarding_table_get_next_hop(ft, 4),12,"");
 	TEST_EQ(forwarding_table_get_next_hop(ft, 1),11,"");
 	
 
@@ -383,7 +409,7 @@ void parse_arguments(int argc,char** argv){
 int main(int argc, char** argv){
 	parse_arguments(argc,argv);	
 
-	TEST(test_util_string);
+	/*TEST(test_util_string);
 	TEST(test_routing_info);
 	TEST(test_small);
 	TEST(test_basic_routing);
@@ -391,7 +417,9 @@ int main(int argc, char** argv){
 	TEST(test_unknown);
 
 	TEST(test_empty);
-	TEST(test_overflow);
+	TEST(test_overflow);*/
+
+	TEST(test_state_machine);
 
 	/* RETURN */
 	return(0);

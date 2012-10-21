@@ -6,7 +6,7 @@
 #include <inttypes.h>
 
 #include "ip_utils.h"
-#include "util/ipsum.h"
+#include "ipsum.h"
 
 
 /*KEEP IN MIND:

@@ -1,5 +1,5 @@
-#include "util/list.h"
-#include "util/parselinks.h"
+#include "list.h"
+#include "parselinks.h"
 #include "link_interface.h"
 
 #define HOST_MAX_LENGTH 256 // RFC 2181

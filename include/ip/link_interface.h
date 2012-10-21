@@ -13,7 +13,8 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include "util/parselinks.h"
+
+#include "parselinks.h"
 
 #define INTERFACE_SUCCESS 0
 #define INTERFACE_ERROR_WRONG_ADDRESS -1
