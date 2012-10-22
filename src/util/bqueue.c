@@ -2,6 +2,7 @@
 #include "bq_list.h"
 #include "dbg.h"
 #include <stdlib.h>
+#include <time.h>
 #include <errno.h>
 #include <pthread.h>
 
@@ -169,18 +170,18 @@ int __bqueue_dequeue( bqueue_t *q, void **data,
     {
       if (abs_timeout != NULL) 
       {
-        dbg(DBG_UTIL, "__bqueue_dequeue: timeout = %d, %d\n", 
-            abs_timeout->tv_sec, abs_timeout->tv_nsec);
+        /*dbg(DBG_UTIL, "__bqueue_dequeue: timeout = %d, %d\n", --COMMENTED OUT BY ALEX
+            abs_timeout->tv_sec, abs_timeout->tv_nsec);*/
         ret = pthread_cond_timedwait( &q->q_cond, &q->q_mtx, abs_timeout ); 
         if (ret == ETIMEDOUT)
         {
-          dbg(DBG_UTIL, "__bqueue_dequeue: cond timed out\n");
+          //dbg(DBG_UTIL, "__bqueue_dequeue: cond timed out\n");	--COMMENTED OUT BY ALEX
           return -ETIMEDOUT;
         }
       }
       else
       {
-        dbg(DBG_UTIL, "__bqueue_dequeue: no timeout\n");
+        //dbg(DBG_UTIL, "__bqueue_dequeue: no timeout\n");	--COMMENTED OUT BY ALEX
         pthread_cond_wait( &q->q_cond, &q->q_mtx );
       }
     }

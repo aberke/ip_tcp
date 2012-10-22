@@ -59,6 +59,8 @@ What are your feelings on this potential architecture:
 					uint32_t virt_ip;	<--- what does this mean if listening on all interfaces??????
 					uint16_t virt_port;
 				};
+			// doesn't need to know local ip
+				needs to know remote ip for sending to ipnode
 		
 		handles own sliding window protocol?
 		handles own state machine?
@@ -71,6 +73,38 @@ What are your feelings on this potential architecture:
 				is legal
 			-- how should this be done?
 			- lastly the packet should go through a helper method that just wraps it appropriately in tcp_utils
+
+start():
+
+	create queue to_send	  --- tcp data for ip to send
+	create queue to_read   --- tcp data that ip pushes on to queue for tcp to handle
+	create queue stdin_commands --- some user commands to tcp_node driver need to be handled by ip_node
+										like interfaces, up, down, etc
+									enqueue and dequeues char* data types that are the buffered commands
+
+
+	alex created ip_thread_data struct to pass in following arguments to start:
+		struct ip_thread_data{
+			ip_node_t ip_node;
+			bqueue_t to_send;
+			bqueue_t to_read;
+			bqueue_t stdin_commands;
+		};
+			// data type that to_send and to_read queues will store (ie queue and dequeue) -- need vip's associated with packet
+				typedef struct tcp_packet_data{
+					uint32_t local_virt_ip;
+					uint32_t remote_virt_ip;
+					char packet[MTU];
+					int packet_size;  //size of packet in bytes
+				} tcp_packet_data_t;
+
+
+
+
+
+
+
+
 				
 NEIL:
 

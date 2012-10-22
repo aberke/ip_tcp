@@ -4,14 +4,14 @@
 
 #include "list.h"
 
-void list_init(list_t **list)
+void iplist_init(iplist_t **list)
 {
-	*list = (list_t *)malloc(sizeof(list_t));
+	*list = (iplist_t *)malloc(sizeof(iplist_t));
 	(*list)->length = 0;
-	memset(*list, 0, sizeof(list_t));
+	memset(*list, 0, sizeof(iplist_t));
 }
 
-void list_free(list_t **list)
+void iplist_free(iplist_t **list)
 {
 	if ((*list) != NULL) { 
 		node_t *curr, *next;
@@ -24,13 +24,13 @@ void list_free(list_t **list)
 	}
 }
 
-void list_append(list_t *list, void *data)
+void iplist_append(iplist_t *list, void *data)
 {
 	node_t *new_node = (node_t *)malloc(sizeof(node_t));
 	memset(new_node, 0, sizeof(node_t));
 	new_node->data = data;
 	
-	if (list_empty(list)) {
+	if (iplist_empty(list)) {
 		list->head = new_node;
 	} else {
 		node_t *curr;
@@ -40,7 +40,7 @@ void list_append(list_t *list, void *data)
 	list->length++;
 }
 
-int list_empty (list_t *list)
+int iplist_empty (iplist_t *list)
 {
 	return list->head == NULL;
 }

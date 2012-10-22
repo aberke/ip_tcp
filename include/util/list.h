@@ -21,33 +21,33 @@ typedef struct node_t {
     struct node_t *next;
 } node_t;
 
-typedef struct list_t {
+typedef struct iplist_t {
 	int length;
 	node_t *head;
-} list_t;
+} iplist_t;
 
 /**
  * Allocates memory for the list and does any necessary setup.
  * The user is responsible for freeing the memory by calling
  * list_free, below.
  */
-void list_init(list_t **list);
+void iplist_init(iplist_t **list);
 
 /** 
  * Frees all memory explicitly allocated by the list and sets the 
  * pointer to null.
  */
-void list_free(list_t **list);
+void iplist_free(iplist_t **list);
 
 /**
  * Inserts a new node holding the data at the end of the list (make sure
  * the data is malloced).
  */
-void list_append(list_t *list, void *data);
+void iplist_append(iplist_t *list, void *data);
 
 /** 
  * Returns 1 if the list is empty, 0 if not.
  */
-int list_empty(list_t *list);
+int iplist_empty(iplist_t *list);
 
 #endif

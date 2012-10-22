@@ -67,11 +67,11 @@ int count_links(FILE *f)
     return lines;
 }
 
-list_t *parse_links(char *filename)
+iplist_t *parse_links(char *filename)
 {
     int ret;
     FILE *f;
-    list_t *links;
+    iplist_t *links;
     link_t *line;
     f = fopen(filename,"r");
   
@@ -80,7 +80,7 @@ list_t *parse_links(char *filename)
     }
 
     // Initialize the list of links.
-    list_init(&links);
+    iplist_init(&links);
 
     while (!feof(f)) {
         line = (link_t *)malloc(sizeof(link_t));
@@ -94,18 +94,18 @@ list_t *parse_links(char *filename)
             free(line);
             return links;
         }
-        list_append(links, (void *)(line));
+        iplist_append(links, (void *)(line));
     }
 
     fclose(f);
     return links;
 }
 
-void free_links(list_t *links)
+void free_links(iplist_t *links)
 {
     node_t *curr;
 	for (curr = links->head; curr != NULL; curr = curr->next) {
 		free (curr->data);
 	}
-	list_free(&links);
+	iplist_free(&links);
 }

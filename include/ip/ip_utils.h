@@ -6,10 +6,12 @@
 
 #define RIP_DATA 200  
 #define TEST_DATA 0  
+#define TCP_DATA 6
 #define IP_PACKET_MAX_SIZE 64000
 #define IP_HEADER_SIZE sizeof(struct ip)
 #define UDP_PACKET_MAX_SIZE 1400
 #define ROUTING_INFO_HEADER_SIZE 4
+#define MTU (UDP_PACKET_MAX_SIZE - IP_HEADER_SIZE)
 
 //Param: buffer read in, number of bytes read in
 //Return value: bytes of data within packet on success, -1 on error

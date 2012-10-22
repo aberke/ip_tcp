@@ -14,8 +14,8 @@ int main(int argc, char *argv[]){
 	// get linked-list of link_t's
 	list_t* linkedlist = parse_links(argv[1]);
 	
-	//initiate ip_node_t which will create factory and use linkedlist
-	ip_node_t ip_node = ip_node_init(linkedlist);
+	//initiate tcp_node which will initiate ip_node_t which will create factory and use linkedlist
+	tcp_node_t tcp_node = tcp_node_init(linkedlist);
 
 	if(!ip_node)
 		return 1;
