@@ -2,14 +2,14 @@
 #include <netinet/ip.h>
 #include <time.h>
 
-#include "ip_node.h"
-#include "ip_utils.h"
+
+#include "bqueue.h"
 #include "forwarding_table.h"
 #include "routing_table.h"
 #include "link_interface.h"
 #include "parselinks.h"
-#include "list.h"
 #include "utils.h"
+#include "ip_node.h"
 
 //// select
 #include <sys/types.h>
@@ -35,14 +35,14 @@
 /* Static functions for internal use */
 static void _update_select_list(ip_node_t node);
 static void _update_all_interfaces(ip_node_t node);
-static void _handle_selected(ip_node_t node, link_interface_t interface);
-static void _handle_reading_stdin(ip_node_t node);
-static void _handle_reading_sockets(ip_node_t node);
-static void _handle_user_command(ip_node_t node);
+static void _handle_selected(ip_node_t ip_node, link_interface_t interface, bqueue_t *to_read);
+static void _handle_reading_stdin(ip_node_t ip_node, bqueue_t *stdin_commands);
+static void _handle_reading_sockets(ip_node_t ip_node, bqueue_t *to_read);
+static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands);
 static int _is_local_ip(ip_node_t ip_node, uint32_t ip);
 static void _handle_query_interfaces(ip_node_t ip_node);
 static void _handle_user_command_down(ip_node_t ip_node, char* buffer);
-static void _handle_user_command_send(ip_node_t ip_node, char* buffer);
+static void _handle_to_send_queue(ip_node_t ip_node, bqueue_t *to_send);
 static void _request_RIP(ip_node_t ip_node);
 
 /* STRUCTS */
@@ -128,7 +128,7 @@ void interface_ip_keyed_destroy(interface_ip_keyed_t* ip_keyed){
    through these in order to populate its fields. It simply extracts each interface and puts
    it in the ip_node's interface array, and also adds each interface to both hash-maps. */
 
-ip_node_t ip_node_init(list_t* links){
+ip_node_t ip_node_init(iplist_t* links){
 	ip_node_t ip_node = (ip_node_t)malloc(sizeof(struct ip_node));
 	ip_node->forwarding_table = forwarding_table_init();
 	ip_node->routing_table = routing_table_init();
@@ -225,13 +225,31 @@ void ip_node_print_interfaces(ip_node_t ip_node){
 		link_interface_print(ip_node->interfaces[i]);
 	}
 }
-
-
+struct ip_thread_data{
+	ip_node_t ip_node;
+	bqueue_t *to_send;
+	bqueue_t *to_read;
+	bqueue_t *stdin_commands;   // way for tcp_node to pass user input commands to ip_node
+};
 
 /* ip_node_start will take just the ip_node as a parameter and will start
    up the whole process of listening to all the interfaces, and handling all
    of the information */
-void ip_node_start(ip_node_t ip_node){
+void *ip_node_start(void *ipdata){
+	/* alex created ip_thread_data struct to pass in following arguments to start:
+			typedef struct ip_thread_data{
+				ip_node_t ip_node;
+				bqueue_t *to_send;
+				bqueue_t *to_read;
+				bqueue_t *stdin_commands;   // way for tcp_node to pass user input commands to ip_node	
+			} ip_thread_data_t; 
+	*/
+	ip_thread_data_t ip_data = (ip_thread_data_t)ipdata;
+	ip_node_t ip_node = ip_data->ip_node;
+	bqueue_t *to_send = ip_data->to_send;	//--- tcp data for ip to send
+	bqueue_t *to_read = ip_data->to_read;	//--- tcp data that ip pushes on to queue for tcp to handle
+	bqueue_t *stdin_commands = ip_data->stdin_commands;
+	
 	int retval;
 
 	//// init the timeval struct for breaking out of select
@@ -257,9 +275,10 @@ void ip_node_start(ip_node_t ip_node){
 		if (retval == -1)
 			{ error("select()"); } 
 		else if (retval){	
-			_handle_reading_stdin(ip_node);			
+			_handle_reading_stdin(ip_node, stdin_commands);   	
+			_handle_to_send_queue(ip_node, to_send);	
 			_handle_query_interfaces(ip_node); // in case the user shut down a node
-			_handle_reading_sockets(ip_node);
+			_handle_reading_sockets(ip_node, to_read);
 		}	 
 		else{
 			_handle_query_interfaces(ip_node); 
@@ -271,12 +290,13 @@ void ip_node_start(ip_node_t ip_node){
 			time(&last_update);
 		}
 	}
+	pthread_exit(NULL);
 }
 /*************************** INTERNAL ******************************/
 /* just reads from stdin if its FD_ISSET */
-static void _handle_reading_stdin(ip_node_t ip_node){
-	if(FD_ISSET(STDIN, &(ip_node->read_fds))){
-		_handle_user_command(ip_node);
+static void _handle_reading_stdin(ip_node_t ip_node, bqueue_t *stdin_commands){
+	if(!bqueue_empty(stdin_commands)){
+		_handle_user_command(ip_node, stdin_commands);
 	}
 }
 
@@ -284,11 +304,11 @@ static void _handle_reading_stdin(ip_node_t ip_node){
    effect of a select call. This will get called only if there is a fd to
    read from. First check STDIN, and handle that command. Then check all 
    of the interface sockets by iterating over the hashmap of sockets to interfaces. */
-static void _handle_reading_sockets(ip_node_t ip_node){
+static void _handle_reading_sockets(ip_node_t ip_node, bqueue_t *to_read){
 	struct interface_socket_keyed *socket_keyed, *tmp;
 	HASH_ITER(hh, ip_node->socketToInterface, socket_keyed, tmp){
 		if(FD_ISSET(socket_keyed->socket, &(ip_node->read_fds))){
-			_handle_selected(ip_node, socket_keyed->interface);	
+			_handle_selected(ip_node, socket_keyed->interface, to_read);	
 		}	
 	}
 }
@@ -398,8 +418,8 @@ static int _is_local_ip(ip_node_t ip_node, uint32_t vip){
 
 static void _update_select_list(ip_node_t ip_node){
 	FD_ZERO(&(ip_node->read_fds));
-	FD_SET(STDIN, &(ip_node->read_fds));
-	int max_fd = fileno(stdin);	
+	/*FD_SET(STDIN, &(ip_node->read_fds));  stdin read by tcp_node */
+	int max_fd = 0;	
 	int sfd;		
 	
 	int i;
@@ -448,109 +468,99 @@ static void _handle_user_command_up(ip_node_t ip_node, char* buffer){
 		link_interface_bringup(interface);
 	}		
 }
-/* _handle_user_command_send is a helper to _handle_user_command for handling 'send vip proto string' command */
-static void _handle_user_command_send(ip_node_t ip_node, char* buffer){
-	char send[50];
-	char send_to_vip_string[50];
-	int protocol;
-	char msg[UDP_PACKET_MAX_SIZE-IP_HEADER_SIZE];
-	
-	if(sscanf(buffer, "%s %s %d %[^\t\n]", send, send_to_vip_string, &protocol, msg) != 4){
-		puts("Proper command: 'send vip protocol message'");
-		return;
-	}
-	
-	if(strcmp(send, "send")){
-		puts("Proper command: 'send vip proto string'");
-		return;
-	}
+/* _handle_user_command_send iterates through to_send queue to handle each packet that has been wrapped by tcp_node */
+static void _handle_to_send_queue(ip_node_t ip_node, bqueue_t *to_send){
+	tcp_packet_data_t *tcp_packet_data = (tcp_packet_data_t *) malloc(sizeof(struct tcp_packet_data));
+	char* packet = (char*) malloc(sizeof(char)*MTU);
 	struct in_addr send_to, send_from;
 	uint32_t send_to_vip;
+	int packet_size;
+	
+	while(!(bqueue_trydequeue(to_send, (void **)&tcp_packet_data))){
+		// extract packet data from tcp_packet_data
+		packet = tcp_packet_data->packet;
+		send_to_vip = tcp_packet_data->remote_virt_ip;
+		packet_size = tcp_packet_data->packet_size;
 		
-	if(inet_pton(AF_INET, send_to_vip_string, &send_to) <= 0){
-		puts("Proper command: 'send vip proto string' where vip is the destination virtual ip address in dotted quad notation.");
-		return;
-	}
-	send_to_vip = send_to.s_addr;
-
-	// check if send_to_vip local -- if so must just print
-	if(_is_local_ip(ip_node, send_to_vip)){
-		printf("Message received: %s\n", msg);
-		return;
-	}
+		send_to.s_addr = send_to_vip;
 	
-	// get next hop for sending message to send_to_vip
-	uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
-	if(next_hop_addr == -1){
-		printf("Cannot reach address %s.\n", send_to_vip_string);
-		return;
-	}
-	// get struct in_addr corresponding to next_hop_addr
-	send_from.s_addr = next_hop_addr;
-	// get interface to send out packet on -- interface corresponding to next_hop_addr
-	interface_ip_keyed_t address_keyed;
-	HASH_FIND(hh, ip_node->addressToInterface, &next_hop_addr, sizeof(uint32_t), address_keyed);
-	if(!address_keyed){
-		printf("Cannot reach address %s  -- TODO: MAKE SURE FIXED -- see _handle_user_command_send\n", send_to_vip_string);
-		return;
-	}
-	link_interface_t next_hop_interface = address_keyed->interface;
-	
-	// get message information
-	int msg_len = (int)strlen(msg); 
-			
-	// wrap and send IP packet
-	ip_wrap_send_packet(msg, msg_len, protocol, send_from, send_to, next_hop_interface);			
+		// check if send_to_vip local -- if so must just print
+		if(_is_local_ip(ip_node, send_to_vip)){
+			printf("We send a message to ourselves?  Look into how we should handle packet: %s\n", packet);
+			continue;
+		}
+		
+		// get next hop for sending message to send_to_vip
+		uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
+		if(next_hop_addr == -1){
+			printf("Cannot reach address %d.\n", send_to_vip);
+			continue;
+		}
+		// get struct in_addr corresponding to next_hop_addr
+		send_from.s_addr = next_hop_addr;
+		// get interface to send out packet on -- interface corresponding to next_hop_addr
+		interface_ip_keyed_t address_keyed;
+		HASH_FIND(hh, ip_node->addressToInterface, &next_hop_addr, sizeof(uint32_t), address_keyed);
+		if(!address_keyed){
+			printf("Cannot reach address %d  -- TODO: MAKE SURE FIXED -- see _handle_user_command_send\n", send_to_vip);
+			continue;
+		}
+		link_interface_t next_hop_interface = address_keyed->interface;
+				
+		// wrap and send IP packet
+		ip_wrap_send_packet(packet, packet_size, TCP_DATA, send_from, send_to, next_hop_interface);		
+	}	
 }
 
-/* _handle_user_command does exactly what it says. Note: this is only called 
-   if reading from STDIN won't block, so just do it already. 
-
+/* 
 	RECOGNIZED COMMANDS:
 		- interfaces : print out all interfaces
 		- routes     : print out routes to known destination
 		- quit/q     : stop everything
 
 */
-static void _handle_user_command(ip_node_t ip_node){
-	char* buffer = (char*) malloc(sizeof(char)*BUFFER_SIZE);
-	fgets(buffer, BUFFER_SIZE-1, stdin);
-	rtrim(buffer, "\n");
-	
-	//// handle the commands
-	if(!strcmp(buffer, "quit") || !strcmp(buffer, "q"))
-		ip_node->running = 0;
-	
-	else if(!strcmp(buffer, "interfaces"))
-		ip_node_print_interfaces(ip_node);
+static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands){
+	char* buffer = (char*) malloc(sizeof(char)*BUFFER_SIZE);	
 
-	else if(!strcmp(buffer, "routes"))
-		routing_table_print(ip_node->routing_table);
+/* bqueue_trydequeue attempts to dequeue an item from the queue... if there are no items
+ * in the queue, rather than blocking we simply return 1 and *data has
+ * an undefined value */
+	while(!(bqueue_trydequeue(stdin_commands, &buffer))){
+	
+		rtrim(buffer, "\n");
 		
-	else if(buffer[0] == 'd')
-		_handle_user_command_down(ip_node, buffer);
+		//// handle the commands
+		if(!strcmp(buffer, "quit") || !strcmp(buffer, "q"))
+			ip_node->running = 0;
+		
+		else if(!strcmp(buffer, "interfaces"))
+			ip_node_print_interfaces(ip_node);
 	
-	else if(buffer[0] == 'u')
-		_handle_user_command_up(ip_node, buffer);
+		else if(!strcmp(buffer, "routes"))
+			routing_table_print(ip_node->routing_table);
+			
+		else if(buffer[0] == 'd')
+			_handle_user_command_down(ip_node, buffer);
+		
+		else if(buffer[0] == 'u')
+			_handle_user_command_up(ip_node, buffer);
 	
-	else if(buffer[0] == 's')
-		_handle_user_command_send(ip_node, buffer);
-
-	else if(!strcmp(buffer, "fp")){
-		forwarding_table_print(ip_node->forwarding_table);	
+		else if(!strcmp(buffer, "fp")){
+			forwarding_table_print(ip_node->forwarding_table);	
+		}
+		
+		else if(!strcmp(buffer, "rp")){
+			routing_table_print(ip_node->routing_table);
+		}
+	
+		else if(!strcmp(buffer, "print")){
+			ip_node_print(ip_node);
+		}
+	
+		else
+			printf("Received unrecognized input from user: %s\n", buffer); 
+	
 	}
-	
-	else if(!strcmp(buffer, "rp")){
-		routing_table_print(ip_node->routing_table);
-	}
-
-	else if(!strcmp(buffer, "print")){
-		ip_node_print(ip_node);
-	}
-
-	else
-		printf("Received unrecognized input from user: %s\n", buffer); 
-	
 	free(buffer); 
 }
 
@@ -621,7 +631,7 @@ static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, 
 /* _handle_selected is a dummy function for testing the functionality of the rest
    of the system (and not the implementation of the link_interface). This will be 
    done by linking to a dummy link_interface file that provides the same methods */
-static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
+static void _handle_selected(ip_node_t ip_node, link_interface_t interface, bqueue_t *to_read){
 	char* packet_buffer = (char*)malloc(sizeof(char)*IP_PACKET_MAX_SIZE + 1);
 	int bytes_read = link_interface_read_packet(interface, packet_buffer, IP_PACKET_MAX_SIZE);
 
@@ -656,11 +666,14 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 		_handle_selected_RIP(ip_node, interface, packet_unwrapped);
 	}
 	else if(type == TCP_DATA){
-		//TODO HANDLE WITH TCP
-		// return packet_unwrapped and virt_ip from link_interfaceha
+		//HANDLE WITH TCP
+			/* enqueue an item into the queue. if the queue has been
+			 * destroyed, returns -EINVAL */
+		if(bqueue_enqueue(to_read, packet_unwrapped) == -EINVAL)
+			puts("Tried to enqueue item into to_read queue after queue destroyed: see ip_node: _handle_selected()");
 		
 		packet_unwrapped[packet_data_size] = '\0'; //null terminate string so that it prints nicely
-		printf("Message Received: %s\n", packet_unwrapped);		
+		printf("TCP Message Received: %s\n", packet_unwrapped);		
 	}
 	else if (type == TEST_DATA){
 		packet_unwrapped[packet_data_size] = '\0'; //null terminate string so that it prints nicely

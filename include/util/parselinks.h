@@ -24,12 +24,12 @@ typedef struct {
  * Returns a list of link_t's. The user is responsible for 
  * calling free_links on the list after using it to avoid memory leaks.
  */
-list_t* parse_links(char *filename);
+iplist_t* parse_links(char *filename);
 
 /*
  * Frees the memory used by the list of links, including
  * the links themselves. Call this when you are done with the links.
  */
-void free_links(list_t *links);
+void free_links(iplist_t *links);
 
 #endif
