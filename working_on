@@ -77,7 +77,7 @@ What are your feelings on this potential architecture:
 start():
 
 	create queue to_send	  --- tcp data for ip to send
-	create queue to_receive   --- tcp data that ip pushes on to queue for tcp to handle
+	create queue to_read   --- tcp data that ip pushes on to queue for tcp to handle
 	create queue stdin_commands --- some user commands to tcp_node driver need to be handled by ip_node
 										like interfaces, up, down, etc
 									enqueue and dequeues char* data types that are the buffered commands

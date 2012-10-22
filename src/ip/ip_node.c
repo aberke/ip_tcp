@@ -225,26 +225,19 @@ void ip_node_print_interfaces(ip_node_t ip_node){
 		link_interface_print(ip_node->interfaces[i]);
 	}
 }
-struct ip_thread_data{
-	ip_node_t ip_node;
-	bqueue_t *to_send;
-	bqueue_t *to_read;
-	bqueue_t *stdin_commands;   // way for tcp_node to pass user input commands to ip_node
-};
 
 /* ip_node_start will take just the ip_node as a parameter and will start
    up the whole process of listening to all the interfaces, and handling all
    of the information */
 void *ip_node_start(void *ipdata){
-	/* alex created ip_thread_data struct to pass in following arguments to start:
-			typedef struct ip_thread_data{
-				ip_node_t ip_node;
-				bqueue_t *to_send;
-				bqueue_t *to_read;
-				bqueue_t *stdin_commands;   // way for tcp_node to pass user input commands to ip_node	
-			} ip_thread_data_t; 
-	*/
-	ip_thread_data_t ip_data = (ip_thread_data_t)ipdata;
+	/* alex created ip_thread_data struct to pass in following arguments to start:*/
+	struct ip_thread_data {
+		ip_node_t ip_node;
+		bqueue_t *to_send;
+		bqueue_t *to_read;
+		bqueue_t *stdin_commands;   // way for tcp_node to pass user input commands to ip_node
+	};
+	struct ip_thread_data* ip_data = (struct ip_thread_data *)ipdata;
 	ip_node_t ip_node = ip_data->ip_node;
 	bqueue_t *to_send = ip_data->to_send;	//--- tcp data for ip to send
 	bqueue_t *to_read = ip_data->to_read;	//--- tcp data that ip pushes on to queue for tcp to handle
