@@ -22,7 +22,7 @@ UTHASH_INC=$(UTHASH_DIR)/src #not a mistake
 
 _IP_OBJS=ip_node.o routing_table.o forwarding_table.o ip_utils.o link_interface.o 
 _TCP_OBJS=
-_UTIL_OBJS=ipsum.o parselinks.o utils.o list.o state_machine.o
+_UTIL_OBJS=ipsum.o parselinks.o utils.o list.o bqueue.o ##Could use dbg.o but for now I commented out references to it in bqueue.c
 
 
 IP_OBJS=$(patsubst %.o, $(IP_DIR)/%.o, $(_IP_OBJS))
