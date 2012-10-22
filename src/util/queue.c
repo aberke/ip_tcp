@@ -5,17 +5,21 @@
 struct queue_el{
 	void* data;
 	struct queue_el* next;
+	struct queue_el* prev;
 };
 
 struct queue{
 	struct queue_el* head;
+	struct queue_el* tail;
 };
 
 typedef struct queue_el* queue_el_t;
 
-queue_el_t queue_el_init(void* data){
+queue_el_t queue_el_init(queue_el_t prev, void* data){
 	queue_el_t el = malloc(sizeof(struct queue_el));
 	el->data = data;
+	el->next = NULL;
+	el->prev = prev;
 	return el;
 }
 
@@ -30,7 +34,7 @@ void queue_el_destroy(queue_el_t* el){
 
 queue_t queue_init(){
 	queue_t q = malloc(sizeof(struct queue));
-	q->head = NULL;
+	q->head = q->tail = NULL;
 	return q;
 }
 
