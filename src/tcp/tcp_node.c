@@ -8,7 +8,8 @@
 #include "util/utils.h"
 #include "util/list.h"
 #include "util/parselinks.h"
-//#include "bqueue.h" -- defined in header tcp_node.h
+
+//#include "bqueue.h" -- defined in header ip_node.h
 #include "ip_node.h"
 #include "tcp_node.h"
 
@@ -61,6 +62,7 @@ int tcp_node_start_ip_threads(tcp_node_t tcp_node,
 		bqueue_t *stdin_commands;   // way for tcp_node to pass user input commands to ip_node
 	};*/
 	// fetch and put arguments into ip_thread_data_t
+
 	ip_thread_data_t ip_data = (ip_thread_data_t)malloc(sizeof(struct ip_thread_data));
 	ip_data->ip_node = tcp_node->ip_node;
 	ip_data->to_send = tcp_node->to_send;
@@ -154,6 +156,7 @@ void tcp_node_start(tcp_node_t tcp_node){
 		puts("Failed to start ip_node");
 		return;
 	}
+
 	// create and initialize queue that will transfer stdin from stdin thread to 
 	bqueue_t *stdin_queue = (bqueue_t*) malloc(sizeof(bqueue_t));
 	bqueue_init(stdin_queue);

@@ -4,6 +4,23 @@
 #include "stdio.h"
 #include "utils.h"
 
+/* STRUCTS */
+
+memchunk_t memchunk_init(void* data, int length){
+	memchunk_t chunk = malloc(sizeof(struct memchunk));
+	chunk->data = data;
+	chunk->length = length;
+	return chunk;
+}
+
+void memchunk_destroy(memchunk_t* chunk){
+	free(*chunk);
+	*chunk = NULL;
+}	
+
+
+/* FUNCTIONS */
+
 void error(const char* msg){
 	perror(msg);
 	if (DEBUG) exit(1);
