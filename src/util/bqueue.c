@@ -102,13 +102,13 @@ int bqueue_timed_dequeue_abs( bqueue_t *q, void ** data,
                               const struct timespec *abs_ts) {
   int ret;
   if (abs_ts != NULL) {
-	puts("YOURE DOING SOMETHING HORRIBLY WRONG");
-	exit(1);
-
+  	puts("YOU CALLED BQUEUE_TIMED_DEQUEUE_ABS WHERE ABS!=NULL -- crash and burn");
+  	exit(1);
+  	/*
     ret = pthread_mutex_timedlock( &q->q_mtx, abs_ts );
     if (ret == ETIMEDOUT) 
       return -ETIMEDOUT;
-
+	*/
     ret = __bqueue_dequeue( q, data , abs_ts );
     pthread_mutex_unlock( &q->q_mtx );
     return ret;

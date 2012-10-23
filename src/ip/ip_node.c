@@ -19,10 +19,7 @@
 //// hash-map 
 #include "uthash.h"
 
-
-//// some helpful static globals
-#define STDIN fileno(stdin)
-#define SELECT_TIMEOUT 1
+// helpful global variables moved to ip_node.h
 
 /*for ip packet*/
 #define TCP_DATA 6
@@ -225,23 +222,103 @@ void ip_node_print_interfaces(ip_node_t ip_node){
 		link_interface_print(ip_node->interfaces[i]);
 	}
 }
-
-/* ip_node_start will take just the ip_node as a parameter and will start
-   up the whole process of listening to all the interfaces, and handling all
-   of the information */
-void *ip_node_start(void *ipdata){
-	/* alex created ip_thread_data struct to pass in following arguments to start:*/
+/* ****************************** IP_THREADS ************************************ */
+/* The following 3 function pointers run the threads of ip_node that tcp_node communicates with via queues.
+	alex created ip_thread_data struct to pass in following arguments to start:
 	struct ip_thread_data {
 		ip_node_t ip_node;
 		bqueue_t *to_send;
 		bqueue_t *to_read;
 		bqueue_t *stdin_commands;   // way for tcp_node to pass user input commands to ip_node
 	};
-	struct ip_thread_data* ip_data = (struct ip_thread_data *)ipdata;
+*/
+/* Thread to handle user commands that need to be carried out by ip_node -- dequeues commands off the stdin_commands queue*/
+void *ip_command_thread_run(void *ipdata){
+
+	ip_thread_data_t ip_data = (ip_thread_data_t)ipdata;
+	// only need to extract ip_node and to_send
 	ip_node_t ip_node = ip_data->ip_node;
-	bqueue_t *to_send = ip_data->to_send;	//--- tcp data for ip to send
-	bqueue_t *to_read = ip_data->to_read;	//--- tcp data that ip pushes on to queue for tcp to handle
 	bqueue_t *stdin_commands = ip_data->stdin_commands;
+	
+	// create timespec for timeout on pthread_cond_timedwait(&to_send);
+	struct timespec wait_cond = {PTHREAD_COND_TIMEOUT_SEC, PTHREAD_COND_TIMEOUT_NSEC}; //
+	int wait_cond_ret;
+	
+	while(ip_node->running){
+		
+		if(!bqueue_empty(stdin_commands)){
+			_handle_reading_stdin(ip_node, stdin_commands); 	
+		}
+		else{
+			// wait a moment for queue to fill -- or continue through while loop after a moment passes
+			pthread_mutex_lock(&(stdin_commands->q_mtx));
+        	if((wait_cond_ret = pthread_cond_timedwait(&(stdin_commands->q_cond), &(stdin_commands->q_mtx), &wait_cond))!=0){
+        		if(wait_cond_ret == ETIMEDOUT){
+        			// timed out
+      				puts("pthread_cond_timed_wait for to_read timed out");
+      			}
+      			else{
+      				printf("ERROR: pthread_cond_timed_wait errored out\n");
+      			}
+      			// unlock and continue
+      			pthread_mutex_unlock(&(stdin_commands->q_mtx));
+      			continue;
+      		}
+			pthread_mutex_unlock(&(stdin_commands->q_mtx));
+			_handle_reading_stdin(ip_node, stdin_commands); 	
+		}
+	}	
+	pthread_exit(NULL);
+}
+
+/* Thread to handle sending tcp packets from tcp_node by dequeuing packets off the to_send queue*/
+void *ip_send_thread_run(void *ipdata){
+
+	ip_thread_data_t ip_data = (ip_thread_data_t)ipdata;
+	// only need to extract ip_node and to_send
+	ip_node_t ip_node = ip_data->ip_node;
+	bqueue_t *to_send = ip_data->to_send;
+	
+	// create timespec for timeout on pthread_cond_timedwait(&to_send);
+	struct timespec wait_cond = {PTHREAD_COND_TIMEOUT_SEC, PTHREAD_COND_TIMEOUT_NSEC}; //
+	int wait_cond_ret;
+	
+	while(ip_node->running){
+		
+		if(!bqueue_empty(to_send))
+			_handle_to_send_queue(ip_node, to_send);		
+		
+		else{
+			// wait a moment for queue to fill -- or continue through while loop after a moment passes
+			pthread_mutex_lock(&(to_send->q_mtx));
+        	if((wait_cond_ret = pthread_cond_timedwait(&(to_send->q_cond), &(to_send->q_mtx), &wait_cond))!=0){
+        		if(wait_cond_ret == ETIMEDOUT){
+        			// timed out
+      				puts("pthread_cond_timed_wait for to_read timed out");
+      			}
+      			else{
+      				printf("ERROR: pthread_cond_timed_wait errored out\n");
+      			}
+      			// unlock and continue
+      			pthread_mutex_unlock(&(to_send->q_mtx));
+      			continue;
+      		}
+			pthread_mutex_unlock(&(to_send->q_mtx));
+			_handle_to_send_queue(ip_node, to_send);				
+		}
+	}
+	pthread_exit(NULL);
+}
+
+/* ip_node_start will take just the ip_node as a parameter and will start
+   up the whole process of listening to all the interfaces, 
+   pushes packets for tcp to handle into the to_read queue */
+void *ip_link_interface_thread_run(void *ipdata){
+
+	ip_thread_data_t ip_data = (ip_thread_data_t)ipdata;
+	// only need to extract ip_node and to_read for this thread
+	ip_node_t ip_node = ip_data->ip_node;
+	bqueue_t *to_read = ip_data->to_read;	//--- tcp data that ip pushes on to queue for tcp to handle
 	
 	int retval;
 
@@ -249,7 +326,7 @@ void *ip_node_start(void *ipdata){
 	struct timeval tv;
 	tv.tv_sec = SELECT_TIMEOUT;
 	tv.tv_usec = 0;	
-	
+	puts("ip_node started!");
 	// do this to init the forwarding tables/routing tables
 	_handle_query_interfaces(ip_node);
 
@@ -267,9 +344,7 @@ void *ip_node_start(void *ipdata){
 		routing_table_check_timers(ip_node->routing_table, ip_node->forwarding_table);
 		if (retval == -1)
 			{ error("select()"); } 
-		else if (retval){	
-			_handle_reading_stdin(ip_node, stdin_commands);   	
-			_handle_to_send_queue(ip_node, to_send);	
+		else if (retval){	  
 			_handle_query_interfaces(ip_node); // in case the user shut down a node
 			_handle_reading_sockets(ip_node, to_read);
 		}	 
@@ -285,6 +360,8 @@ void *ip_node_start(void *ipdata){
 	}
 	pthread_exit(NULL);
 }
+/* ************************ END OF IP_THREADS ******************************* */
+
 /*************************** INTERNAL ******************************/
 /* just reads from stdin if its FD_ISSET */
 static void _handle_reading_stdin(ip_node_t ip_node, bqueue_t *stdin_commands){
@@ -518,7 +595,7 @@ static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands){
 /* bqueue_trydequeue attempts to dequeue an item from the queue... if there are no items
  * in the queue, rather than blocking we simply return 1 and *data has
  * an undefined value */
-	while(!(bqueue_trydequeue(stdin_commands, &buffer))){
+	while(!(bqueue_trydequeue(stdin_commands, (void **)&buffer))){
 	
 		rtrim(buffer, "\n");
 		
@@ -689,3 +766,10 @@ void ip_node_print(ip_node_t ip_node){
 		printf("%s\n", ip_buffer);
 	}
 }
+
+// returns 1 if true, 0 if false
+int ip_node_running(ip_node_t ip_node){
+	return ip_node->running;
+}
+
+

@@ -17,13 +17,9 @@ UTHASH_DIR=lib/uthash-1.9.6
 UTHASH_INC=$(UTHASH_DIR)/src #not a mistake
 
 
-
-
-
 _IP_OBJS=ip_node.o routing_table.o forwarding_table.o ip_utils.o link_interface.o 
-_TCP_OBJS=tcp_node.o tcp_utils.o neils_main.o
-_UTIL_OBJS=ipsum.o parselinks.o utils.o list.o queue.o bqueue.o ext_array.o##Could use dbg.o but for now I commented out references to it in bqueue.c
-
+_TCP_OBJS=main.o tcp_node.o tcp_utils.o
+_UTIL_OBJS=ipsum.o parselinks.o utils.o list.o bqueue.o queue.o ext_array.o##Could use dbg.o but for now I commented out references to it in bqueue.c
 
 IP_OBJS=$(patsubst %.o, $(IP_DIR)/%.o, $(_IP_OBJS))
 TCP_OBJS=$(patsubst %.o, $(TCP_DIR)/%.o, $(_TCP_OBJS))
@@ -33,6 +29,9 @@ OBJS=$(patsubst %.o, $(BUILD_DIR)/%.o, $(IP_OBJS) $(TCP_OBJS) $(UTIL_OBJS))
 
 _INCLUDE=$(INC_DIR) $(INC_DIR)/$(IP_DIR) $(INC_DIR)/$(TCP_DIR) $(INC_DIR)/$(UTIL_DIR) $(UTHASH_INC)
 INCLUDE=$(patsubst %, -I%, $(_INCLUDE))
+
+_LIBS=pthread
+LIBS=$(patsubst %, -l%, $(_LIBS))
 
 _DEPENDENT_DIRS=build build/util build/ip build/tcp test/build test/build/tcp
 DEPENDENT_DIRS=$(patsubst %, directory/%, $(_DEPENDENT_DIRS))
