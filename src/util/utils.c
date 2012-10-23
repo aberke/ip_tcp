@@ -6,6 +6,7 @@
 
 /* STRUCTS */
 
+///// MEMCHUNK
 memchunk_t memchunk_init(void* data, int length){
 	memchunk_t chunk = malloc(sizeof(struct memchunk));
 	chunk->data = data;
@@ -18,6 +19,38 @@ void memchunk_destroy(memchunk_t* chunk){
 	*chunk = NULL;
 }	
 
+///// BUFFER
+buffer_t buffer_init(int capacity){
+	buffer_t buff = malloc(sizeof(struct buffer));
+	buff->data = (void*)malloc(capacity);
+	buff->length = 0;
+	buff->capacity = capacity;
+	return buff;
+}
+
+void buffer_destroy(buffer_t* buffer){
+	free(*buffer);
+	*buffer = NULL;
+}	
+
+/* COPIES the data in to the buffer so the caller should take care of freeing it, 
+   returns how much it was able to fill */
+int buffer_fill(buffer_t buffer, void* data, int length){
+	if(buffer->length + length <= buffer->capacity){
+		memcpy(buffer->data + buffer->length, data, length);
+		buffer->length += length;
+		return length;
+	}
+	else{
+		int remaining = buffer->capacity - buffer->length;
+		memcpy(buffer->data, data, remaining);
+		return length - remaining;
+	}
+}
+
+void buffer_empty(buffer_t buffer){
+	buffer->length = 0;
+}
 
 /* FUNCTIONS */
 
@@ -63,3 +96,10 @@ int utils_startswith(const char* s, const char* beginning){
 
 	return 1;
 }	
+
+/* useful for passing around as a function pointer */
+
+void util_free(void** ptr){
+	free(*ptr);
+	*ptr = NULL;
+}

@@ -21,8 +21,8 @@ UTHASH_INC=$(UTHASH_DIR)/src #not a mistake
 
 
 _IP_OBJS=ip_node.o routing_table.o forwarding_table.o ip_utils.o link_interface.o 
-_TCP_OBJS=tcp_node.o tcp_utils.o
-_UTIL_OBJS=ipsum.o parselinks.o utils.o list.o bqueue.o ##Could use dbg.o but for now I commented out references to it in bqueue.c
+_TCP_OBJS=tcp_node.o tcp_utils.o neils_main.o
+_UTIL_OBJS=ipsum.o parselinks.o utils.o list.o queue.o bqueue.o ext_array.o##Could use dbg.o but for now I commented out references to it in bqueue.c
 
 
 IP_OBJS=$(patsubst %.o, $(IP_DIR)/%.o, $(_IP_OBJS))
@@ -48,7 +48,7 @@ TEST_DEFAULT_ARGS=
 PYTEST=pyLink.py
 
 _TEST_OBJS=test.o tcp/test_states.o
-_TEST_DEP_OBJS=ip/routing_table.o ip/forwarding_table.o util/utils.o util/state_machine.o
+_TEST_DEP_OBJS=ip/routing_table.o ip/forwarding_table.o util/utils.o util/state_machine.o util/queue.o tcp/window.o
 TEST_OBJS=$(patsubst %.o, $(TEST_BUILD_DIR)/%.o, $(_TEST_OBJS)) $(patsubst %.o, $(BUILD_DIR)/%.o, $(_TEST_DEP_OBJS))
 
 _TEST_INCLUDE=$(TEST_DIR)/include
@@ -69,7 +69,7 @@ test_clean:
 test_rebuild: test_clean test_build
 
 test_valgrind: test_rebuild
-	valgrind ./$(TEST_EXEC_FILE) $(TEST_DEFAULT_ARGS)
+	valgrind --leak-check=full ./$(TEST_EXEC_FILE) $(TEST_DEFAULT_ARGS)
 
 test: test_rebuild
 	@./$(TEST_EXEC_FILE) $(TEST_DEFAULT_ARGS)

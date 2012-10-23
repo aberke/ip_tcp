@@ -7,6 +7,8 @@
 #include "routing_table.h"
 #include "state_machine.h"
 #include "config.h"
+#include "queue.h"
+#include "window.h"
 
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
@@ -67,6 +69,24 @@ do{																		\
 }																		\
 while(0)
 
+#define TEST_EQ_PTR(e1,e2,annotation)									\
+do{																		\
+	printf("%-50s == %-20s\t\t", (#e1), (#e2));							\
+	if(e1==e2){															\
+		printf("%sGood%s", ANSI_COLOR_GREEN, ANSI_COLOR_RESET);			\
+		ANNOTATE(annotation);											\
+	}																	\
+	else {																\
+		printf("%sBad", ANSI_COLOR_RED);								\
+		ANNOTATE(annotation);											\
+		printf("RESULTS @ %s:%d\n", __FILE__, __LINE__);				\
+		printf("\t\t\t%s = %p\n", (#e1), e1);							\
+		printf("\t\t\t%s = %p\n", (#e2), e2);							\
+		printf("%s", ANSI_COLOR_RESET);									\
+	}																	\
+}																		\
+while(0)
+
 #define TEST(tst)  									\
 do{													\
 	printf("<<	Running test: %s\t>>\n\n", (#tst));	\
@@ -77,6 +97,7 @@ while(0)
 
 int verbose = DEFAULT_VERBOSE;
 
+///////////////////////////// AUXILIARY FUNCTIONS ///////////////////////////////////
 struct routing_info* fill_routing_info(int num_entries, uint32_t* costs, uint32_t* addrs){
 	struct routing_info* info = malloc(sizeof(struct routing_info) + num_entries*sizeof(struct cost_address));
 	info->command = ntohs(DEFAULT_COMMAND);
@@ -106,6 +127,75 @@ void debug_update_routing_table(routing_table_t rt, forwarding_table_t ft, struc
 		puts("");
 	}
 }
+/////////////////////////////////////////////////////////////////////////////////////////
+
+void test_queue(){
+	queue_t q = queue_init();
+	
+	int a,b,c;
+	a = 0; b = 1; c = 2;
+
+	queue_push(q, &a);
+	queue_push(q, &b);
+	
+	TEST_EQ(*(int*)queue_pop(q), a, "should be FIFO");
+	
+	queue_push(q, &c);
+	
+	TEST_EQ(*(int*)queue_pop(q), b, "");
+	TEST_EQ(*(int*)queue_pop(q), c, "");
+	TEST_EQ_PTR(queue_pop(q), NULL, "");
+	
+	queue_destroy(&q);
+}
+	
+/* test that destroying windows works properly */
+void test_window_destroy(){
+	window_t window = window_init(1.0,1,NULL);
+	
+	int a=1, b=2;
+	memchunk_t mem_a = memchunk_init(&a, sizeof(int)); 
+
+	window_push(window, mem_a);
+	
+	window_chunk_t wc = window_get_next(window);
+	window_chunk_destroy(&wc);
+
+	window_destroy(&window);
+}
+
+void test_window(){
+	window_t window = window_init(1.0, 1, NULL);
+	
+	int a=1, b=2, c=3;
+	memchunk_t mem_a = memchunk_init(&a, sizeof(int)), 
+				mem_b = memchunk_init(&b, sizeof(int)),
+				mem_c = memchunk_init(&c, sizeof(int));
+
+	window_push(window, mem_a);
+	window_push(window, mem_b);
+	window_push(window, mem_c);
+
+	window_chunk_t chunk;
+
+	chunk = window_get_next(window);
+	TEST_EQ_PTR(chunk->chunk, mem_a, "FIFO window");
+	TEST_EQ(chunk->seqnum, 0, "");
+	window_chunk_destroy(&chunk);
+	
+	chunk = window_get_next(window);
+	TEST_EQ_PTR(chunk, NULL, "Nothing to send");
+
+	window_ack(window, 0);
+	
+	chunk = window_get_next(window);
+	TEST_EQ_PTR(chunk->chunk, mem_b, "After acking, there's now something to send");
+	TEST_EQ(chunk->seqnum, 0, "");
+	window_chunk_destroy(&chunk);
+
+	window_destroy(&window);
+}
+
 
 //// Testing the state machine
 void test_state_machine(){
@@ -416,9 +506,13 @@ int main(int argc, char** argv){
 	TEST(test_unknown);
 
 	TEST(test_empty);
-	TEST(test_overflow);*/
+	TEST(test_overflow);
 
-	TEST(test_state_machine);
+	TEST(test_state_machine); 
+
+	TEST(test_queue); */
+	TEST(test_window);
+	TEST(test_window_destroy);
 
 	/* RETURN */
 	return(0);
