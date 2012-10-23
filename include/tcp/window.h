@@ -3,6 +3,14 @@
 
 typedef struct window* window_t;
 
+struct window_chunk{
+	void* data;
+	int   length;
+	int   seqnum;
+};
+
+typedef struct window_chunk* window_chunk_t;
+
 window_t window_init(int window_size, int timeout);
 void window_destroy(window_t* window);
 

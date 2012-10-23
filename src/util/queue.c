@@ -5,7 +5,6 @@
 struct queue_el{
 	void* data;
 	struct queue_el* next;
-	struct queue_el* prev;
 };
 
 struct queue{
@@ -15,23 +14,21 @@ struct queue{
 
 typedef struct queue_el* queue_el_t;
 
-queue_el_t queue_el_init(queue_el_t prev, void* data){
+/* takes the pointers to the next and prev */
+queue_el_t queue_el_init(void* data){
 	queue_el_t el = malloc(sizeof(struct queue_el));
 	el->data = data;
 	el->next = NULL;
-	el->prev = prev;
 	return el;
 }
 
+/* just free's it */
 void queue_el_destroy(queue_el_t* el){
-	if(el->next){
-		queue_el_destroy(el->next);
-	}
-
 	free(*el);
 	*el = NULL;
 }
 
+/* inits the queue, will initially be empty */
 queue_t queue_init(){
 	queue_t q = malloc(sizeof(struct queue));
 	q->head = q->tail = NULL;
@@ -39,13 +36,26 @@ queue_t queue_init(){
 }
 
 void queue_push(queue_t q, void* data){
-	queue_el_t tmp = q->head;
-	q->head = queue_el_init(data);
-	q->head->next = tmp;
+	queue_el_t tail = q->tail;
+	if(!tail){
+		q->head = q->tail = queue_el_init(data);
+	}
+	else{
+		tail->next = queue_el_init(data);
+		q->tail = tail->next; 
+	}
 }
 
 void* queue_pop(queue_t q){
+	if(q->head == NULL){
+		puts("ERROR POPPING FROM EMPTY QUEUE!!");
+		return NULL;	
+	}
+
 	queue_el_t tmp = q->head;
+	if (tmp == q->tail)
+		q->tail = NULL;
+
 	q->head = tmp->next;
 	
 	void* result = tmp->data;
@@ -54,8 +64,11 @@ void* queue_pop(queue_t q){
 }
 
 void queue_destroy(queue_t* queue){
-	if(queue->head){
-		queue_el_destroy(&(queue->head));
+	queue_el_t tmp, el = queue->head;
+	while(el){
+		tmp = el->next;	
+		queue_el_destroy(&(el));
+		el = tmp;
 	}
 
 	free(*(queue));
