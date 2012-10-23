@@ -2,7 +2,6 @@
 #ifndef __TCP_NODE_H__ 
 #define __TCP_NODE_H__
 
-#include "list.h"
 
 //// some helpful static globals
 #define IP_HEADER_SIZE sizeof(struct ip)
@@ -35,6 +34,9 @@ typedef struct tcp_packet_data{
 tcp_node_t tcp_node_init(iplist_t* links);
 void tcp_node_destroy(tcp_node_t ip_node);
 void tcp_node_print(tcp_node_t tcp_node);
+
+int tcp_node_start_ip_thread(tcp_node_t tcp_node);
+int tcp_node_start_stdin_thread(bqueue_t stdin_queue);
 
 void tcp_node_start(tcp_node_t tcp_node);
 /* ***************************** */

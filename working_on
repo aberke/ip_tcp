@@ -98,7 +98,13 @@ start():
 					int packet_size;  //size of packet in bytes
 				} tcp_packet_data_t;
 
-
+***
+tcp_node runs ip_node in 3 separate threads that handle different responsibilities and queues:
+	ip_link_interface_thread:  reads off link interfaces (current select() loop) and throws packets for tcp to handle into to_read
+	ip_send_thread: calls p_thread_cond_wait(&to_send) and sends things loaded on to queue
+	ip_command_thread: calls p_thread_cond_wait(&stdin_commands) and handles ip commands loaded on to queue
+	
+	
 
 
 
@@ -113,7 +119,4 @@ please accomodate for new util files: circular_buffer.c, bqueue.c, node_readline
 
 
 ALEX:
-	- added the tcp directory to include/ and src/
-	- added file tcp_node.h and tcp_node.c as our struct that is analogous to struct ip_node
-	
-
+	implement ***

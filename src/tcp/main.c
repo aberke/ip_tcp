@@ -3,7 +3,7 @@
 
 #include "util/list.h"
 #include "util/parselinks.h"
-#include "ip_node.h"
+#include "tcp_node.h"
 
 int main(int argc, char *argv[]){
 	// check arguments
@@ -12,19 +12,16 @@ int main(int argc, char *argv[]){
 		return 0;
 	}
 	// get linked-list of link_t's
-	list_t* linkedlist = parse_links(argv[1]);
+	iplist_t* linkedlist = parse_links(argv[1]);
 	
 	//initiate tcp_node which will initiate ip_node_t which will create factory and use linkedlist
 	tcp_node_t tcp_node = tcp_node_init(linkedlist);
 
-	if(!ip_node)
+	if(!tcp_node)
 		return 1;
 
-	// This should probably be done in node-destroy
-	//free_links(linkedlist);
-
-	ip_node_start(ip_node);
-	ip_node_destroy(&ip_node);
+	tcp_node_start(tcp_node);
+	tcp_node_destroy(&tcp_node);
 
 	return 0;
 }
