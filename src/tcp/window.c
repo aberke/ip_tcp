@@ -5,6 +5,8 @@
 #include "window.h"
 #include "utils.h"
 
+#define QUEUE_CAPACITY 1024
+
 ///////////// TIMER //////////////////////
 
 typedef enum timer_status{
@@ -102,78 +104,61 @@ void window_chunk_destroy(window_chunk_t* wc){
 ///////////// WINDOW //////////////////
 
 struct window{
-	queue_t data_queue;
-	queue_t to_send;	
-	destructor_f destructor;
+	ext_array_t data_queue;
 	
 	double timeout;
 	int size;
-	int left;
-	int right;
 
 	timed_chunk_t* timed_chunks;
 };
 
-window_t window_init(double timeout, int window_size, destructor_f destructor){
+window_t window_init(double timeout, int window_size){
 	window_t window = (window_t)malloc(sizeof(struct window));
 
-	window->data_queue  = queue_init();
-	window->to_send     = queue_init();
-	window->destructor  = destructor;
+	window->data_queue = ext_array_init(QUEUE_CAPACITY);
+
 	window->timeout 	= timeout;
 	window->size 		= window_size;
-	window->left 	    = 0;
-	window->right 		= 0;
 
-	window->timed_chunks   = (timed_chunk_t*)malloc(sizeof(timed_chunk_t)*2*window_size);
+	window->timed_chunks = malloc(sizeof(timed_chunk_t)*2*window_size);
+	memset(window->timed_chunks, 0, sizeof(timed_chunk_t)*2*window_size);
 
-	int i;
-	for(i=0;i<2*window->size;i++){
-		window->timed_chunks[i] = timed_chunk_init();
-	}
-	
 	return window;
 }
 
 void window_destroy(window_t* window){
-	queue_destroy_total(&((*window)->data_queue), (destructor_f)memchunk_destroy);
-	queue_destroy(&((*window)->to_send)); // will be in the array, so don't destroy_total
+	ext_array_destroy(&((*window)->data_queue));
 	
 	int i;
-	for(i=0;i<(*window)->size*2;i++){
-		timed_chunk_destroy(&((*window)->timed_chunks[i]));
+	for(i=0;i<2*window->size;i++){
+		if((*window)->timed_chunks[i]) 
+			timed_chunk_destroy(&((*window)->timed_chunks[i]));
 	}
-	
 	free((*window)->timed_chunks);
+
 	free(*(window));
 	*window = NULL;
 }
 
+/* copying the data in chunk, so you can throw it out */
 void window_push(window_t window, memchunk_t chunk){
-	// check if the window is full
-	if( (window->right > window->left && window->right - window->left >= window->size) 
-	 	|| (window->left > window->right && window->left - window->right <= window->size) )
-	{
-		queue_push(window->data_queue, (void*)chunk);		
-		DEBUG_PUTS("pushing onto the data_queue, window full");
-	}
-	else
-	{
-		int tofill = window->right;
-
-		/* fill the sliding window position with the chunk, and 
-		   also push it onto the queue to send, and set its timed_chunk
-		   to UNSTARTED (it will start once its pulled from the 
-		   to_send queue) */
-		timed_chunk_reset(window->timed_chunks[tofill], chunk, tofill);
-		queue_push(window->to_send, (void*)(window->timed_chunks[tofill]));
-
-		/* shift the right over (and wrap around) */
-		window->right = (window->right + 1) % (2*window->size);
-	}
+	ext_array_push(window->data_queue, chunk->data, chunk->length);
 }
 
 void window_ack(window_t window, int seqnum){
+	if (seqnum < 0 || seqnum > window->size*2){
+		LOG(("Trying to ack with invalid seqnum. Should be 0 <= seqnum < %d, given: %d", window->size*2, seqnum));
+		return;
+	}
+
+	timed_chunk_t acked_chunk = window->timed_chunks[seqnum];
+	if(!acked_chunk)
+		{ LOG(("Acked chunk is null")); return; }
+
+	
+
+	
+
 	if(seqnum < 0 || seqnum >= window->size*2){
 		LOG(("Trying to ack with invalid seqnum. Should be 0 <= seqnum < %d, given: %d", window->size*2, seqnum));
 		return;
@@ -201,9 +186,7 @@ void window_ack(window_t window, int seqnum){
 		data = chunk->data;
 
 		memchunk_destroy(&chunk);
-		if(window->destructor)
-			window->destructor(&data);
-
+	
 		/* now if the ack you received is for the left side of the window, 
 		   slide the window over until you find an unacked spot, as you slide
 		   over, attempt to fill the window with queued data. */

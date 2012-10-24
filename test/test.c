@@ -9,6 +9,7 @@
 #include "config.h"
 #include "queue.h"
 #include "window.h"
+#include "ext_array.h"
 
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
@@ -148,8 +149,78 @@ void test_queue(){
 	
 	queue_destroy(&q);
 }
+
+void test_ext_array_scale(){
+	ext_array_t ar = ext_array_init(10);
+
+	char buffer[256];
+	strcpy(buffer, "Hey there");
+	int strLength = strlen(buffer);
 	
-/* test that destroying windows works properly */
+	int i;
+	for(i=0;i<1000;i++){
+		ext_array_push(ar, buffer, strLength);
+	}
+	
+	memchunk_t chunk;
+	for(i=0;i<2000;i++){
+		chunk = ext_array_peel(ar, strLength/2);
+		memchunk_destroy_total(&chunk, util_free);
+	}
+
+	ext_array_destroy(&ar);
+}
+		
+
+void test_ext_array(){
+	ext_array_t ar = ext_array_init(0);
+	TEST_EQ_PTR(ar, NULL, "A capacity of 0 doesn't scale well");
+	ext_array_destroy(&ar);
+
+	char buffer[BUFFER_SIZE];
+
+	ar = ext_array_init(5);
+	
+	char* str = malloc(sizeof(char)*(strlen("hello world")+1));
+	strcpy(str, "hello world");
+	
+	/* this should resize it */
+	ext_array_push(ar, (void*)str, strlen(str)+1);
+	
+	memchunk_t chunk;
+
+	chunk = ext_array_peel(ar, 5);
+	memcpy(buffer, chunk->data, 5);
+	buffer[5] = '\0';
+	memchunk_destroy_total(&chunk, util_free);
+
+	TEST_STR_EQ(buffer, "hello", "");
+	
+
+	/* this should scale it down */
+	chunk = ext_array_peel(ar,5);
+	memcpy(buffer, chunk->data, 5);
+	buffer[5] = '\0';
+	memchunk_destroy_total(&chunk, util_free);
+
+	TEST_STR_EQ(buffer, " worl", "");
+	
+	/* make sure this doesn't kill it */
+	chunk = ext_array_peel(ar, 10);
+	
+	memcpy(buffer, chunk->data, chunk->length);
+	buffer[chunk->length] = '\0';
+	memchunk_destroy_total(&chunk, util_free);
+
+	TEST_STR_EQ(buffer, "d", "");
+
+	ext_array_destroy(&ar);
+
+	free(str);
+}
+
+	
+/*
 void test_window_destroy(){
 	window_t window = window_init(1.0,1,NULL);
 	
@@ -195,7 +266,7 @@ void test_window(){
 
 	window_destroy(&window);
 }
-
+*/
 
 //// Testing the state machine
 void test_state_machine(){
@@ -511,8 +582,9 @@ int main(int argc, char** argv){
 	TEST(test_state_machine); 
 
 	TEST(test_queue); */
-	TEST(test_window);
-	TEST(test_window_destroy);
+	
+	TEST(test_ext_array);
+	TEST(test_ext_array_scale);
 
 	/* RETURN */
 	return(0);

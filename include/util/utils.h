@@ -16,6 +16,10 @@
 
 typedef int boolean;
 
+/* SOME COMMON FUNCTION POINTERS */
+typedef void (*destructor_f)(void**);
+typedef void (*printer_f)(void*);
+
 /* USEFUL STRUCTS */
 struct memchunk{
 	void* data;
@@ -33,6 +37,7 @@ typedef struct buffer* buffer_t;
 
 memchunk_t memchunk_init(void* data, int length);
 void memchunk_destroy(memchunk_t* chunk);
+void memchunk_destroy_total(memchunk_t* chunk, destructor_f destructor);
 
 buffer_t buffer_init(int capacity);
 void buffer_destroy(buffer_t* buffer);
@@ -50,8 +55,5 @@ void rtrim(char* s, const char* delim);
 int utils_startswith(const char* s, const char* starts);
 void util_free(void** ptr);
 
-/* SOME COMMON FUNCTION POINTERS */
-typedef void (*destructor_f)(void**);
-typedef void (*printer_f)(void*);
 
 #endif // __UTILS_H__
