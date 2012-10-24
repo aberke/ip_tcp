@@ -189,7 +189,6 @@ void ip_node_destroy(ip_node_t* ip_node){
 	//// this will NOT destroy the interfaces
 	interface_socket_keyed_t socket_keyed, tmp_sock_keyed;
 	HASH_ITER(hh, (*ip_node)->socketToInterface, socket_keyed, tmp_sock_keyed){
-		puts("destroying..."); 
 		HASH_DEL((*ip_node)->socketToInterface, socket_keyed);
 		interface_socket_keyed_destroy(&socket_keyed);
 	}
@@ -200,14 +199,15 @@ void ip_node_destroy(ip_node_t* ip_node){
 		HASH_DEL((*ip_node)->addressToInterface, ip_keyed);
 		interface_ip_keyed_destroy(&ip_keyed);
 	}
-
+	puts("destroying...");
 	//// NOW destroy all the interfaces
 	int i;
 	for(i=0;i<(*ip_node)->num_interfaces;i++){
 		link_interface_destroy((*ip_node)->interfaces[i]);
-	}		
+	}	
+	puts("freeing ip_node->interfaces");	
 	free((*ip_node)->interfaces);
-
+	puts("freed ip_node->interfaces");
 	//// basic clean up
 	free(*ip_node);
 	*ip_node = NULL;
@@ -239,6 +239,9 @@ void *ip_command_thread_run(void *ipdata){
 	// only need to extract ip_node and to_send
 	ip_node_t ip_node = ip_data->ip_node;
 	bqueue_t *stdin_commands = ip_data->stdin_commands;
+		
+	// I can destroy ip_data now right??
+	free(ip_data);
 	
 	// create timespec for timeout on pthread_cond_timedwait(&to_send);
 	struct timespec wait_cond = {PTHREAD_COND_TIMEOUT_SEC, PTHREAD_COND_TIMEOUT_NSEC}; //
@@ -255,7 +258,7 @@ void *ip_command_thread_run(void *ipdata){
         	if((wait_cond_ret = pthread_cond_timedwait(&(stdin_commands->q_cond), &(stdin_commands->q_mtx), &wait_cond))!=0){
         		if(wait_cond_ret == ETIMEDOUT){
         			// timed out
-      				puts("pthread_cond_timed_wait for to_read timed out");
+      				//puts("pthread_cond_timed_wait for to_read timed out");
       			}
       			else{
       				printf("ERROR: pthread_cond_timed_wait errored out\n");
@@ -279,10 +282,13 @@ void *ip_send_thread_run(void *ipdata){
 	ip_node_t ip_node = ip_data->ip_node;
 	bqueue_t *to_send = ip_data->to_send;
 	
+	// I can destroy ip_data now right??
+	//free(ip_data);
+		
 	// create timespec for timeout on pthread_cond_timedwait(&to_send);
 	struct timespec wait_cond = {PTHREAD_COND_TIMEOUT_SEC, PTHREAD_COND_TIMEOUT_NSEC}; //
 	int wait_cond_ret;
-	
+	puts("starting loop of ip_send_thread_run");
 	while(ip_node->running){
 		
 		if(!bqueue_empty(to_send))
@@ -294,7 +300,7 @@ void *ip_send_thread_run(void *ipdata){
         	if((wait_cond_ret = pthread_cond_timedwait(&(to_send->q_cond), &(to_send->q_mtx), &wait_cond))!=0){
         		if(wait_cond_ret == ETIMEDOUT){
         			// timed out
-      				puts("pthread_cond_timed_wait for to_read timed out");
+      				//puts("pthread_cond_timed_wait for to_read timed out");
       			}
       			else{
       				printf("ERROR: pthread_cond_timed_wait errored out\n");
@@ -319,6 +325,9 @@ void *ip_link_interface_thread_run(void *ipdata){
 	// only need to extract ip_node and to_read for this thread
 	ip_node_t ip_node = ip_data->ip_node;
 	bqueue_t *to_read = ip_data->to_read;	//--- tcp data that ip pushes on to queue for tcp to handle
+	
+	// I can destroy ip_data now right??
+	//free(ip_data);
 	
 	int retval;
 
@@ -363,11 +372,9 @@ void *ip_link_interface_thread_run(void *ipdata){
 /* ************************ END OF IP_THREADS ******************************* */
 
 /*************************** INTERNAL ******************************/
-/* just reads from stdin if its FD_ISSET */
+/* just reads from off each command from stdin_commands queue and handles until queue empty */
 static void _handle_reading_stdin(ip_node_t ip_node, bqueue_t *stdin_commands){
-	if(!bqueue_empty(stdin_commands)){
-		_handle_user_command(ip_node, stdin_commands);
-	}
+	_handle_user_command(ip_node, stdin_commands);
 }
 
 /* _handle_reading_sockets is an internal function for dealing with the 
@@ -540,6 +547,7 @@ static void _handle_user_command_up(ip_node_t ip_node, char* buffer){
 }
 /* _handle_user_command_send iterates through to_send queue to handle each packet that has been wrapped by tcp_node */
 static void _handle_to_send_queue(ip_node_t ip_node, bqueue_t *to_send){
+	puts("in ip_node: _handle-to_send_queue");
 	tcp_packet_data_t *tcp_packet_data = (tcp_packet_data_t *) malloc(sizeof(struct tcp_packet_data));
 	char* packet = (char*) malloc(sizeof(char)*MTU);
 	struct in_addr send_to, send_from;
@@ -580,6 +588,8 @@ static void _handle_to_send_queue(ip_node_t ip_node, bqueue_t *to_send){
 		// wrap and send IP packet
 		ip_wrap_send_packet(packet, packet_size, TCP_DATA, send_from, send_to, next_hop_interface);		
 	}	
+	free(packet);
+	free(tcp_packet_data);
 }
 
 /* 
@@ -590,7 +600,12 @@ static void _handle_to_send_queue(ip_node_t ip_node, bqueue_t *to_send){
 
 */
 static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands){
-	char* buffer = (char*) malloc(sizeof(char)*BUFFER_SIZE);	
+	//char* buffer = (char*) malloc(sizeof(char)*BUFFER_SIZE);	
+
+	//char buffer[BUFFER_SIZE];
+	//char* buffer_pntr = &buffer;
+	char *buffer;
+
 
 /* bqueue_trydequeue attempts to dequeue an item from the queue... if there are no items
  * in the queue, rather than blocking we simply return 1 and *data has
@@ -600,9 +615,10 @@ static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands){
 		rtrim(buffer, "\n");
 		
 		//// handle the commands
-		if(!strcmp(buffer, "quit") || !strcmp(buffer, "q"))
+		if(!strcmp(buffer, "quit") || !strcmp(buffer, "q")){
 			ip_node->running = 0;
-		
+			puts("ip_node->running = 0");
+		}
 		else if(!strcmp(buffer, "interfaces"))
 			ip_node_print_interfaces(ip_node);
 	
@@ -631,7 +647,10 @@ static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands){
 			printf("Received unrecognized input from user: %s\n", buffer); 
 	
 	}
+	/*puts("about to call free on buffer");
+	printf("&buffer = %p\n", buffer);
 	free(buffer); 
+	puts("freed buffer");*/
 }
 
 /* Helper to _handle_selected to clean up code -- just does the error printing */

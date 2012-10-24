@@ -88,6 +88,7 @@ link_interface_t link_interface_create(link_t *link, int id){
 	return l_i;
 }
 void link_interface_destroy(link_interface_t interface){
+	puts("in link_interface_destroy");
 	close(interface->sfd);
 	free(interface);
 }

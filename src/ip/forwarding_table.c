@@ -49,7 +49,6 @@ forwarding_table_t forwarding_table_init(){
 
 void forwarding_table_destroy(forwarding_table_t* ft){
 	forwarding_info_t info, tmp;
-
 	HASH_ITER(hh,(*ft)->entries,info,tmp){
 		//forwarding_info_print(info);
 		HASH_DEL((*ft)->entries, info);

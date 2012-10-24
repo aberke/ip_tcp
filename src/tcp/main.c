@@ -21,7 +21,7 @@ int main(int argc, char *argv[]){
 		return 1;
 
 	tcp_node_start(tcp_node);
-	tcp_node_destroy(&tcp_node);
+	tcp_node_destroy(tcp_node);
 
 	return 0;
 }

@@ -14,6 +14,8 @@
 #include "util/parselinks.h"
 #include "tcp_node.h"
 
+#include "ip_node.h" 
+
 #define FILE_BUF_SIZE	1024
 
 #define SHUTDOWN_READ	0
@@ -30,7 +32,7 @@
 #define v_read(a,b,c)	-ENOTSUP
 #define v_shutdown(a,b)	-ENOTSUP
 #define v_close(a)	-ENOTSUP
-
+/*
 struct sendrecvfile_arg {
   int s;
   int fd;
@@ -82,7 +84,7 @@ int v_read_all(int s, void *buf, size_t bytes_requested){
   return bytes_read;
 }
 
-void help_cmd(const char *line){
+void help_cmd(const char *line, tcp_node_t tcp_node){
   (void)line;
 
   printf("- help: Print this list of commands.\n"
@@ -102,7 +104,7 @@ void help_cmd(const char *line){
   return;
 }
 
-void interfaces_cmd(const char *line){
+void interfaces_cmd(const char *line, tcp_node_t tcp_node){
   (void)line;
 
   printf("not yet implemented: interfaces\n");
@@ -111,7 +113,7 @@ void interfaces_cmd(const char *line){
   return;
 }
 
-void routes_cmd(const char *line){
+void routes_cmd(const char *line, tcp_node_t tcp_node){
   (void)line;
 
   printf("not yet implemented: routes\n");
@@ -120,7 +122,7 @@ void routes_cmd(const char *line){
   return;
 }
 
-void sockets_cmd(const char *line){
+void sockets_cmd(const char *line, tcp_node_t tcp_node){
   (void)line;
 
   printf("not yet implemented: sockets\n");
@@ -129,7 +131,7 @@ void sockets_cmd(const char *line){
   return;
 }
 
-void down_cmd(const char *line){
+void down_cmd(const char *line, tcp_node_t tcp_node){
   unsigned interface;
   int ret;
 
@@ -145,7 +147,7 @@ void down_cmd(const char *line){
   return;
 }
 
-void up_cmd(const char *line){
+void up_cmd(const char *line, tcp_node_t tcp_node){
   unsigned interface;
   int ret;
 
@@ -179,7 +181,7 @@ void *accept_thr_func(void *arg){
   return NULL;
 }
 
-void accept_cmd(const char *line){
+void accept_cmd(const char *line, tcp_node_t tcp_node){
   uint16_t port;
   int ret;
   struct in_addr any_addr;
@@ -224,7 +226,7 @@ void accept_cmd(const char *line){
   return;
 }
 
-void connect_cmd(const char *line){
+void connect_cmd(const char *line, tcp_node_t tcp_node){
   char ip_string[LINE_MAX];
   struct in_addr ip_addr;
   uint16_t port;
@@ -257,7 +259,7 @@ void connect_cmd(const char *line){
   return;
 }
 
-void send_cmd(const char *line){
+void send_cmd(const char *line, tcp_node_t tcp_node){
   int num_consumed;
   int socket;
   const char *data;
@@ -284,7 +286,7 @@ void send_cmd(const char *line){
   return;
 }
 
-void recv_cmd(const char *line){
+void recv_cmd(const char *line, tcp_node_t tcp_node){
   int socket;
   size_t bytes_requested;
   int bytes_read;
@@ -371,7 +373,7 @@ void *sendfile_thr_func(void *arg){
   return NULL;
 }
 
-void sendfile_cmd(const char *line){
+void sendfile_cmd(const char *line, tcp_node_t tcp_node){
   int ret;
   char filename[LINE_MAX];
   char ip_string[LINE_MAX];
@@ -478,7 +480,7 @@ void *recvfile_thr_func(void *arg){
   return NULL;
 }
 
-void recvfile_cmd(const char *line){
+void recvfile_cmd(const char *line, tcp_node_t tcp_node){
   int ret;
   char filename[LINE_MAX];
   uint16_t port;
@@ -534,7 +536,7 @@ void recvfile_cmd(const char *line){
   return;
 }
 
-void shutdown_cmd(const char *line){
+void shutdown_cmd(const char *line, tcp_node_t tcp_node){
   char shut_type[LINE_MAX];
   int shut_type_int;
   int socket;
@@ -571,7 +573,7 @@ void shutdown_cmd(const char *line){
   return;
 }
 
-void close_cmd(const char *line){
+void close_cmd(const char *line, tcp_node_t tcp_node){
   int ret;
   int socket;
 
@@ -591,6 +593,12 @@ void close_cmd(const char *line){
   return;
 }
 
+int quit_cmd(const char *line, tcp_node_t tcp_node){
+
+	// HANDLE QUITTING
+	return 0;
+}
+
 struct {
   const char *command;
   void (*handler)(const char *);
@@ -608,65 +616,55 @@ struct {
   {"sendfile", sendfile_cmd},
   {"recvfile", recvfile_cmd},
   {"shutdown", shutdown_cmd},
-  {"close", close_cmd}
+  {"close", close_cmd},
+  {"quit", quit_cmd},	// last two quit commands added by alex -- is this how we want to deal with quitting?
+  {"q", quit_cmd}
 };
+*/
 
-void driver(){
-  char line[LINE_MAX];
-  char cmd[LINE_MAX];
-  char *fgets_ret;
-  int ret;
-  unsigned i; 
+/* Thread for tcp_node to accept standard input and transfer that standard input to queue for tcp_node or ip_node to handle */
+void *_handle_tcp_node_stdin(void* node){
 
-  while (1){
-    printf("Command: ");
-    (void)fflush(stdout);
+	tcp_node_t tcp_node = (tcp_node_t)node;
+	
+	char line[LINE_MAX];
+	char cmd[LINE_MAX];
+	char *fgets_ret;
+	int ret;
+	unsigned i; 
+	
+	
+	while (tcp_node_running(tcp_node)&&tcp_node_ip_running(tcp_node)){
+		
+		fgets_ret = fgets(line, sizeof(line), stdin);
+		if (fgets_ret == NULL){
+			break;
+		}
+		
+		ret = sscanf(line, "%s", cmd);
+		if (ret != 1){
+			fprintf(stderr, "syntax error (first argument must be a command)\n");
+			continue;
+		}
+		
+		char* cmd_item = (char *)malloc(sizeof(char)*LINE_MAX);
+		cmd_item = line;
+		
+		tcp_node_queue_ip_cmd(tcp_node, cmd_item);
+		/*
+		for (i=0; i < sizeof(cmd_table) / sizeof(cmd_table[0]); i++){
+			if (!strcmp(cmd, cmd_table[i].command)){
+				cmd_table[i].handler(line, tcp_node);
+				break;
+			}
+		}
+		
+		if (i == sizeof(cmd_table) / sizeof(cmd_table[0])){
+			fprintf(stderr, "error: no valid command specified\n");
+			continue;
+		}
+		*/
+		}
+	pthread_exit(NULL);
+	}
 
-    fgets_ret = fgets(line, sizeof(line), stdin);
-    if (fgets_ret == NULL){
-      break;
-    }
-
-    ret = sscanf(line, "%s", cmd);
-    if (ret != 1){
-      fprintf(stderr, "syntax error (first argument must be a command)\n");
-      continue;
-    }
-
-    for (i=0; i < sizeof(cmd_table) / sizeof(cmd_table[0]); i++){
-      if (!strcmp(cmd, cmd_table[i].command)){
-        cmd_table[i].handler(line);
-        break;
-      }
-    }
-
-    if (i == sizeof(cmd_table) / sizeof(cmd_table[0])){
-      fprintf(stderr, "error: no valid command specified\n");
-      continue;
-    }
-
-  }
-  return;
-}
-// 
-// int main(int argc, char **argv){
-//   if (argc != 2) {
-//     fprintf(stderr, "usage: %s <linkfile>\n", argv[0]);
-//     return -1;
-//   }
-//   // TODO initialization!
-//   
-//   // start of tcp_node which in turn starts up ip_node running in a thread
-//   // get linked-list of link_t's
-//   list_t* linkedlist = parse_links(argv[1]);
-//   
-//   tcp_node_t tcp_node = tcp_node_init(linkedlist);
-// 
-//   if(!tcp_node)
-//   	 return 1;
-// 
-//   driver();
-//   // handles calling further tcp_node functions like start()
-// 
-//   return 0;
-// }
