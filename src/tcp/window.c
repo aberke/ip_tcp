@@ -14,30 +14,35 @@ typedef enum timer_status{
 } timer_status_e;
 
 struct timed_chunk{
-	struct timeval start_time;
+	time_t start_time;
 	timer_status_e status;
 	memchunk_t chunk;
+	int index;
 };
 
 typedef struct timed_chunk* timed_chunk_t;
 
-timed_chunk_t timed_chunk_init(memchunk_t chunk){
+timed_chunk_t timed_chunk_init(){
 	timed_chunk_t timed_chunk = malloc(sizeof(struct timed_chunk));
 	timed_chunk->status = NOTSTARTED;
-	timed_chunk->chunk = chunk;
+	timed_chunk->chunk = NULL;
+	timed_chunk->index = -1;
 
 	return timed_chunk;
 }
 
 void timed_chunk_destroy(timed_chunk_t* timed_chunk){
-	memchunk_destroy(&((*timed_chunk)->chunk));
+	if((*timed_chunk)->chunk)
+		memchunk_destroy(&((*timed_chunk)->chunk));
+
 	free(*timed_chunk);
 	*timed_chunk = NULL;
 }
 
-void timed_chunk_reset(timed_chunk_t timed_chunk, memchunk_t chunk){
+void timed_chunk_reset(timed_chunk_t timed_chunk, memchunk_t chunk, int index){
 	timed_chunk->status = NOTSTARTED;
 	timed_chunk->chunk = chunk;
+	timed_chunk->index = index;
 }
 
 void timed_chunk_restart_timer(timed_chunk_t timed_chunk){
@@ -60,7 +65,7 @@ void timed_chunk_start(timed_chunk_t timed_chunk){
 }
 
 boolean timed_chunk_started(timed_chunk_t timed_chunk){
-	return !(timed_chunk->status != NOTSTARTED);
+	return !(timed_chunk->status == NOTSTARTED);
 }
 
 boolean timed_chunk_ended(timed_chunk_t timed_chunk){
@@ -68,16 +73,30 @@ boolean timed_chunk_ended(timed_chunk_t timed_chunk){
 }
 
 void timed_chunk_stop(timed_chunk_t timed_chunk){
-	if(timed_chunk->status != STARTED){
+	if(timed_chunk->status == STARTED)
 		timed_chunk->status = ENDED;
+	
 	else
 		LOG(("Unable to end timed_chunk that does not have status equal to STARTED"));
 }
 
 double timed_chunk_elapsed(timed_chunk_t timed_chunk){
-	struct timeval now;
+	time_t now;
 	time(&now);
 	return difftime(now, timed_chunk->start_time);
+}
+
+///////////// WINDOW CHUNK ////////////
+static window_chunk_t window_chunk_init(timed_chunk_t timed_chunk){
+	window_chunk_t wc = malloc(sizeof(struct window_chunk));
+	wc->chunk = timed_chunk->chunk;
+	wc->seqnum = timed_chunk->index;
+	return wc;
+}
+
+void window_chunk_destroy(window_chunk_t* wc){
+	free(*wc);
+	*wc = NULL;
 }
 
 ///////////// WINDOW //////////////////
@@ -96,7 +115,7 @@ struct window{
 };
 
 window_t window_init(double timeout, int window_size, destructor_f destructor){
-	window_t window = (struct window*)malloc(sizeof(struct window));
+	window_t window = (window_t)malloc(sizeof(struct window));
 
 	window->data_queue  = queue_init();
 	window->to_send     = queue_init();
@@ -106,21 +125,22 @@ window_t window_init(double timeout, int window_size, destructor_f destructor){
 	window->left 	    = 0;
 	window->right 		= 0;
 
-	window->timed_chunks   = (timed_chunk_t)malloc(sizeof(timed_chunk_t)*2*window_size);
+	window->timed_chunks   = (timed_chunk_t*)malloc(sizeof(timed_chunk_t)*2*window_size);
 
 	int i;
 	for(i=0;i<2*window->size;i++){
-		window->timed_chunks = timed_chunk_init(NULL);
+		window->timed_chunks[i] = timed_chunk_init();
 	}
 	
 	return window;
 }
 
 void window_destroy(window_t* window){
-	queue_destroy(&((*window)->data_queue));
-	queue_destroy(&((*window)->to_send));
+	queue_destroy_total(&((*window)->data_queue), (destructor_f)memchunk_destroy);
+	queue_destroy(&((*window)->to_send)); // will be in the array, so don't destroy_total
 	
-	for(int i=0;i<(*window)->window_size*2;i++){
+	int i;
+	for(i=0;i<(*window)->size*2;i++){
 		timed_chunk_destroy(&((*window)->timed_chunks[i]));
 	}
 	
@@ -131,10 +151,11 @@ void window_destroy(window_t* window){
 
 void window_push(window_t window, memchunk_t chunk){
 	// check if the window is full
-	if( window->right > window->left && window->right - window->left >= window->size 
-	 	|| window->left - window->right <= window->size )
+	if( (window->right > window->left && window->right - window->left >= window->size) 
+	 	|| (window->left > window->right && window->left - window->right <= window->size) )
 	{
 		queue_push(window->data_queue, (void*)chunk);		
+		DEBUG_PUTS("pushing onto the data_queue, window full");
 	}
 	else
 	{
@@ -144,11 +165,11 @@ void window_push(window_t window, memchunk_t chunk){
 		   also push it onto the queue to send, and set its timed_chunk
 		   to UNSTARTED (it will start once its pulled from the 
 		   to_send queue) */
-		timed_chunk_reset(window->timed_chunks[tofill], chunk);
+		timed_chunk_reset(window->timed_chunks[tofill], chunk, tofill);
 		queue_push(window->to_send, (void*)(window->timed_chunks[tofill]));
 
 		/* shift the right over (and wrap around) */
-		right = (right + 1) % window->size;
+		window->right = (window->right + 1) % (2*window->size);
 	}
 }
 
@@ -161,7 +182,9 @@ void window_ack(window_t window, int seqnum){
 	/* if the timed_chunk isn't started (ie it's ended already or it hasn't been 
 	   started yet, this is an error */
 	if(!timed_chunk_started(window->timed_chunks[seqnum])){
+		puts("BLAHD BLAH BLAH");
 		LOG(("Trying to ack when timed_chunk hasn't been started for seqnum %d", seqnum));	
+		return;
 	}
 	else{
 		/* stop the timed_chunk for the acked position */
@@ -178,7 +201,8 @@ void window_ack(window_t window, int seqnum){
 		data = chunk->data;
 
 		memchunk_destroy(&chunk);
-		window->destructor(&data);
+		if(window->destructor)
+			window->destructor(&data);
 
 		/* now if the ack you received is for the left side of the window, 
 		   slide the window over until you find an unacked spot, as you slide
@@ -191,7 +215,7 @@ void window_ack(window_t window, int seqnum){
 			   ack has been received), reset that timed_chunk. Then shift the left
 			   over, and try to add some more to the right side of the window. */ 
 			while(timed_chunk_ended(window->timed_chunks[new_left])){
-				timed_chunk_reset(window->timed_chunks[new_left], NULL);
+				timed_chunk_reset(window->timed_chunks[new_left], NULL, -1);
 				new_left = (new_left + 1) % window->size;			
 
 				chunk = (memchunk_t)queue_pop(window->data_queue);
@@ -202,8 +226,8 @@ void window_ack(window_t window, int seqnum){
 					   (put it in the UNSTARTED phase). */
 					new_right = (new_right + 1) % window->size;
 
-					timed_chunk = window->timed_chunk[new_right];
-					timed_chunk_reset(timed_chunk, chunk);
+					timed_chunk = window->timed_chunks[new_right];
+					timed_chunk_reset(timed_chunk, chunk, new_right);
 					queue_push(window->to_send, (void*)timed_chunk);
 				}	
 			}
@@ -217,12 +241,14 @@ void window_ack(window_t window, int seqnum){
    timers that have elapsed time > timeout, adds these to the to_send
    queue and resets the timer. */
 void window_check_timers(window_t window){
-	double timeout, time_elapsed;
+	double time_elapsed;
 	timed_chunk_t timed_chunk;
 	
 	int i;
 	for(i=0;i<2*window->size;i++){
-		timed_chunk = window->timed_chunks[i]
+		timed_chunk = window->timed_chunks[i];
+		if(timed_chunk->status != STARTED) continue;
+
 		time_elapsed = timed_chunk_elapsed(timed_chunk);
 		if( time_elapsed > window->timeout ){
 			/* If the time elapsed is more than the allowable timeout, then
@@ -234,11 +260,13 @@ void window_check_timers(window_t window){
 }	
 	
 /* Once you pull it out, the timer starts */
-memchunk_t window_get_next(window_t window){
+window_chunk_t window_get_next(window_t window){
 	timed_chunk_t timed_chunk = (timed_chunk_t)queue_pop(window->to_send);
 	if(timed_chunk){
+		window_chunk_t window_chunk = window_chunk_init(timed_chunk);
+
 		timed_chunk_start(timed_chunk);	
-		return timed_chunk->chunk;
+		return window_chunk;
 	}
 	else{
 		return NULL;

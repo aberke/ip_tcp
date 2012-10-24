@@ -1,6 +1,8 @@
 #include <stdlib.h>
+#include <stdio.h>
 
 #include "queue.h"
+#include "utils.h"
 
 struct queue_el{
 	void* data;
@@ -46,9 +48,18 @@ void queue_push(queue_t q, void* data){
 	}
 }
 
+/* Peek at the head of the queue, but don't remove it */
+void* queue_peek(queue_t q){
+	if( q->head == NULL ){
+		return NULL;
+	}
+
+	return q->head->data;
+}
+
+/* pop the queue, ie remove the head */
 void* queue_pop(queue_t q){
 	if(q->head == NULL){
-		puts("ERROR POPPING FROM EMPTY QUEUE!!");
 		return NULL;	
 	}
 
@@ -63,8 +74,22 @@ void* queue_pop(queue_t q){
 	return result;
 }
 
+void queue_destroy_total(queue_t* queue, destructor_f destructor){
+	queue_el_t tmp, el = (*queue)->head;
+	while(el){
+		if(destructor)
+			destructor(&(el->data));
+		tmp = el->next;	
+		queue_el_destroy(&(el));
+		el = tmp;
+	}
+
+	free(*(queue));
+	*queue = NULL;
+}
+
 void queue_destroy(queue_t* queue){
-	queue_el_t tmp, el = queue->head;
+	queue_el_t tmp, el = (*queue)->head;
 	while(el){
 		tmp = el->next;	
 		queue_el_destroy(&(el));
