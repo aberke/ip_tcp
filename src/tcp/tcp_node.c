@@ -4,6 +4,7 @@
 #include <time.h>
 
 #include "tcp_utils.h"
+#include "tcp_node_stdin.h"
 #include "tcp_connection.h"
 #include "util/utils.h"
 #include "util/list.h"
@@ -25,6 +26,10 @@
 
 // static functions
 static void _handle_read(tcp_node_t tcp_node);
+static int _start_ip_threads(tcp_node_t tcp_node, 
+			pthread_t ip_link_interface_thread, pthread_t ip_send_thread, pthread_t ip_command_thread);
+static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t tcp_stdin_thread);
+
 
 
 struct tcp_node{
@@ -38,31 +43,28 @@ struct tcp_node{
 	// owns table of tcp_connections
 };
 
-/* Thread for tcp_node to accept standard input and transfer that standard input to queue for tcp_node or ip_node to handle */
-void *_handle_tcp_node_stdin(void *queue){
-	//bqueue_t *stdin_queue = (bqueue_t *)queue;
-	
-	pthread_exit(NULL);
-}
 
 /* helper function to tcp_node_start -- does the work of starting up _handle_tcp_node_stdin() in a thread */
-int tcp_node_start_stdin_thread(bqueue_t stdin_queue){
-
+static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t tcp_stdin_thread){	
+		
+	int status = pthread_create(&tcp_stdin_thread, NULL, _handle_tcp_node_stdin, (void *)tcp_node);
+    if (status){
+         printf("ERROR; return code from pthread_create() for _handle_tcp_node_stdin is %d\n", status);
+         return 0;
+    }
 	return 1;
 }
 
 /* helper function to tcp_node_start -- does the work of starting up ip_node_start() in a thread */
-int tcp_node_start_ip_threads(tcp_node_t tcp_node, 
+static int _start_ip_threads(tcp_node_t tcp_node, 
 			pthread_t ip_link_interface_thread, pthread_t ip_send_thread, pthread_t ip_command_thread){
-	/*		
-	struct ip_thread_data{
+	/*struct ip_thread_data{
 		ip_node_t ip_node;
 		bqueue_t *to_send;
 		bqueue_t *to_read;
 		bqueue_t *stdin_commands;   // way for tcp_node to pass user input commands to ip_node
 	};*/
 	// fetch and put arguments into ip_thread_data_t
-
 	ip_thread_data_t ip_data = (ip_thread_data_t)malloc(sizeof(struct ip_thread_data));
 	ip_data->ip_node = tcp_node->ip_node;
 	ip_data->to_send = tcp_node->to_send;
@@ -74,18 +76,23 @@ int tcp_node_start_ip_threads(tcp_node_t tcp_node,
 	status = pthread_create(&ip_link_interface_thread, NULL, ip_link_interface_thread_run, (void *)ip_data);
     if (status){
          printf("ERROR; return code from pthread_create() for ip_link_interface_thread is %d\n", status);
+         free(ip_data);
          return 0;
     }
+    puts("started ip_thread: link_interface_thread");
     status = pthread_create(&ip_send_thread, NULL, ip_send_thread_run, (void *)ip_data);
     if (status){
          printf("ERROR; return code from pthread_create() for ip_send_thread is %d\n", status);
+         free(ip_data);
          return 0;
     }
     status = pthread_create(&ip_command_thread, NULL, ip_command_thread_run, (void *)ip_data);
     if (status){
          printf("ERROR; return code from pthread_create() for ip_command_thread is %d\n", status);
+         free(ip_data);
          return 0;
     }
+    //free(ip_data);  -- free called in ip_command_thread_run
 	return 1;
 }
 
@@ -129,6 +136,7 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	ip_node_t ip_node = tcp_node->ip_node;
 	ip_node_destroy(&ip_node);
 	// destroy bqueues
+	puts("About to destroy queues");
 	bqueue_destroy(tcp_node->to_send);
 	bqueue_destroy(tcp_node->to_read);
 	bqueue_destroy(tcp_node->stdin_commands);
@@ -137,7 +145,10 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	
 	//destroy statemachine
 	// destroy window
-
+	
+	free(tcp_node);
+	tcp_node = NULL;
+	puts("tcp_node destroyed");
 }
 void tcp_node_print(tcp_node_t tcp_node);
 
@@ -151,29 +162,26 @@ void tcp_node_start(tcp_node_t tcp_node){
 	pthread_t tcp_stdin_thread, ip_link_interface_thread, ip_send_thread, ip_command_thread;
 	
 	// start up ip_node threads
-	if(!tcp_node_start_ip_threads(tcp_node, ip_link_interface_thread, ip_send_thread, ip_command_thread)){
+	if(!_start_ip_threads(tcp_node, ip_link_interface_thread, ip_send_thread, ip_command_thread)){
 		// failed to start thread that runs ip_node_start() -- get out and destroy
 		puts("Failed to start ip_node");
 		return;
 	}
 
-	// create and initialize queue that will transfer stdin from stdin thread to 
-	bqueue_t *stdin_queue = (bqueue_t*) malloc(sizeof(bqueue_t));
-	bqueue_init(stdin_queue);
-	
-	// TODO: START TCP STDIN THREAD
-	
+	// start thread for reading in standard inputs
+	if(!_start_stdin_thread(tcp_node, tcp_stdin_thread)){
+		// failed to start thread that runs tcp_node_stdin_thread() -- get out and destroy
+		puts("Failed to start tcp_node_stdin_thread");
+		return;
+	}
+		
 	// create timespec for timeout on pthread_cond_timedwait(&to_read);
 	struct timespec wait_cond = {PTHREAD_COND_TIMEOUT_SEC, PTHREAD_COND_TIMEOUT_NSEC}; //
 	int wait_cond_ret;
 	
 	while((tcp_node->running)&&(ip_node_running(tcp_node->ip_node))){	
 		bqueue_t *to_read = tcp_node->to_read;
-		
-		// check stdin
-		if(!bqueue_empty(stdin_queue)){
-			// TODO ****** handle stdin
-		}
+
 		if(!(bqueue_empty(to_read))){
 			// handle reading tcp packet from ip_node
 			_handle_read(tcp_node);	
@@ -184,7 +192,7 @@ void tcp_node_start(tcp_node_t tcp_node){
         	if((wait_cond_ret = pthread_cond_timedwait(&(to_read->q_cond), &(to_read->q_mtx), &wait_cond))!=0){
         		if(wait_cond_ret == ETIMEDOUT){
         			// timed out
-      				puts("pthread_cond_timed_wait for to_read timed out");
+      				//puts("pthread_cond_timed_wait for to_read timed out");
       			}
       			else{
       				printf("ERROR: pthread_cond_timed_wait errored out\n");
@@ -197,8 +205,31 @@ void tcp_node_start(tcp_node_t tcp_node){
 			_handle_read(tcp_node);
 		}
 	}
+	pthread_join(ip_link_interface_thread, NULL);
+	pthread_join(ip_send_thread, NULL);
+	pthread_join(ip_command_thread, NULL);
+	pthread_join(tcp_stdin_thread, NULL);
+	puts("threads joined");
 }
-
+// puts command on to stdin_commands queue
+// returns 1 on success, -1 on failure (failure when queue actually already destroyed)
+int tcp_node_queue_ip_cmd(tcp_node_t tcp_node, char* buffered_cmd){
+	
+	bqueue_t *stdin_commands = tcp_node->stdin_commands;
+	
+	if(bqueue_enqueue(stdin_commands, (void*)buffered_cmd))
+		return -1;
+	
+	return 1;
+}
+// returns tcp_node->running
+int tcp_node_running(tcp_node_t tcp_node){
+	return tcp_node->running;
+}
+// returns whether ip_node running still
+int tcp_node_ip_running(tcp_node_t tcp_node){
+	return ip_node_running(tcp_node->ip_node);
+}
 /**********************************************************************/
 
 static void _handle_read(tcp_node_t tcp_node){

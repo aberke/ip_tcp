@@ -35,13 +35,18 @@ tcp_node_t tcp_node_init(iplist_t* links);
 void tcp_node_destroy(tcp_node_t ip_node);
 void tcp_node_print(tcp_node_t tcp_node);
 
-int tcp_node_start_ip_thread(tcp_node_t tcp_node);
-int tcp_node_start_stdin_thread(bqueue_t stdin_queue);
-
 void tcp_node_start(tcp_node_t tcp_node);
+
+// returns tcp_node->running
+int tcp_node_running(tcp_node_t tcp_node);
 /* ***************************** */
 
+// puts command on to stdin_commands queue
+// returns 1 on success, -1 on failure (failure when queue actually already destroyed)
+int tcp_node_queue_ip_cmd(tcp_node_t tcp_node, char* buffered_cmd);
 
+// returns whether ip_node running still
+int tcp_node_ip_running(tcp_node_t tcp_node);
 
 
 #endif //__TCP_NODE_H__

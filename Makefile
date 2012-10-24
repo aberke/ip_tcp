@@ -18,7 +18,7 @@ UTHASH_INC=$(UTHASH_DIR)/src #not a mistake
 
 
 _IP_OBJS=ip_node.o routing_table.o forwarding_table.o ip_utils.o link_interface.o 
-_TCP_OBJS=main.o tcp_node.o tcp_utils.o
+_TCP_OBJS=main.o tcp_node.o tcp_utils.o tcp_node_stdin.o
 _UTIL_OBJS=ipsum.o parselinks.o utils.o list.o bqueue.o ##Could use dbg.o but for now I commented out references to it in bqueue.c
 
 
@@ -36,6 +36,8 @@ LIBS=$(patsubst %, -l%, $(_LIBS))
 
 _DEPENDENT_DIRS=build build/util build/ip build/tcp test/build test/build/tcp
 DEPENDENT_DIRS=$(patsubst %, directory/%, $(_DEPENDENT_DIRS))
+
+DEFAULT_ARGS = test/ip/helper_files/A.lnx
 
 #default target
 default: build
@@ -98,4 +100,5 @@ rebuild: clean build
 
 run: rebuild
 	@./$(EXEC_FILE) $(DEFAULT_ARGS)
+
 

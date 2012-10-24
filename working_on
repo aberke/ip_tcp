@@ -120,3 +120,7 @@ please accomodate for new util files: circular_buffer.c, bqueue.c, node_readline
 
 ALEX:
 	implement ***
+	
+	QUESTION: I malloc data structures to pass into threads -- where should those be freed?  within thread
+	or within the function that created them?  -- important question since idk what happens if thread fails to create
+	
