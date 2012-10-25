@@ -153,8 +153,11 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	// destroy bqueues
 	puts("About to destroy queues");
 	bqueue_destroy(tcp_node->to_send);
+	free(tcp_node->to_send);
 	bqueue_destroy(tcp_node->to_read);
+	free(tcp_node->to_read);
 	bqueue_destroy(tcp_node->stdin_commands);
+	free(tcp_node->stdin_commands);
 	
 	// TODO: REST OF CLEAN UP
 	
@@ -221,32 +224,26 @@ void tcp_node_start(tcp_node_t tcp_node){
 		}
 	}
 	int rc;
-	// is my segmentation fault issue in the threads?
-	puts("joining thread 1");
 	rc = pthread_join(ip_link_interface_thread, NULL);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
-	puts("joining thread 2");
 	rc = pthread_join(ip_send_thread, NULL);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
-	puts("joining thread 3");
 	rc = pthread_join(ip_command_thread, NULL);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
-	puts("joining thread 4");
-	rc = pthread_join(tcp_stdin_thread, NULL);
+	rc = pthread_cancel(tcp_stdin_thread);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
-	puts("threads joined");
 }
 // puts command on to stdin_commands queue
 // returns 1 on success, -1 on failure (failure when queue actually already destroyed)
@@ -255,6 +252,17 @@ int tcp_node_queue_ip_cmd(tcp_node_t tcp_node, char* buffered_cmd){
 	bqueue_t *stdin_commands = tcp_node->stdin_commands;
 	
 	if(bqueue_enqueue(stdin_commands, (void*)buffered_cmd))
+		return -1;
+	
+	return 1;
+}
+// puts command on to to_send queue
+// returns 1 on success, -1 on failure (failure when queue actually already destroyed)
+int tcp_node_queue_ip_send(tcp_node_t tcp_node, char* buffered_cmd){
+	
+	bqueue_t *to_send = tcp_node->to_send;
+	
+	if(bqueue_enqueue(to_send, (void*)buffered_cmd))
 		return -1;
 	
 	return 1;

@@ -83,7 +83,7 @@ int v_read_all(int s, void *buf, size_t bytes_requested){
 
   return bytes_read;
 }
-
+*/
 void help_cmd(const char *line, tcp_node_t tcp_node){
   (void)line;
 
@@ -104,65 +104,88 @@ void help_cmd(const char *line, tcp_node_t tcp_node){
   return;
 }
 
+// puts command on to stdin_commands queue for ip_node to handle
+void ip_handle_cmd(const char *line, tcp_node_t tcp_node){
+	char* cmd_item = (char *)malloc(sizeof(char)*LINE_MAX);
+	strcpy(cmd_item, line);
+
+	tcp_node_queue_ip_cmd(tcp_node, cmd_item);
+	return;	
+}
+
+void quit_cmd(const char *line, tcp_node_t tcp_node){
+
+	ip_handle_cmd(line, tcp_node);	
+	return;
+}
+void fp_cmd(const char *line, tcp_node_t tcp_node){
+
+	ip_handle_cmd(line, tcp_node);	
+	return;
+}
+void rp_cmd(const char *line, tcp_node_t tcp_node){
+
+	ip_handle_cmd(line, tcp_node);	
+	return;
+}
 void interfaces_cmd(const char *line, tcp_node_t tcp_node){
-  (void)line;
 
-  printf("not yet implemented: interfaces\n");
-  // TODO print interfaces
-
-  return;
+	ip_handle_cmd(line, tcp_node);	
+  	return;
 }
 
 void routes_cmd(const char *line, tcp_node_t tcp_node){
-  (void)line;
 
-  printf("not yet implemented: routes\n");
-  // TODO print routes 
-
-  return;
+	ip_handle_cmd(line, tcp_node);	
+  	return;
 }
 
-void sockets_cmd(const char *line, tcp_node_t tcp_node){
-  (void)line;
-
-  printf("not yet implemented: sockets\n");
-  // TODO print sockets
-
-  return;
-}
 
 void down_cmd(const char *line, tcp_node_t tcp_node){
-  unsigned interface;
-  int ret;
 
-  ret = sscanf(line, "down %u", &interface);
-  if (ret != 1){
-    fprintf(stderr, "syntax error (usage: down [interface])\n");
-    return;
-  }
-
-  printf("not yet implemented: down\n"); 
-  // TODO call down(interface)
-
-  return;
+	ip_handle_cmd(line, tcp_node);	
+  	return;
 }
 
 void up_cmd(const char *line, tcp_node_t tcp_node){
-  unsigned interface;
+
+	ip_handle_cmd(line, tcp_node);	
+  	return;
+}
+
+void send_cmd(const char *line, tcp_node_t tcp_node){
+	// AFTER HAVE WORKING IP_NODE MAKE SURE TO USER BELOW CMD INSTEAD
+	
+
+}
+/*
+
+void send_cmd(const char *line, tcp_node_t tcp_node){
+  int num_consumed;
+  int socket;
+  const char *data;
   int ret;
 
-  ret = sscanf(line, "up %u", &interface);
+  ret = sscanf(line, "send %d %n", &socket, &num_consumed);
   if (ret != 1){
-    fprintf(stderr, "syntax error (usage: up [interface])\n");
+    fprintf(stderr, "syntax error (usage: send [interface] [payload])\n");
+    return;
+  } 
+  data = line + num_consumed;
+  if (strlen(data) < 2){ // 1-char message, plus newline
+    fprintf(stderr, "syntax error (payload unspecified)\n");
     return;
   }
 
-  printf("not yet implemented: up\n");
-  // TODO call up(interface)
+  ret = v_write(socket, data, strlen(data)-1); // strlen()-1: stripping newline
+  if (ret < 0){
+    fprintf(stderr, "v_write() error: %s\n", strerror(-ret));
+    return;
+  }
+  printf("v_write() on %d bytes returned %d\n", strlen(data)-1, ret);
 
   return;
 }
-
 void *accept_thr_func(void *arg){
   int s;
   int ret;
@@ -259,32 +282,6 @@ void connect_cmd(const char *line, tcp_node_t tcp_node){
   return;
 }
 
-void send_cmd(const char *line, tcp_node_t tcp_node){
-  int num_consumed;
-  int socket;
-  const char *data;
-  int ret;
-
-  ret = sscanf(line, "send %d %n", &socket, &num_consumed);
-  if (ret != 1){
-    fprintf(stderr, "syntax error (usage: send [interface] [payload])\n");
-    return;
-  } 
-  data = line + num_consumed;
-  if (strlen(data) < 2){ // 1-char message, plus newline
-    fprintf(stderr, "syntax error (payload unspecified)\n");
-    return;
-  }
-
-  ret = v_write(socket, data, strlen(data)-1); // strlen()-1: stripping newline
-  if (ret < 0){
-    fprintf(stderr, "v_write() error: %s\n", strerror(-ret));
-    return;
-  }
-  printf("v_write() on %d bytes returned %d\n", strlen(data)-1, ret);
-
-  return;
-}
 
 void recv_cmd(const char *line, tcp_node_t tcp_node){
   int socket;
@@ -593,22 +590,30 @@ void close_cmd(const char *line, tcp_node_t tcp_node){
   return;
 }
 
-int quit_cmd(const char *line, tcp_node_t tcp_node){
+void sockets_cmd(const char *line, tcp_node_t tcp_node){
+  (void)line;
 
-	// HANDLE QUITTING
-	return 0;
+  printf("not yet implemented: sockets\n");
+  // TODO print sockets
+
+  return;
 }
+
+*/
+
 
 struct {
   const char *command;
-  void (*handler)(const char *);
+  void (*handler)(const char *, tcp_node_t);
 } cmd_table[] = {
   {"help", help_cmd},
   {"interfaces", interfaces_cmd},
   {"routes", routes_cmd},
-  {"sockets", sockets_cmd},
   {"down", down_cmd},
   {"up", up_cmd},
+  {"fp", fp_cmd},
+  {"rp", rp_cmd},/*
+  {"sockets", sockets_cmd},
   {"accept", accept_cmd},
   {"connect", connect_cmd},
   {"send", send_cmd},
@@ -616,11 +621,11 @@ struct {
   {"sendfile", sendfile_cmd},
   {"recvfile", recvfile_cmd},
   {"shutdown", shutdown_cmd},
-  {"close", close_cmd},
+  {"close", close_cmd},*/
   {"quit", quit_cmd},	// last two quit commands added by alex -- is this how we want to deal with quitting?
   {"q", quit_cmd}
 };
-*/
+
 
 /* Thread for tcp_node to accept standard input and transfer that standard input to queue for tcp_node or ip_node to handle */
 void* _handle_tcp_node_stdin(void* node){
@@ -631,8 +636,7 @@ void* _handle_tcp_node_stdin(void* node){
 	char cmd[LINE_MAX];
 	char *fgets_ret;
 	int ret;
-	unsigned i; 
-	
+	unsigned i; 	
 	
 	while (tcp_node_running(tcp_node)&&tcp_node_ip_running(tcp_node)){
 		
@@ -646,12 +650,7 @@ void* _handle_tcp_node_stdin(void* node){
 			fprintf(stderr, "syntax error (first argument must be a command)\n");
 			continue;
 		}
-		
-		char* cmd_item = (char *)malloc(sizeof(char)*LINE_MAX);
-		cmd_item = line;
-		
-		tcp_node_queue_ip_cmd(tcp_node, cmd_item);
-		/*
+				
 		for (i=0; i < sizeof(cmd_table) / sizeof(cmd_table[0]); i++){
 			if (!strcmp(cmd, cmd_table[i].command)){
 				cmd_table[i].handler(line, tcp_node);
@@ -663,8 +662,7 @@ void* _handle_tcp_node_stdin(void* node){
 			fprintf(stderr, "error: no valid command specified\n");
 			continue;
 		}
-		*/
-		}
-	pthread_exit(NULL);
 	}
+	pthread_exit(NULL);
+}
 

@@ -602,12 +602,8 @@ static void _handle_to_send_queue(ip_node_t ip_node, bqueue_t *to_send){
 
 */
 static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands){
-	//char* buffer = (char*) malloc(sizeof(char)*BUFFER_SIZE);	
 
-	//char buffer[BUFFER_SIZE];
-	//char* buffer_pntr = &buffer;
 	char *buffer;
-
 
 /* bqueue_trydequeue attempts to dequeue an item from the queue... if there are no items
  * in the queue, rather than blocking we simply return 1 and *data has
@@ -633,26 +629,19 @@ static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands){
 		else if(buffer[0] == 'u')
 			_handle_user_command_up(ip_node, buffer);
 	
-		else if(!strcmp(buffer, "fp")){
+		else if(!strcmp(buffer, "fp"))
 			forwarding_table_print(ip_node->forwarding_table);	
-		}
 		
-		else if(!strcmp(buffer, "rp")){
+		else if(!strcmp(buffer, "rp"))
 			routing_table_print(ip_node->routing_table);
-		}
-	
-		else if(!strcmp(buffer, "print")){
+
+		else if(!strcmp(buffer, "print"))
 			ip_node_print(ip_node);
-		}
 	
 		else
-			printf("Received unrecognized input from user: %s\n", buffer); 
-	
+			printf("Received unrecognized input from user: %s\n", buffer); 	
 	}
-	/*puts("about to call free on buffer");
-	printf("&buffer = %p\n", buffer);
 	free(buffer); 
-	puts("freed buffer");*/
 }
 
 /* Helper to _handle_selected to clean up code -- just does the error printing */

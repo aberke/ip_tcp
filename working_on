@@ -5,32 +5,6 @@ window        -- struct that implements a very abstract, high-level version of t
 Change Alex made to IP: We have added a type: TCP_DATA=6  which is the protocol number in the IP packet for TCP
 					This is now defined where RIP_DATA and TEST_DATA defined
 
-BIG QUESTION:
-	Can/should our tcp driver 'own' an ip_node (rather than the *node executable)?  
-		- if owns *node exe. use popen? or use fopen?  why is this so badly documented on the internet???
-	This could make our lives easier in the following way:
-		- tp_driver could pass in a reference to itself so that the handler (when ip_node receives TCP_DATA)
-				can directly call tcp_driver methods to handle the incoming packet.
-		
-		ramifications:  
-			- This would change how we deal with standard input
-			- when we want to send something, we'd need to somehow trigger stdin of ip_node to let it know,
-				or we'd have to slightly change our implementation
-				
-				
-Either way, I think our driver should have exactly one ip_node in the way described below
-
-What are your feelings on this potential architecture:
-
-	Let's say 'struct tcp_node' is our struct with the socket api and the struct that is 'driven' by the driver
-	
-	Why I believe one ip_node should serve all of the tcp connections:
-		The specs say that even when a socket 'bind()'s' to a port, it should bind to all interfaces, etc
-		Consider one ip_node serving all the tcp_connections so that when a TCP_DATA packet is received, 
-			the ip_node passes off the packet to our tcp_node, tcp_node unwraps the packet, and based on 
-			the destination port specified in the tcp-header, decides which struct tcp_connection the 
-			packet was intended for.
-			What are your thoughts?
 			
 	We should think about what having only one ip_node means for the sliding window protocol (if only want one ip_node).
 
@@ -105,13 +79,7 @@ tcp_node runs ip_node in 3 separate threads that handle different responsibiliti
 	ip_command_thread: calls p_thread_cond_wait(&stdin_commands) and handles ip commands loaded on to queue
 	
 	
-
-
-
-
-
-
-				
+			
 NEIL:
 
 TODO: THINK ABOUT DESIGN AND COMMUNICATE WITH ALEX PLEASE
@@ -123,4 +91,6 @@ ALEX:
 	
 	QUESTION: I malloc data structures to pass into threads -- where should those be freed?  within thread
 	or within the function that created them?  -- important question since idk what happens if thread fails to create
+	
+	fix checksum!!!
 	
