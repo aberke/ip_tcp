@@ -313,6 +313,7 @@ void *ip_send_thread_run(void *ipdata){
 			_handle_to_send_queue(ip_node, to_send);				
 		}
 	}
+	puts("about to exit send_thread");
 	pthread_exit(NULL);
 }
 
@@ -367,6 +368,7 @@ void *ip_link_interface_thread_run(void *ipdata){
 			time(&last_update);
 		}
 	}
+	puts("about to exit link_interface_thread");
 	pthread_exit(NULL);
 }
 /* ************************ END OF IP_THREADS ******************************* */

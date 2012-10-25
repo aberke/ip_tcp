@@ -45,13 +45,20 @@ struct tcp_node{
 
 
 /* helper function to tcp_node_start -- does the work of starting up _handle_tcp_node_stdin() in a thread */
-static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t tcp_stdin_thread){	
+static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t tcp_stdin_thread){		
+	
+	/* Initialize and set thread detached attribute */
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 		
-	int status = pthread_create(&tcp_stdin_thread, NULL, _handle_tcp_node_stdin, (void *)tcp_node);
+	int status = pthread_create(&tcp_stdin_thread, &attr, _handle_tcp_node_stdin, (void *)tcp_node);
     if (status){
          printf("ERROR; return code from pthread_create() for _handle_tcp_node_stdin is %d\n", status);
          return 0;
     }
+    puts("started tcp_stdin_thread");
+    pthread_attr_destroy(&attr);
 	return 1;
 }
 
@@ -71,9 +78,14 @@ static int _start_ip_threads(tcp_node_t tcp_node,
 	ip_data->to_read = tcp_node->to_read;
 	ip_data->stdin_commands = tcp_node->stdin_commands;	
 	
+	/* Initialize and set thread detached attribute */
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+	
 	// start up each thread	
 	int status;
-	status = pthread_create(&ip_link_interface_thread, NULL, ip_link_interface_thread_run, (void *)ip_data);
+	status = pthread_create(&ip_link_interface_thread, &attr, ip_link_interface_thread_run, (void *)ip_data);
     if (status){
          printf("ERROR; return code from pthread_create() for ip_link_interface_thread is %d\n", status);
          free(ip_data);
@@ -86,12 +98,15 @@ static int _start_ip_threads(tcp_node_t tcp_node,
          free(ip_data);
          return 0;
     }
+    puts("started ip_thread: ip_send_thread");
     status = pthread_create(&ip_command_thread, NULL, ip_command_thread_run, (void *)ip_data);
     if (status){
          printf("ERROR; return code from pthread_create() for ip_command_thread is %d\n", status);
          free(ip_data);
          return 0;
     }
+    puts("started ip_thread: ip_command_thread");
+    pthread_attr_destroy(&attr);
     //free(ip_data);  -- free called in ip_command_thread_run
 	return 1;
 }
@@ -161,6 +176,7 @@ void tcp_node_start(tcp_node_t tcp_node){
 	*/
 	pthread_t tcp_stdin_thread, ip_link_interface_thread, ip_send_thread, ip_command_thread;
 	
+	
 	// start up ip_node threads
 	if(!_start_ip_threads(tcp_node, ip_link_interface_thread, ip_send_thread, ip_command_thread)){
 		// failed to start thread that runs ip_node_start() -- get out and destroy
@@ -205,10 +221,32 @@ void tcp_node_start(tcp_node_t tcp_node){
 			_handle_read(tcp_node);
 		}
 	}
-	pthread_join(ip_link_interface_thread, NULL);
-	pthread_join(ip_send_thread, NULL);
-	pthread_join(ip_command_thread, NULL);
-	pthread_join(tcp_stdin_thread, NULL);
+	int rc;
+	// is my segmentation fault issue in the threads?
+	puts("joining thread 1");
+	rc = pthread_join(ip_link_interface_thread, NULL);
+	if (rc) {
+		printf("ERROR; return code from pthread_join() is %d\n", rc);
+		exit(-1);
+	}
+	puts("joining thread 2");
+	rc = pthread_join(ip_send_thread, NULL);
+	if (rc) {
+		printf("ERROR; return code from pthread_join() is %d\n", rc);
+		exit(-1);
+	}
+	puts("joining thread 3");
+	rc = pthread_join(ip_command_thread, NULL);
+	if (rc) {
+		printf("ERROR; return code from pthread_join() is %d\n", rc);
+		exit(-1);
+	}
+	puts("joining thread 4");
+	rc = pthread_join(tcp_stdin_thread, NULL);
+	if (rc) {
+		printf("ERROR; return code from pthread_join() is %d\n", rc);
+		exit(-1);
+	}
 	puts("threads joined");
 }
 // puts command on to stdin_commands queue

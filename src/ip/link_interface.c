@@ -90,7 +90,9 @@ link_interface_t link_interface_create(link_t *link, int id){
 void link_interface_destroy(link_interface_t interface){
 	puts("in link_interface_destroy");
 	close(interface->sfd);
+	puts("sfd closed");
 	free(interface);
+	puts("interface freed");
 }
 // sends packet using given link_interface
 // data is a packet constructed by node.c-- wraps udp protocol around this ip packet
