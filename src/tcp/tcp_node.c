@@ -176,7 +176,6 @@ void tcp_node_start(tcp_node_t tcp_node){
 	*/
 	pthread_t tcp_stdin_thread, ip_link_interface_thread, ip_send_thread, ip_command_thread;
 	
-	
 	// start up ip_node threads
 	if(!_start_ip_threads(tcp_node, ip_link_interface_thread, ip_send_thread, ip_command_thread)){
 		// failed to start thread that runs ip_node_start() -- get out and destroy
