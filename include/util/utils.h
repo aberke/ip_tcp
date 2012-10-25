@@ -12,6 +12,10 @@
 #define TRUE 1
 #define FALSE 0
 
+#define MAX(x,y) ((x) > (y) ? (x) : (y))
+#define MIN(x,y) ((x) < (y) ? (x) : (y))
+#define WRAP_DIFF(x,y,length) ((y) >= (x) ? (y) - (x) : (length) - (x) + (y)) 
+
 #define LOG(msg) printf msg
 
 typedef int boolean;
