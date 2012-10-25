@@ -19,6 +19,10 @@ void _scale_down(ext_array_t ar);
 void _shift(ext_array_t ar);
 
 ext_array_t ext_array_init(int capacity){
+	if(capacity == 0) // that would be VERY bad, ie infinite looping bad
+		return NULL;
+		
+
 	ext_array_t ext_array = (struct ext_array*)malloc(sizeof(struct ext_array));
 	ext_array->capacity = capacity;
 	ext_array->data = malloc(capacity);
@@ -30,13 +34,15 @@ ext_array_t ext_array_init(int capacity){
 
 /* FREES ITS DATA!!!! */
 void ext_array_destroy(ext_array_t* ext_array){
+	if(!(*ext_array)) return;
+
 	free((*ext_array)->data);
 
 	free(*(ext_array));
 	*ext_array = NULL;
 }
 
-void ext_array_put(ext_array_t ext_array, void* data, int length){
+void ext_array_push(ext_array_t ext_array, void* data, int length){
 	/* if there's no room at the end, but that's due to all the garbage at the beginning, 
 	   then get rid of all the garbage */
 	if(ext_array->capacity - ext_array->right < length 
@@ -63,7 +69,7 @@ memchunk_t ext_array_peel(ext_array_t ext_array, int length){
 		return NULL;
 
 	void* data = malloc(ret_length);
-	memcpy(data, ext_array->data, ret_length);
+	memcpy(data, ext_array->data+ext_array->left, ret_length);
 	
 	/* now peel */
 	ext_array->left += ret_length;
@@ -84,6 +90,7 @@ void _scale_up(ext_array_t ar){
 	int new_left = 0, new_right = ar->right - ar->left;
 	memcpy(new_data, ar->data, new_right);
 
+	/* free the old data */
 	free(ar->data);
 	ar->data = new_data;
 	ar->left = new_left;

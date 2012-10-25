@@ -19,6 +19,14 @@ void memchunk_destroy(memchunk_t* chunk){
 	*chunk = NULL;
 }	
 
+void memchunk_destroy_total(memchunk_t* chunk, destructor_f destructor){
+	if(destructor)
+		destructor(&((*chunk)->data));
+	
+	free(*chunk);
+	*chunk = NULL;
+}	
+
 ///// BUFFER
 buffer_t buffer_init(int capacity){
 	buffer_t buff = malloc(sizeof(struct buffer));

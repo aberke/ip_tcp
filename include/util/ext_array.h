@@ -7,7 +7,7 @@
 
 typedef struct ext_array* ext_array_t;
 
-ext_array_t ext_array_init( /* ARGUMENTS */ );
+ext_array_t ext_array_init(int capacity);
 void ext_array_destroy(ext_array_t* ext_array);
 
 void ext_array_push(ext_array_t ar, void* data, int length);
