@@ -57,7 +57,6 @@ static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t* tcp_stdin_thread)
          printf("ERROR; return code from pthread_create() for _handle_tcp_node_stdin is %d\n", status);
          return 0;
     }
-    puts("started tcp_stdin_thread");
     pthread_attr_destroy(&attr);
 	return 1;
 }
@@ -153,7 +152,6 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	ip_node_t ip_node = tcp_node->ip_node;
 	ip_node_destroy(&ip_node);
 	// destroy bqueues
-	puts("About to destroy queues");
 	bqueue_destroy(tcp_node->to_send);
 	free(tcp_node->to_send);
 	bqueue_destroy(tcp_node->to_read);
@@ -168,7 +166,6 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	
 	free(tcp_node);
 	tcp_node = NULL;
-	puts("tcp_node destroyed");
 }
 void tcp_node_print(tcp_node_t tcp_node);
 

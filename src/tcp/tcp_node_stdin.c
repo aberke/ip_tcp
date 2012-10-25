@@ -153,39 +153,45 @@ void up_cmd(const char *line, tcp_node_t tcp_node){
   	return;
 }
 
+
+
 void send_cmd(const char *line, tcp_node_t tcp_node){
-	// AFTER HAVE WORKING IP_NODE MAKE SURE TO USER BELOW CMD INSTEAD
+  /*typedef struct tcp_packet_data{
+	uint32_t local_virt_ip;
+	uint32_t remote_virt_ip;
+	char packet[MTU];
+	int packet_size;  //size of packet in bytes
+} tcp_packet_data_t;*/
+
+  
+  /* TODO: ONCE HAVE WORKING API MAKE SURE TO INSTEAD IMPLEMENT BELOW VERSION */
+	/*  
+	int num_consumed;
+	int socket;
+	const char *data;
+	int ret;
 	
-
-}
-/*
-
-void send_cmd(const char *line, tcp_node_t tcp_node){
-  int num_consumed;
-  int socket;
-  const char *data;
-  int ret;
-
-  ret = sscanf(line, "send %d %n", &socket, &num_consumed);
-  if (ret != 1){
-    fprintf(stderr, "syntax error (usage: send [interface] [payload])\n");
-    return;
-  } 
-  data = line + num_consumed;
-  if (strlen(data) < 2){ // 1-char message, plus newline
-    fprintf(stderr, "syntax error (payload unspecified)\n");
-    return;
-  }
-
-  ret = v_write(socket, data, strlen(data)-1); // strlen()-1: stripping newline
-  if (ret < 0){
-    fprintf(stderr, "v_write() error: %s\n", strerror(-ret));
-    return;
-  }
-  printf("v_write() on %d bytes returned %d\n", strlen(data)-1, ret);
-
+	ret = sscanf(line, "send %d %n", &socket, &num_consumed);
+	if (ret != 1){
+		fprintf(stderr, "syntax error (usage: send [interface] [payload])\n");
+		return;
+	} 
+	data = line + num_consumed;
+	if (strlen(data) < 2){ // 1-char message, plus newline
+		fprintf(stderr, "syntax error (payload unspecified)\n");
+		return;
+	}
+	
+	ret = v_write(socket, data, strlen(data)-1); // strlen()-1: stripping newline
+	if (ret < 0){
+		fprintf(stderr, "v_write() error: %s\n", strerror(-ret));
+		return;
+	}
+	printf("v_write() on %d bytes returned %d\n", strlen(data)-1, ret);
+*/
   return;
 }
+/*
 void *accept_thr_func(void *arg){
   int s;
   int ret;
@@ -607,6 +613,7 @@ struct {
   void (*handler)(const char *, tcp_node_t);
 } cmd_table[] = {
   {"help", help_cmd},
+  {"send", send_cmd},
   {"interfaces", interfaces_cmd},
   {"routes", routes_cmd},
   {"down", down_cmd},
@@ -616,7 +623,6 @@ struct {
   {"sockets", sockets_cmd},
   {"accept", accept_cmd},
   {"connect", connect_cmd},
-  {"send", send_cmd},
   {"recv", recv_cmd},
   {"sendfile", sendfile_cmd},
   {"recvfile", recvfile_cmd},

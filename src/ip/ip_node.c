@@ -199,15 +199,12 @@ void ip_node_destroy(ip_node_t* ip_node){
 		HASH_DEL((*ip_node)->addressToInterface, ip_keyed);
 		interface_ip_keyed_destroy(&ip_keyed);
 	}
-	puts("destroying...");
 	//// NOW destroy all the interfaces
 	int i;
 	for(i=0;i<(*ip_node)->num_interfaces;i++){
 		link_interface_destroy((*ip_node)->interfaces[i]);
 	}	
-	puts("freeing ip_node->interfaces");	
 	free((*ip_node)->interfaces);
-	puts("freed ip_node->interfaces");
 	//// basic clean up
 	free(*ip_node);
 	*ip_node = NULL;
@@ -285,7 +282,6 @@ void *ip_send_thread_run(void *ipdata){
 	// create timespec for timeout on pthread_cond_timedwait(&to_send);
 	struct timespec wait_cond = {PTHREAD_COND_TIMEOUT_SEC, PTHREAD_COND_TIMEOUT_NSEC}; //
 	int wait_cond_ret;
-	puts("starting loop of ip_send_thread_run");
 	while(ip_node->running){
 		
 		if(!bqueue_empty(to_send))
@@ -310,7 +306,6 @@ void *ip_send_thread_run(void *ipdata){
 			_handle_to_send_queue(ip_node, to_send);				
 		}
 	}
-	puts("about to exit send_thread");
 	pthread_exit(NULL);
 }
 
@@ -332,7 +327,6 @@ void *ip_link_interface_thread_run(void *ipdata){
 	struct timeval tv;
 	tv.tv_sec = SELECT_TIMEOUT;
 	tv.tv_usec = 0;	
-	puts("ip_node started!");
 	// do this to init the forwarding tables/routing tables
 	_handle_query_interfaces(ip_node);
 
@@ -364,7 +358,6 @@ void *ip_link_interface_thread_run(void *ipdata){
 			time(&last_update);
 		}
 	}
-	puts("about to exit link_interface_thread");
 	pthread_exit(NULL);
 }
 /* ************************ END OF IP_THREADS ******************************* */
@@ -611,7 +604,6 @@ static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands){
 		//// handle the commands
 		if(!strcmp(buffer, "quit") || !strcmp(buffer, "q")){
 			ip_node->running = 0;
-			puts("ip_node->running = 0");
 		}
 		else if(!strcmp(buffer, "interfaces"))
 			ip_node_print_interfaces(ip_node);
@@ -637,7 +629,6 @@ static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands){
 		else
 			printf("Received unrecognized input from user: %s\n", buffer); 	
 	}
-	printf("about to free buffer at address %p\n", buffer);
 	free(buffer); 
 }
 
