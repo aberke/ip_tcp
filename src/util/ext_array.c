@@ -60,6 +60,8 @@ void ext_array_push(ext_array_t ext_array, void* data, int length){
 		memcpy(ext_array->data+ext_array->right, data, length);
 		ext_array->right += length;
 	}
+
+	printf("ext_array pushed: capacity: %d, left: %d, right: %d\n", ext_array->capacity, ext_array->left, ext_array->right);
 }
 
 /* peels data from the beginning of the array */
@@ -73,6 +75,8 @@ memchunk_t ext_array_peel(ext_array_t ext_array, int length){
 	
 	/* now peel */
 	ext_array->left += ret_length;
+
+	printf("ext_array peeled: capacity: %d, left: %d, right: %d\n", ext_array->capacity, ext_array->left, ext_array->right);
 
 	return memchunk_init(data, ret_length);
 }
