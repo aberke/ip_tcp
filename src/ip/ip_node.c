@@ -236,11 +236,9 @@ void ip_node_print_interfaces(ip_node_t ip_node){
 void *ip_command_thread_run(void *ipdata){
 
 	ip_thread_data_t ip_data = (ip_thread_data_t)ipdata;
-	// only need to extract ip_node and to_send
 	ip_node_t ip_node = ip_data->ip_node;
 	bqueue_t *stdin_commands = ip_data->stdin_commands;
 		
-	// I can destroy ip_data now right??
 	free(ip_data);
 	
 	// create timespec for timeout on pthread_cond_timedwait(&to_send);
@@ -282,8 +280,7 @@ void *ip_send_thread_run(void *ipdata){
 	ip_node_t ip_node = ip_data->ip_node;
 	bqueue_t *to_send = ip_data->to_send;
 	
-	// I can destroy ip_data now right??
-	//free(ip_data);
+	free(ip_data);
 		
 	// create timespec for timeout on pthread_cond_timedwait(&to_send);
 	struct timespec wait_cond = {PTHREAD_COND_TIMEOUT_SEC, PTHREAD_COND_TIMEOUT_NSEC}; //
@@ -327,8 +324,7 @@ void *ip_link_interface_thread_run(void *ipdata){
 	ip_node_t ip_node = ip_data->ip_node;
 	bqueue_t *to_read = ip_data->to_read;	//--- tcp data that ip pushes on to queue for tcp to handle
 	
-	// I can destroy ip_data now right??
-	//free(ip_data);
+	free(ip_data);
 	
 	int retval;
 
@@ -641,6 +637,7 @@ static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands){
 		else
 			printf("Received unrecognized input from user: %s\n", buffer); 	
 	}
+	printf("about to free buffer at address %p\n", buffer);
 	free(buffer); 
 }
 

@@ -71,12 +71,18 @@ static int _start_ip_threads(tcp_node_t tcp_node,
 		bqueue_t *to_read;
 		bqueue_t *stdin_commands;   // way for tcp_node to pass user input commands to ip_node
 	};*/
-	// fetch and put arguments into ip_thread_data_t
-	ip_thread_data_t ip_data = (ip_thread_data_t)malloc(sizeof(struct ip_thread_data));
-	ip_data->ip_node = tcp_node->ip_node;
-	ip_data->to_send = tcp_node->to_send;
-	ip_data->to_read = tcp_node->to_read;
-	ip_data->stdin_commands = tcp_node->stdin_commands;	
+	// fetch and put arguments into ip_thread_data_t  -- each thread responsible for freeing its own ip_thread_data arg
+	ip_thread_data_t ip_data_link_interface_thread = (ip_thread_data_t)malloc(sizeof(struct ip_thread_data));
+	ip_data_link_interface_thread->ip_node = tcp_node->ip_node;
+	ip_data_link_interface_thread->to_read = tcp_node->to_read;
+	
+	ip_thread_data_t ip_data_send_thread = (ip_thread_data_t)malloc(sizeof(struct ip_thread_data));
+	ip_data_send_thread->ip_node = tcp_node->ip_node;
+	ip_data_send_thread->to_send = tcp_node->to_send;
+	
+	ip_thread_data_t ip_data_command_thread = (ip_thread_data_t)malloc(sizeof(struct ip_thread_data));
+	ip_data_command_thread->ip_node = tcp_node->ip_node;	
+	ip_data_command_thread->stdin_commands = tcp_node->stdin_commands;	
 	
 	/* Initialize and set thread detached attribute */
 	pthread_attr_t attr;
@@ -85,29 +91,25 @@ static int _start_ip_threads(tcp_node_t tcp_node,
 	
 	// start up each thread	
 	int status;
-	status = pthread_create(ip_link_interface_thread, &attr, ip_link_interface_thread_run, (void *)ip_data);
+	status = pthread_create(ip_link_interface_thread, &attr, ip_link_interface_thread_run, (void *)ip_data_link_interface_thread);
     if (status){
          printf("ERROR; return code from pthread_create() for ip_link_interface_thread is %d\n", status);
-         free(ip_data);
+         free(ip_data_link_interface_thread);
          return 0;
     }
-    puts("started ip_thread: link_interface_thread");
-    status = pthread_create(ip_send_thread, NULL, ip_send_thread_run, (void *)ip_data);
+    status = pthread_create(ip_send_thread, NULL, ip_send_thread_run, (void *)ip_data_send_thread);
     if (status){
          printf("ERROR; return code from pthread_create() for ip_send_thread is %d\n", status);
-         free(ip_data);
+         free(ip_data_send_thread);
          return 0;
     }
-    puts("started ip_thread: ip_send_thread");
-    status = pthread_create(ip_command_thread, NULL, ip_command_thread_run, (void *)ip_data);
+    status = pthread_create(ip_command_thread, NULL, ip_command_thread_run, (void *)ip_data_command_thread);
     if (status){
          printf("ERROR; return code from pthread_create() for ip_command_thread is %d\n", status);
-         free(ip_data);
+         free(ip_data_command_thread);
          return 0;
     }
-    puts("started ip_thread: ip_command_thread");
     pthread_attr_destroy(&attr);
-    //free(ip_data);  -- free called in ip_command_thread_run
 	return 1;
 }
 
