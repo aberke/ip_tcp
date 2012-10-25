@@ -48,6 +48,17 @@ void queue_push(queue_t q, void* data){
 	}
 }
 
+void queue_push_front(queue_t q, void* data){
+	queue_el_t head = q->head;
+	if(!head){
+		q->head = q->tail = queue_el_init(data);
+	}
+	else{
+		q->head = queue_el_init(data);
+		q->head->next = head;
+	}
+}
+
 /* Peek at the head of the queue, but don't remove it */
 void* queue_peek(queue_t q){
 	if( q->head == NULL ){

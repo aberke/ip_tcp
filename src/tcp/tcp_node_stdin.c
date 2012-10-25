@@ -623,7 +623,7 @@ struct {
 */
 
 /* Thread for tcp_node to accept standard input and transfer that standard input to queue for tcp_node or ip_node to handle */
-void *_handle_tcp_node_stdin(void* node){
+void* _handle_tcp_node_stdin(void* node){
 
 	tcp_node_t tcp_node = (tcp_node_t)node;
 	

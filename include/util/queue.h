@@ -12,5 +12,6 @@ void queue_destroy_total(queue_t* queue, destructor_f destructor);
 void* queue_pop(queue_t q);
 void* queue_peek(queue_t q);
 void queue_push(queue_t q, void* data);
+void queue_push_front(queue_t q, void* data);
 
 #endif // __QUEUE_H__
