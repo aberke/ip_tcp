@@ -39,6 +39,9 @@ struct window{
 	int size;
 	void* slider;
 
+	int left;
+	int right;
+
 	timed_chunk_t* timed_chunks;
 };
 
@@ -53,6 +56,8 @@ window_t window_init(double timeout, int window_size){
 
 	window->timed_chunks = malloc(sizeof(timed_chunk_t)*2*window_size);
 	memset(window->timed_chunks, 0, sizeof(timed_chunk_t)*2*window_size);
+
+	window->left = window->right = 0;
 
 	return window;
 }
@@ -78,16 +83,28 @@ void window_push(window_t window, void* data, int length){
 	}
 
 	else {
-		int fill_window = MIN(WRAP_DIFF(window->left, window->right, window->size*2), length);
-		int fill_right = MIN(window->size*2 - window->left, length);
+		/* we're only gonna fill it up until its full, so take the minimum of what's left in the
+			window, and the length */
+		int fill_window = MIN(WRAP_DIFF(window->right, window->left, window->size*2), length);
+
+		/* only fill it up until you fall of the array on the right, then wrap around */
+		int fill_right = MIN(window->size*2 - window->left, fill_window);
+
+		/* copy in to the right */
 		memcpy(window->slider+window->left, data, fill_right);
 		
-		/* if it overflows, wrap around and write to the --- */
-		if(length - fill_right)
-			memcpy(window->slider, data, length - fill_right); 
-	
+		/* if it overflows, wrap around */
+		if(fill_window - fill_right) {
+			memcpy(window->slider, data, fill_window - fill_right); 
+			window->right = fill_window - fill_right;
+		}
+		else {
+			window->right = window->left
 
-	ext_array_push(window->data_queue, chunk->data, chunk->length);
+		/* and if it all couldn't fit in the window, push the rest of it to the data queue */
+		if(length - fill_window)
+			ext_array_push(window->data_queue, data, length - fill_window);
+	}
 }
 
 void window_ack(window_t window, int seqnum){
@@ -158,7 +175,7 @@ window_chunk_t window_get_next(window_t window){
 		return NULL; 
 
 	else {
-		
+			
 
 	timed_chunk_t timed_chunk = (timed_chunk_t)queue_pop(window->to_send);
 	if(timed_chunk){

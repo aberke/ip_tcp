@@ -27,8 +27,8 @@
 // static functions
 static void _handle_read(tcp_node_t tcp_node);
 static int _start_ip_threads(tcp_node_t tcp_node, 
-			pthread_t ip_link_interface_thread, pthread_t ip_send_thread, pthread_t ip_command_thread);
-static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t tcp_stdin_thread);
+			pthread_t* ip_link_interface_thread, pthread_t* ip_send_thread, pthread_t* ip_command_thread);
+static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t* tcp_stdin_thread);
 
 
 
@@ -45,14 +45,14 @@ struct tcp_node{
 
 
 /* helper function to tcp_node_start -- does the work of starting up _handle_tcp_node_stdin() in a thread */
-static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t tcp_stdin_thread){		
+static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t* tcp_stdin_thread){		
 	
 	/* Initialize and set thread detached attribute */
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
 	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 		
-	int status = pthread_create(&tcp_stdin_thread, &attr, _handle_tcp_node_stdin, (void *)tcp_node);
+	int status = pthread_create(tcp_stdin_thread, &attr, _handle_tcp_node_stdin, (void *)tcp_node);
     if (status){
          printf("ERROR; return code from pthread_create() for _handle_tcp_node_stdin is %d\n", status);
          return 0;
@@ -64,7 +64,7 @@ static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t tcp_stdin_thread){
 
 /* helper function to tcp_node_start -- does the work of starting up ip_node_start() in a thread */
 static int _start_ip_threads(tcp_node_t tcp_node, 
-			pthread_t ip_link_interface_thread, pthread_t ip_send_thread, pthread_t ip_command_thread){
+			pthread_t* ip_link_interface_thread, pthread_t* ip_send_thread, pthread_t* ip_command_thread){
 	/*struct ip_thread_data{
 		ip_node_t ip_node;
 		bqueue_t *to_send;
@@ -85,21 +85,21 @@ static int _start_ip_threads(tcp_node_t tcp_node,
 	
 	// start up each thread	
 	int status;
-	status = pthread_create(&ip_link_interface_thread, &attr, ip_link_interface_thread_run, (void *)ip_data);
+	status = pthread_create(ip_link_interface_thread, &attr, ip_link_interface_thread_run, (void *)ip_data);
     if (status){
          printf("ERROR; return code from pthread_create() for ip_link_interface_thread is %d\n", status);
          free(ip_data);
          return 0;
     }
     puts("started ip_thread: link_interface_thread");
-    status = pthread_create(&ip_send_thread, NULL, ip_send_thread_run, (void *)ip_data);
+    status = pthread_create(ip_send_thread, NULL, ip_send_thread_run, (void *)ip_data);
     if (status){
          printf("ERROR; return code from pthread_create() for ip_send_thread is %d\n", status);
          free(ip_data);
          return 0;
     }
     puts("started ip_thread: ip_send_thread");
-    status = pthread_create(&ip_command_thread, NULL, ip_command_thread_run, (void *)ip_data);
+    status = pthread_create(ip_command_thread, NULL, ip_command_thread_run, (void *)ip_data);
     if (status){
          printf("ERROR; return code from pthread_create() for ip_command_thread is %d\n", status);
          free(ip_data);
@@ -178,14 +178,14 @@ void tcp_node_start(tcp_node_t tcp_node){
 	
 	
 	// start up ip_node threads
-	if(!_start_ip_threads(tcp_node, ip_link_interface_thread, ip_send_thread, ip_command_thread)){
+	if(!_start_ip_threads(tcp_node, &ip_link_interface_thread, &ip_send_thread, &ip_command_thread)){
 		// failed to start thread that runs ip_node_start() -- get out and destroy
 		puts("Failed to start ip_node");
 		return;
 	}
 
 	// start thread for reading in standard inputs
-	if(!_start_stdin_thread(tcp_node, tcp_stdin_thread)){
+	if(!_start_stdin_thread(tcp_node, &tcp_stdin_thread)){
 		// failed to start thread that runs tcp_node_stdin_thread() -- get out and destroy
 		puts("Failed to start tcp_node_stdin_thread");
 		return;
