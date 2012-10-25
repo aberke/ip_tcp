@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <netinet/in.h>
+#include <assert.h>
 
 #include "utils.h"
 #include "routing_table.h"
@@ -31,6 +32,8 @@ do{							\
 	else printf("\n");		\
 }							\
 while(0) 
+
+#define ASSERT(x) assert(x)
 
 #define TEST_OUTPUT_BAD(msg) printf("%s%s%s\n", ANSI_COLOR_RED, msg, ANSI_COLOR_RESET);
 
@@ -130,6 +133,143 @@ void debug_update_routing_table(routing_table_t rt, forwarding_table_t ft, struc
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 
+void test_window_scale(){
+	window_t window = window_init(1.0, 100, 50);
+	
+	char buffer[BUFFER_SIZE];
+	
+	int i, str_length = 10;
+	strcpy(buffer, "0123456789");
+
+	for(i=0;i<1000;i++)
+		window_push(window, buffer, str_length);
+
+	strcpy(buffer, "THE END");
+	window_push(window,buffer,strlen("THE END"));
+
+	window_chunk_t got;
+	for(i=0;i<(1000/(50/10));i++){
+		got = window_get_next(window);
+		if(got){
+			window_ack(window, (got->seqnum+1) % (200));
+			window_chunk_destroy_total(&got, util_free);
+		}
+		else{
+			printf(".");
+		}	
+	}
+	puts("");
+
+	got = window_get_next(window);
+	
+	ASSERT(got!=NULL);
+	TEST_EQ(got->length, strlen("THE END"), "");
+	TEST_EQ(got->seqnum, strlen("THE END"), "right?");
+
+	memcpy(buffer, got->data, got->length);
+	buffer[got->length] = '\0';
+	TEST_STR_EQ(buffer, "THE END", "");
+	
+	window_chunk_destroy_total(&got, util_free);
+	window_destroy(&window);
+}
+
+void test_window(){
+	window_t window = window_init(1.0, 10, 5);
+	
+	char buffer[BUFFER_SIZE];
+	
+	strcpy(buffer, "Hello");
+	window_push(window, buffer, strlen(buffer));
+	
+	strcpy(buffer, ", World!");
+	window_push(window, buffer, strlen(buffer));
+	
+	window_chunk_t chunk;
+
+	// get the first 5 bytes out of the window (should pull other stuff in)
+	chunk = window_get_next(window);
+	ASSERT(chunk!=NULL);
+	TEST_EQ(chunk->length, 5, "");
+	TEST_EQ(chunk->seqnum, 4, "");
+	
+	memcpy(buffer, chunk->data, 5);
+	buffer[5] = '\0';
+	TEST_STR_EQ(buffer, "Hello", "I will be amazed if this works");
+
+	window_chunk_destroy_total(&chunk, util_free);
+
+
+	// rinse and repeat
+	chunk = window_get_next(window);
+	ASSERT(chunk!=NULL);
+	TEST_EQ(chunk->length, 5, "");
+	TEST_EQ(chunk->seqnum, 9, "");
+	
+	memcpy(buffer, chunk->data, 5);
+	buffer[5] = '\0';
+	TEST_STR_EQ(buffer, ", Wor", "");
+
+	window_chunk_destroy_total(&chunk, util_free);
+
+
+ 	// now 10 bytes should be in flight. So let's ack 7 of them
+	// that should be enough to get the rest of the stuff
+	window_ack(window, 5);
+
+
+	// and try to get the tail 
+	chunk = window_get_next(window);
+	ASSERT(chunk!=NULL);
+	TEST_EQ(chunk->length, 3, "");
+	TEST_EQ(chunk->seqnum, 12, "");
+	
+	memcpy(buffer, chunk->data, 3);
+	buffer[3] = '\0';
+	TEST_STR_EQ(buffer, "ld!", "");
+
+	window_chunk_destroy_total(&chunk, util_free);
+
+
+	// now do some more
+	strcpy(buffer, "012345");
+	window_push(window, buffer, 6);
+	window_push(window, buffer, 6);
+	window_push(window, buffer, 6);
+
+	chunk = window_get_next(window);
+	ASSERT(chunk!=NULL);
+	window_ack(window, chunk->seqnum);
+	window_chunk_destroy_total(&chunk, util_free);		
+
+	chunk = window_get_next(window);
+	ASSERT(chunk!=NULL);
+	window_ack(window, chunk->seqnum);
+	window_chunk_destroy_total(&chunk, util_free);		
+
+	chunk = window_get_next(window);
+	ASSERT(chunk!=NULL);
+	window_ack(window, chunk->seqnum);
+	window_chunk_destroy_total(&chunk, util_free);		
+
+
+	window_destroy(&window);
+}
+	
+	
+
+void test_wrapping(){
+	/* this function REALLY needs to be correct */
+	
+	int x=0,y=10,z=5;
+	
+	TEST_EQ(WRAP_DIFF(x,y,13),10,"");
+	TEST_EQ(WRAP_DIFF(y,z,13),8, "");
+	TEST_EQ(WRAP_DIFF(y,y,0), 0, "");
+	TEST_EQ(WRAP_DIFF(y,x,11),1, "");
+	TEST_EQ(WRAP_DIFF(z,y,12),5, "");
+}
+
 void test_queue(){
 	queue_t q = queue_init();
 	
@@ -154,18 +294,21 @@ void test_ext_array_scale(){
 	ext_array_t ar = ext_array_init(10);
 
 	char buffer[256];
-	strcpy(buffer, "Hey there");
+	strcpy(buffer, "Hey there you person who are something other than whatever");
 	int strLength = strlen(buffer);
 	
-	int i;
+	int i, r;
 	for(i=0;i<1000;i++){
-		ext_array_push(ar, buffer, strLength);
+		r = rand() % strLength;
+		ext_array_push(ar, buffer, r);
 	}
 	
 	memchunk_t chunk;
-	for(i=0;i<2000;i++){
-		chunk = ext_array_peel(ar, strLength/2);
-		memchunk_destroy_total(&chunk, util_free);
+	for(i=0;i<1000;i++){
+		r = rand() % strLength;
+		chunk = ext_array_peel(ar, r);
+		if(chunk)
+			memchunk_destroy_total(&chunk, util_free);
 	}
 
 	ext_array_destroy(&ar);
@@ -218,55 +361,6 @@ void test_ext_array(){
 
 	free(str);
 }
-
-	
-/*
-void test_window_destroy(){
-	window_t window = window_init(1.0,1,NULL);
-	
-	int a=1, b=2;
-	memchunk_t mem_a = memchunk_init(&a, sizeof(int)); 
-
-	window_push(window, mem_a);
-	
-	window_chunk_t wc = window_get_next(window);
-	window_chunk_destroy(&wc);
-
-	window_destroy(&window);
-}
-
-void test_window(){
-	window_t window = window_init(1.0, 1, NULL);
-	
-	int a=1, b=2, c=3;
-	memchunk_t mem_a = memchunk_init(&a, sizeof(int)), 
-				mem_b = memchunk_init(&b, sizeof(int)),
-				mem_c = memchunk_init(&c, sizeof(int));
-
-	window_push(window, mem_a);
-	window_push(window, mem_b);
-	window_push(window, mem_c);
-
-	window_chunk_t chunk;
-
-	chunk = window_get_next(window);
-	TEST_EQ_PTR(chunk->chunk, mem_a, "FIFO window");
-	TEST_EQ(chunk->seqnum, 0, "");
-	window_chunk_destroy(&chunk);
-	
-	chunk = window_get_next(window);
-	TEST_EQ_PTR(chunk, NULL, "Nothing to send");
-
-	window_ack(window, 0);
-	
-	chunk = window_get_next(window);
-	TEST_EQ_PTR(chunk->chunk, mem_b, "After acking, there's now something to send");
-	TEST_EQ(chunk->seqnum, 0, "");
-	window_chunk_destroy(&chunk);
-
-	window_destroy(&window);
-}
-*/
 
 //// Testing the state machine
 void test_state_machine(){
@@ -585,6 +679,11 @@ int main(int argc, char** argv){
 	
 	TEST(test_ext_array);
 	TEST(test_ext_array_scale);
+	
+	TEST(test_wrapping);
+	
+	TEST(test_window);
+	//TEST(test_window_scale);
 
 	/* RETURN */
 	return(0);
