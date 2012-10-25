@@ -40,6 +40,10 @@ DEPENDENT_DIRS=$(patsubst %, directory/%, $(_DEPENDENT_DIRS))
 
 DEFAULT_ARGS = test/ip/helper_files/A.lnx
 
+NODE_A = test/ip/helper_files/A.lnx
+NODE_B = test/ip/helper_files/B.lnx
+NODE_C = test/ip/helper_files/C.lnx
+
 #default target
 default: build
 
@@ -101,5 +105,19 @@ rebuild: clean build
 
 run: rebuild
 	@./$(EXEC_FILE) $(DEFAULT_ARGS)
+
+runA: rebuild
+	@./$(EXEC_FILE) $(NODE_A)
+	
+runB: rebuild
+	@./$(EXEC_FILE) $(NODE_B)
+	
+runC: rebuild
+	@./$(EXEC_FILE) $(NODE_C)
+
+	
+runNetwork: rebuild
+	cp node test/ip/helper_files/
+	cd test/ip/helper_files; ./runNetwork ABC.net
 
 

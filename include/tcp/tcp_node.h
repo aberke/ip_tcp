@@ -44,6 +44,9 @@ int tcp_node_running(tcp_node_t tcp_node);
 // puts command on to stdin_commands queue
 // returns 1 on success, -1 on failure (failure when queue actually already destroyed)
 int tcp_node_queue_ip_cmd(tcp_node_t tcp_node, char* buffered_cmd);
+// puts command on to to_send queue
+// returns 1 on success, -1 on failure (failure when queue actually already destroyed)
+int tcp_node_queue_ip_send(tcp_node_t tcp_node, char* buffered_cmd);
 
 // returns whether ip_node running still
 int tcp_node_ip_running(tcp_node_t tcp_node);

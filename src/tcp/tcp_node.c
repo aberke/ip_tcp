@@ -71,12 +71,18 @@ static int _start_ip_threads(tcp_node_t tcp_node,
 		bqueue_t *to_read;
 		bqueue_t *stdin_commands;   // way for tcp_node to pass user input commands to ip_node
 	};*/
-	// fetch and put arguments into ip_thread_data_t
-	ip_thread_data_t ip_data = (ip_thread_data_t)malloc(sizeof(struct ip_thread_data));
-	ip_data->ip_node = tcp_node->ip_node;
-	ip_data->to_send = tcp_node->to_send;
-	ip_data->to_read = tcp_node->to_read;
-	ip_data->stdin_commands = tcp_node->stdin_commands;	
+	// fetch and put arguments into ip_thread_data_t  -- each thread responsible for freeing its own ip_thread_data arg
+	ip_thread_data_t ip_data_link_interface_thread = (ip_thread_data_t)malloc(sizeof(struct ip_thread_data));
+	ip_data_link_interface_thread->ip_node = tcp_node->ip_node;
+	ip_data_link_interface_thread->to_read = tcp_node->to_read;
+	
+	ip_thread_data_t ip_data_send_thread = (ip_thread_data_t)malloc(sizeof(struct ip_thread_data));
+	ip_data_send_thread->ip_node = tcp_node->ip_node;
+	ip_data_send_thread->to_send = tcp_node->to_send;
+	
+	ip_thread_data_t ip_data_command_thread = (ip_thread_data_t)malloc(sizeof(struct ip_thread_data));
+	ip_data_command_thread->ip_node = tcp_node->ip_node;	
+	ip_data_command_thread->stdin_commands = tcp_node->stdin_commands;	
 	
 	/* Initialize and set thread detached attribute */
 	pthread_attr_t attr;
@@ -85,29 +91,25 @@ static int _start_ip_threads(tcp_node_t tcp_node,
 	
 	// start up each thread	
 	int status;
-	status = pthread_create(ip_link_interface_thread, &attr, ip_link_interface_thread_run, (void *)ip_data);
+	status = pthread_create(ip_link_interface_thread, &attr, ip_link_interface_thread_run, (void *)ip_data_link_interface_thread);
     if (status){
          printf("ERROR; return code from pthread_create() for ip_link_interface_thread is %d\n", status);
-         free(ip_data);
+         free(ip_data_link_interface_thread);
          return 0;
     }
-    puts("started ip_thread: link_interface_thread");
-    status = pthread_create(ip_send_thread, NULL, ip_send_thread_run, (void *)ip_data);
+    status = pthread_create(ip_send_thread, NULL, ip_send_thread_run, (void *)ip_data_send_thread);
     if (status){
          printf("ERROR; return code from pthread_create() for ip_send_thread is %d\n", status);
-         free(ip_data);
+         free(ip_data_send_thread);
          return 0;
     }
-    puts("started ip_thread: ip_send_thread");
-    status = pthread_create(ip_command_thread, NULL, ip_command_thread_run, (void *)ip_data);
+    status = pthread_create(ip_command_thread, NULL, ip_command_thread_run, (void *)ip_data_command_thread);
     if (status){
          printf("ERROR; return code from pthread_create() for ip_command_thread is %d\n", status);
-         free(ip_data);
+         free(ip_data_command_thread);
          return 0;
     }
-    puts("started ip_thread: ip_command_thread");
     pthread_attr_destroy(&attr);
-    //free(ip_data);  -- free called in ip_command_thread_run
 	return 1;
 }
 
@@ -153,8 +155,11 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	// destroy bqueues
 	puts("About to destroy queues");
 	bqueue_destroy(tcp_node->to_send);
+	free(tcp_node->to_send);
 	bqueue_destroy(tcp_node->to_read);
+	free(tcp_node->to_read);
 	bqueue_destroy(tcp_node->stdin_commands);
+	free(tcp_node->stdin_commands);
 	
 	// TODO: REST OF CLEAN UP
 	
@@ -175,7 +180,6 @@ void tcp_node_start(tcp_node_t tcp_node){
 		ip_command_thread: calls p_thread_cond_wait(&stdin_commands) and handles ip commands loaded on to queue
 	*/
 	pthread_t tcp_stdin_thread, ip_link_interface_thread, ip_send_thread, ip_command_thread;
-	
 	
 	// start up ip_node threads
 	if(!_start_ip_threads(tcp_node, &ip_link_interface_thread, &ip_send_thread, &ip_command_thread)){
@@ -222,32 +226,26 @@ void tcp_node_start(tcp_node_t tcp_node){
 		}
 	}
 	int rc;
-	// is my segmentation fault issue in the threads?
-	puts("joining thread 1");
 	rc = pthread_join(ip_link_interface_thread, NULL);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
-	puts("joining thread 2");
 	rc = pthread_join(ip_send_thread, NULL);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
-	puts("joining thread 3");
 	rc = pthread_join(ip_command_thread, NULL);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
-	puts("joining thread 4");
-	rc = pthread_join(tcp_stdin_thread, NULL);
+	rc = pthread_cancel(tcp_stdin_thread);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
-	puts("threads joined");
 }
 // puts command on to stdin_commands queue
 // returns 1 on success, -1 on failure (failure when queue actually already destroyed)
@@ -256,6 +254,17 @@ int tcp_node_queue_ip_cmd(tcp_node_t tcp_node, char* buffered_cmd){
 	bqueue_t *stdin_commands = tcp_node->stdin_commands;
 	
 	if(bqueue_enqueue(stdin_commands, (void*)buffered_cmd))
+		return -1;
+	
+	return 1;
+}
+// puts command on to to_send queue
+// returns 1 on success, -1 on failure (failure when queue actually already destroyed)
+int tcp_node_queue_ip_send(tcp_node_t tcp_node, char* buffered_cmd){
+	
+	bqueue_t *to_send = tcp_node->to_send;
+	
+	if(bqueue_enqueue(to_send, (void*)buffered_cmd))
 		return -1;
 	
 	return 1;

@@ -236,11 +236,9 @@ void ip_node_print_interfaces(ip_node_t ip_node){
 void *ip_command_thread_run(void *ipdata){
 
 	ip_thread_data_t ip_data = (ip_thread_data_t)ipdata;
-	// only need to extract ip_node and to_send
 	ip_node_t ip_node = ip_data->ip_node;
 	bqueue_t *stdin_commands = ip_data->stdin_commands;
 		
-	// I can destroy ip_data now right??
 	free(ip_data);
 	
 	// create timespec for timeout on pthread_cond_timedwait(&to_send);
@@ -282,8 +280,7 @@ void *ip_send_thread_run(void *ipdata){
 	ip_node_t ip_node = ip_data->ip_node;
 	bqueue_t *to_send = ip_data->to_send;
 	
-	// I can destroy ip_data now right??
-	//free(ip_data);
+	free(ip_data);
 		
 	// create timespec for timeout on pthread_cond_timedwait(&to_send);
 	struct timespec wait_cond = {PTHREAD_COND_TIMEOUT_SEC, PTHREAD_COND_TIMEOUT_NSEC}; //
@@ -327,8 +324,7 @@ void *ip_link_interface_thread_run(void *ipdata){
 	ip_node_t ip_node = ip_data->ip_node;
 	bqueue_t *to_read = ip_data->to_read;	//--- tcp data that ip pushes on to queue for tcp to handle
 	
-	// I can destroy ip_data now right??
-	//free(ip_data);
+	free(ip_data);
 	
 	int retval;
 
@@ -602,12 +598,8 @@ static void _handle_to_send_queue(ip_node_t ip_node, bqueue_t *to_send){
 
 */
 static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands){
-	//char* buffer = (char*) malloc(sizeof(char)*BUFFER_SIZE);	
 
-	//char buffer[BUFFER_SIZE];
-	//char* buffer_pntr = &buffer;
 	char *buffer;
-
 
 /* bqueue_trydequeue attempts to dequeue an item from the queue... if there are no items
  * in the queue, rather than blocking we simply return 1 and *data has
@@ -633,26 +625,20 @@ static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands){
 		else if(buffer[0] == 'u')
 			_handle_user_command_up(ip_node, buffer);
 	
-		else if(!strcmp(buffer, "fp")){
+		else if(!strcmp(buffer, "fp"))
 			forwarding_table_print(ip_node->forwarding_table);	
-		}
 		
-		else if(!strcmp(buffer, "rp")){
+		else if(!strcmp(buffer, "rp"))
 			routing_table_print(ip_node->routing_table);
-		}
-	
-		else if(!strcmp(buffer, "print")){
+
+		else if(!strcmp(buffer, "print"))
 			ip_node_print(ip_node);
-		}
 	
 		else
-			printf("Received unrecognized input from user: %s\n", buffer); 
-	
+			printf("Received unrecognized input from user: %s\n", buffer); 	
 	}
-	/*puts("about to call free on buffer");
-	printf("&buffer = %p\n", buffer);
+	printf("about to free buffer at address %p\n", buffer);
 	free(buffer); 
-	puts("freed buffer");*/
 }
 
 /* Helper to _handle_selected to clean up code -- just does the error printing */
