@@ -4,6 +4,7 @@
 #include <stdio.h>
 
 #define DEBUG 1
+//#define TEST_STATES_ON
 #define DEBUG_PUTS(msg) if(DEBUG){ puts(msg); }
 
 #define STDIN fileno(stdin)
@@ -14,8 +15,9 @@
 
 #define MAX(x,y) ((x) > (y) ? (x) : (y))
 #define MIN(x,y) ((x) < (y) ? (x) : (y))
+#define BETWEEN(x,lo,hi) (((lo) <= (x)) && ((x) <= (hi)))
 #define WRAP_DIFF(x,y,length) ((y) >= (x) ? (y) - (x) : (length) - (x) + (y)) 
-#define WRAP_ADD(x,y,mod) ((x) + (y) % (mod))
+#define WRAP_ADD(x,y,mod) (((x) + (y)) % (mod))
 
 #define LOG(msg) printf msg
 
