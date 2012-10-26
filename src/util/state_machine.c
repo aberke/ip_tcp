@@ -2,7 +2,7 @@
 
 #include "utils.h"
 
-#ifdef DEBUG_ON
+#ifdef TEST_STATES_ON
 #include "test_states.h"
 #else
 #include "tcp_states.h"
