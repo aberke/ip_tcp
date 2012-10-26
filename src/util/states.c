@@ -29,24 +29,47 @@ state_e closed_next_state(transition_e t){
 			return LISTEN;
 		case activeOPEN:
 			return SYN_SENT;
+			
+		case receiveSYN:
+			return NONE;
+		case receiveSYN_ACK:
+			return NONE;
+		case receiveACK:
+			return NONE;
 	}
 	return NONE;
 }
 state_e listen_next_state(transition_e t){
 	
-	switch(t){
+	switch(t){	
+		case passiveOPEN:
+			return NONE;
+		case activeOPEN:
+			return NONE;
+			
 		case receiveSYN:
-			return SYN_RECEIVED;		
+			return SYN_RECEIVED;
+			
+		case receiveSYN_ACK:
+			return NONE;
+		case receiveACK:
+			return NONE;	
 	}
 	return NONE;
 }
 state_e syn_sent_next_state(transition_e t){
 	
-	switch(t){		
+	switch(t){	
+		case passiveOPEN:
+			return NONE;
+		case activeOPEN:
+			return NONE;
+				
 		case receiveSYN:
 			return SYN_RECEIVED;
 		case receiveSYN_ACK:
 			return ESTABLISHED;
+			
 		case receiveACK:
 			return NONE; //right?
 	}
@@ -55,25 +78,34 @@ state_e syn_sent_next_state(transition_e t){
 state_e syn_received_next_state(transition_e t){
 	
 	switch(t){
+		case passiveOPEN:
+			return NONE;
+		case activeOPEN:
+			return NONE;
+		case receiveSYN:
+			return NONE;
+		case receiveSYN_ACK:
+			return NONE;
+			
 		case receiveACK:
 			return ESTABLISHED;
 	}
 	return NONE;
 }
 state_e established_next_state(transition_e t){
-	/*	TODO: DEAL WITH ESTABLISHED STATE AND TEARDOWN
+	/*	TODO: DEAL WITH ESTABLISHED STATE AND TEARDOWN */
 	switch(t){
 		case passiveOPEN:
-		
+			return NONE;
 		case activeOPEN:
-		
+			return NONE;
 		case receiveSYN:
-		
+			return NONE;
 		case receiveSYN_ACK:
-		
+			return NONE;
 		case receiveACK:
-		
-	}*/
+			return NONE;
+	}
 	return NONE;
 }
 
