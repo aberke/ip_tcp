@@ -3,6 +3,8 @@
 #define __TCP_NODE_H__
 
 
+#define START_NUM_INTERFACES 20
+
 //// some helpful static globals
 #define IP_HEADER_SIZE sizeof(struct ip)
 #define UDP_PACKET_MAX_SIZE 1400
@@ -40,6 +42,12 @@ void tcp_node_start(tcp_node_t tcp_node);
 // returns tcp_node->running
 int tcp_node_running(tcp_node_t tcp_node);
 /* ***************************** */
+
+
+// returns next available, currently unused, virtual socket file descriptor to initiate a new tcp_connection with
+int tcp_node_next_virt_socket(tcp_node_t tcp_node);
+// returns next available, currently unused, port to bind or connect/accept a new tcp_connection with
+int tcp_node_next_port(tcp_node_t tcp_node);
 
 // puts command on to stdin_commands queue
 // returns 1 on success, -1 on failure (failure when queue actually already destroyed)

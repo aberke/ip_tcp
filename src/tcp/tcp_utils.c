@@ -10,10 +10,10 @@
 #include "tcp_utils.h"
 
 // a tcp_connection owns a local and remote tcp_socket_address.  This pair defines the connection
-struct tcp_socket_address{
-	uint32_t virt_ip;
-	uint16_t virt_port;
-};
+// struct tcp_socket_address{
+// 	uint32_t virt_ip;
+// 	uint16_t virt_port;
+// };
 // 
 //  81 struct tcphdr {
 //  82     unsigned short  th_sport;   /* source port */

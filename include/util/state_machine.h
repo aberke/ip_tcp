@@ -3,6 +3,8 @@
 
 #include "states.h"
 
+// each tcp_connection has a statemachine keeping track of its state
+
 typedef struct state_machine* state_machine_t;
 
 state_machine_t state_machine_init();

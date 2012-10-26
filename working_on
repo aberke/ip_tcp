@@ -91,6 +91,9 @@ ALEX:
 	
 	QUESTION: I malloc data structures to pass into threads -- where should those be freed?  within thread
 	or within the function that created them?  -- important question since idk what happens if thread fails to create
-	
+
+TODO:	
 	fix checksum!!!
+	create better way of dealing with new sockets/ports -- see tcp_node struct  
+		// for now virt_socket is the index of the tcp_connection in the array
 	
