@@ -88,4 +88,7 @@ ALEX:
 	fix checksum!!!
 	create better way of dealing with new sockets/ports -- see tcp_node struct  
 		// for now virt_socket is the index of the tcp_connection in the array
+		
+	DEAL WITH ESTABLISHED STATE AND TEAR-DOWN	
+	fix states.c to deal with corner conditions
 	
