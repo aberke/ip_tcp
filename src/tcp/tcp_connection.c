@@ -90,12 +90,7 @@ int tcp_connection_get_socket(tcp_connection_t connection){
 	return connection->socket_id;
 }
 
-		
-/* state machine notes:
-	The sequence number of the first data octet in this segment (except
-    when SYN is present). If SYN is present the sequence number is the
-    initial sequence number (ISN) and the first data octet is ISN+1.
-*/	
+
 	
 	
 

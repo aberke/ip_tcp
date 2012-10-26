@@ -1,3 +1,10 @@
+		
+/* state machine notes:
+	The sequence number of the first data octet in this segment (except
+    when SYN is present). If SYN is present the sequence number is the
+    initial sequence number (ISN) and the first data octet is ISN+1.
+*/	
+
 #include <stdlib.h>
 
 #include "utils.h"
