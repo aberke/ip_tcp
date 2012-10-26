@@ -30,7 +30,61 @@ static int _start_ip_threads(tcp_node_t tcp_node,
 			pthread_t* ip_link_interface_thread, pthread_t* ip_send_thread, pthread_t* ip_command_thread);
 static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t* tcp_stdin_thread);
 
+/* uthash works by keying on a field of a struct, and using that key as 
+   the hashmap key, therefore, it would be impossible to create two hashmaps
+   just using the link_interface struct without duplicating each of the 
+   structs. The solution is to create structs that extract the keyed field. 
+   We have two of these in order to have hashmaps that map the socket, and the ip, 
+   and they are named accordingly */
 
+struct connection_virt_socket_keyed{
+	tcp_connection_t connection;
+	int virt_socket;
+
+	UT_hash_handle hh;
+};
+
+struct connection_port_keyed{
+	tcp_connection_t connection;
+	int port;
+
+	UT_hash_handle hh;
+};
+
+typedef struct connection_virt_socket_keyed* connection_virt_socket_keyed_t;
+typedef struct connection_port_keyed* connection_port_keyed_t;
+
+/* CTORS/DTORS */
+
+/* These are straightforward in the case of the keyed structs. Just store the connection
+   and pull out the socket/port */
+
+connection_virt_socket_keyed_t connection_virt_socket_keyed_init(tcp_connection_t tcp_connection){
+	connection_virt_socket_keyed_t virt_sock_keyed = malloc(sizeof(struct connection_virt_socket_keyed));
+	virt_sock_keyed->virt_socket = tcp_connection_get_socket(tcp_connection);
+	virt_sock_keyed->connection = tcp_connection;
+	return virt_sock_keyed;
+}
+
+//// DO NOT DESTROY THE CONNECTION
+void connection_virt_socket_keyed_destroy(connection_virt_socket_keyed_t* sock_keyed){
+	free(*sock_keyed);
+	*sock_keyed = NULL;
+}
+
+connection_port_keyed_t connection_port_keyed_init(tcp_connection_t connection){
+	connection_port_keyed_t port_keyed = malloc(sizeof(struct connection_port_keyed));
+	port_keyed->port = tcp_connection_get_local_port(connection);
+	port_keyed->connection = connection;
+	
+	return port_keyed;
+}
+
+//// DO NOT DESTROY THE INTERFACE
+void connection_port_keyed_destroy(connection_port_keyed_t* port_keyed){
+	free(*port_keyed);
+	*port_keyed = NULL;
+}
 
 struct tcp_node{
 	int running; // 0 for not running, 1 for running // mimics ip_node
@@ -38,11 +92,122 @@ struct tcp_node{
 	bqueue_t *to_send;	//--- tcp data for ip to send
 	bqueue_t *to_read;	//--- tcp data that ip pushes on to queue for tcp to handle
 	bqueue_t *stdin_commands;	//---  way for tcp_node to pass user input commands to ip_node
-	// owns statemachine
-	// owns window
+	
 	// owns table of tcp_connections
+		// each tcp_connection owns a statemachine to keep track of its state
+
+	int num_connections; //number of current tcp_connections
+	int connection_array_size; // will need to realloc if don't initially create enough room in array kernal
+	
+	tcp_connection_t* connections;
+	connection_virt_socket_keyed_t virt_socketToConnection;
+	connection_port_keyed_t portToConnection;
+	
+	// For now have silly way of making sure we don't repeat a virt_socket or port number.  TODO: FIX!!!!!
+	int virt_socket_count;	//TODO: Instead of increasing virt_socket by one at each new connection, create system of storing available socket Id's
+	int port_count;	//TODO: same as directly above, but with ports
 };
 
+tcp_node_t tcp_node_init(iplist_t* links){
+	// initalize ip_node -- return FAILURE if ip_node a failure
+	ip_node_t ip_node = ip_node_init(links);
+	if(!ip_node)
+		return NULL;
+
+	// create tcp_node
+	tcp_node_t tcp_node = (tcp_node_t)malloc(sizeof(struct tcp_node));	
+	tcp_node->ip_node = ip_node;
+	
+	/************ Create Queues ********************/			
+	// create to_send and to_read stdin_commands queues that allow tcp_node and ip_node to communicate
+	// to_send is loaded with tcp packets by tcp_node that need to be sent by ip_node
+	bqueue_t *to_send = (bqueue_t*) malloc(sizeof(bqueue_t));
+	bqueue_init(to_send);
+	tcp_node->to_send = to_send;
+	// to_read is loaded with unwrapped ip_packets by ip_node that tcp_node needs to handle and unwrap as tcp packets
+	bqueue_t *to_read = (bqueue_t*) malloc(sizeof(bqueue_t));
+	bqueue_init(to_read);
+	tcp_node->to_read = to_read;
+	// stdin_commands is for the tcp_node to pass user input commands to ip_node that ip_node needs to handle
+	bqueue_t *stdin_commands = (bqueue_t*) malloc(sizeof(bqueue_t));   // way for tcp_node to pass user input commands to ip_node
+	bqueue_init(stdin_commands);	
+	tcp_node->stdin_commands = stdin_commands;
+	/************ Queues Created *****************/
+		
+	/*********** create kernal table  ************/
+	tcp_node->connection_array_size = START_NUM_INTERFACES;  
+	tcp_node->num_connections = 0; // no connections at start
+	tcp_node->connections = (tcp_connection_t*)malloc(sizeof(tcp_connection_t)*(tcp_node->connection_array_size));
+	tcp_node->virt_socketToConnection = NULL;
+	tcp_node->portToConnection = NULL;
+	
+	tcp_node->virt_socket_count = 0;
+	tcp_node->port_count = 0;
+	/************ Kernal Table Created ***********/
+	
+	//// you're still running right? right
+	tcp_node->running = 1;
+	
+	return tcp_node;
+}
+
+void tcp_node_destroy(tcp_node_t tcp_node){
+	// destroy ip_node
+	ip_node_t ip_node = tcp_node->ip_node;
+	ip_node_destroy(&ip_node);
+	// destroy bqueues
+	bqueue_destroy(tcp_node->to_send);
+	free(tcp_node->to_send);
+	bqueue_destroy(tcp_node->to_read);
+	free(tcp_node->to_read);
+	bqueue_destroy(tcp_node->stdin_commands);
+	free(tcp_node->stdin_commands);
+	
+	//// iterate through the hash maps and destroy all of the keys/values,
+	//// this will NOT destroy the interfaces
+	connection_virt_socket_keyed_t socket_keyed, tmp_sock_keyed;
+	HASH_ITER(hh, tcp_node->virt_socketToConnection, socket_keyed, tmp_sock_keyed){
+		HASH_DEL(tcp_node->virt_socketToConnection, socket_keyed);
+		connection_virt_socket_keyed_destroy(&socket_keyed);
+	}
+
+	//// ditto (see above)
+	connection_port_keyed_t port_keyed, tmp_port_keyed;
+	HASH_ITER(hh, tcp_node->portToConnection, port_keyed, tmp_port_keyed){
+		HASH_DEL(tcp_node->portToConnection, port_keyed);
+		connection_port_keyed_destroy(&port_keyed);
+	}
+	//// NOW destroy all the connections
+	int i;
+	for(i=0; i<(tcp_node->num_connections); i++){
+		tcp_connection_destroy(tcp_node->connections[i]);
+	}
+	
+	free(tcp_node);
+	tcp_node = NULL;
+}
+// returns next available, currently unused, port to bind or connect/accept a new tcp_connection with
+int tcp_node_next_port(tcp_node_t tcp_node){
+	int next_port = tcp_node->port_count;
+	
+	// check that next_port not already in use -- not already in hashmap	
+	connection_port_keyed_t port_keyed;
+	while(1){
+		next_port ++;
+		HASH_FIND_INT(tcp_node->portToConnection, &next_port, port_keyed);
+		if(!port_keyed)
+			break;
+	}
+	tcp_node->port_count = next_port;
+	return next_port;
+}
+
+// returns next available, currently unused, virtual socket file descriptor to initiate a new tcp_connection with
+int tcp_node_next_virt_socket(tcp_node_t tcp_node){
+	int next_socket = (tcp_node->virt_socket_count)+1;
+	tcp_node->virt_socket_count = next_socket;
+	return next_socket;
+}
 
 /* helper function to tcp_node_start -- does the work of starting up _handle_tcp_node_stdin() in a thread */
 static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t* tcp_stdin_thread){		
@@ -57,7 +222,6 @@ static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t* tcp_stdin_thread)
          printf("ERROR; return code from pthread_create() for _handle_tcp_node_stdin is %d\n", status);
          return 0;
     }
-    puts("started tcp_stdin_thread");
     pthread_attr_destroy(&attr);
 	return 1;
 }
@@ -113,63 +277,6 @@ static int _start_ip_threads(tcp_node_t tcp_node,
 	return 1;
 }
 
-tcp_node_t tcp_node_init(iplist_t* links){
-	// initalize ip_node -- return FAILURE if ip_node a failure
-	ip_node_t ip_node = ip_node_init(links);
-	if(!ip_node)
-		return NULL;
-
-	// create tcp_node
-	tcp_node_t tcp_node = (tcp_node_t)malloc(sizeof(struct tcp_node));	
-	tcp_node->ip_node = ip_node;
-				
-	// create to_send and to_read stdin_commands queues that allow tcp_node and ip_node to communicate
-	// to_send is loaded with tcp packets by tcp_node that need to be sent by ip_node
-	bqueue_t *to_send = (bqueue_t*) malloc(sizeof(bqueue_t));
-	bqueue_init(to_send);
-	tcp_node->to_send = to_send;
-	// to_read is loaded with unwrapped ip_packets by ip_node that tcp_node needs to handle and unwrap as tcp packets
-	bqueue_t *to_read = (bqueue_t*) malloc(sizeof(bqueue_t));
-	bqueue_init(to_read);
-	tcp_node->to_read = to_read;
-	// stdin_commands is for the tcp_node to pass user input commands to ip_node that ip_node needs to handle
-	bqueue_t *stdin_commands = (bqueue_t*) malloc(sizeof(bqueue_t));   // way for tcp_node to pass user input commands to ip_node
-	bqueue_init(stdin_commands);	
-	tcp_node->stdin_commands = stdin_commands;
-	
-	// init statemachine
-	// init window
-	
-	// create kernal table
-	
-	//// you're still running right? right
-	tcp_node->running = 1;
-	
-	return tcp_node;
-}
-
-void tcp_node_destroy(tcp_node_t tcp_node){
-	// destroy ip_node
-	ip_node_t ip_node = tcp_node->ip_node;
-	ip_node_destroy(&ip_node);
-	// destroy bqueues
-	puts("About to destroy queues");
-	bqueue_destroy(tcp_node->to_send);
-	free(tcp_node->to_send);
-	bqueue_destroy(tcp_node->to_read);
-	free(tcp_node->to_read);
-	bqueue_destroy(tcp_node->stdin_commands);
-	free(tcp_node->stdin_commands);
-	
-	// TODO: REST OF CLEAN UP
-	
-	//destroy statemachine
-	// destroy window
-	
-	free(tcp_node);
-	tcp_node = NULL;
-	puts("tcp_node destroyed");
-}
 void tcp_node_print(tcp_node_t tcp_node);
 
 void tcp_node_start(tcp_node_t tcp_node){
