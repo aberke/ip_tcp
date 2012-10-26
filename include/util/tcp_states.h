@@ -10,7 +10,8 @@ enum state{
 	LISTEN,
 	SYN_SENT,
 	SYN_RECEIVED,
-	ESTABLISHED
+	ESTABLISHED,
+	NONE // is this the best way to handle transitions that don't exist??
 	// TODO:  FINISH STATES!  FOR TEARDOWN
 };
 

@@ -11,6 +11,8 @@
 #include "state_machine.h"
 #include "array2d.h"
 
+#define START_STATE CLOSED
+
 /* Some internal functions: */
 void _set_state(state_machine_t machine, state_e s, transition_e t, state_e next_state);
 void _set_states(state_machine_t machine); // RELIES ON THE FUNCTION get_next_state, which should have already been declard in states.h
@@ -31,7 +33,7 @@ struct state_machine {
 	state to the start state */
 state_machine_t state_machine_init(){
 	state_machine_t state_machine = (struct state_machine*)malloc(sizeof(struct state_machine));
-	ARRAY_INIT(state_machine->transition_matrix, state_e, NUM_STATES, NUM_TRANSITIONS, EMPTY_STATE);
+	ARRAY_INIT(state_machine->transition_matrix, state_e, NUM_STATES, NUM_TRANSITIONS, NONE);
 	state_machine->current_state = START_STATE;
 	_set_states(state_machine);
 	
