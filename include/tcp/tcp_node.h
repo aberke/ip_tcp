@@ -2,6 +2,8 @@
 #ifndef __TCP_NODE_H__ 
 #define __TCP_NODE_H__
 
+#include "tcp_connection.h"
+#include "list.h"
 
 #define START_NUM_INTERFACES 20
 
@@ -59,5 +61,17 @@ int tcp_node_queue_ip_send(tcp_node_t tcp_node, char* buffered_cmd);
 // returns whether ip_node running still
 int tcp_node_ip_running(tcp_node_t tcp_node);
 
+// creates a new tcp_connection and properly places it in kernal table -- ports and ips initialized to 0
+tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node);
+
+// returns 1 if the port is available for use, 0 if already in use
+int tcp_node_port_unused(tcp_node_t tcp_node, int port);
+
+// assigns port to tcp_connection and puts entry in hash table that hashes ports to tcp_connections
+// returns 1 if port successfully assigned, 0 otherwise
+int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int port);
+
+// returns tcp_connection corresponding to socket
+tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int socket);
 
 #endif //__TCP_NODE_H__
