@@ -1,7 +1,8 @@
-// states.c
 
+#include <stdio.h>
 #include "states.h"
 #include "tcp_states.h"
+
 
 /*
 enum state{
@@ -124,5 +125,25 @@ state_e get_next_state(state_e s, transition_e t){
 			return established_next_state(t); break;
 	}
 	return NONE;
+}
+void tcp_states_print_state(state_e s){
+	switch(s){
+		case CLOSED:
+			printf("CLOSED");
+			return;
+		case LISTEN:
+			printf("LISTEN");
+			return;
+		case SYN_SENT:
+			printf("SYN_SENT");
+			return;
+		case SYN_RECEIVED:
+			printf("SYN_RECEIVED");
+			return;
+		case ESTABLISHED:
+			printf("ESTABLISHED");
+			return;	
+	}
+	printf("No Such State");
 }
 

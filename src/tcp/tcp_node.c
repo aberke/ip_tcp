@@ -224,7 +224,12 @@ tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int sock
 // assigns port to tcp_connection and puts entry in hash table that hashes ports to tcp_connections
 // returns 1 if port successfully assigned, 0 otherwise
 int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int port){
-
+	
+	// set connection's port
+	uint16_t uport = (uint16_t)port;
+	tcp_connection_set_local_port(connection, uport);
+	
+	// put port to connection in kernal
 	connection_port_keyed_t port_keyed = connection_port_keyed_init(connection);
 	HASH_ADD_INT(tcp_node->portToConnection, port, port_keyed);	
 	
@@ -262,8 +267,25 @@ int tcp_node_next_virt_socket(tcp_node_t tcp_node){
 }
 /**************** End of functions that deal with Kernal Table *******************/
 
+// iterate through sockets hash map to print info about each socket
+void tcp_node_print(tcp_node_t tcp_node){
 
-void tcp_node_print(tcp_node_t tcp_node);
+	//char* buffer = malloc(sizeof(char)*INET_ADDRSTRLEN);
+	tcp_connection_t connection;
+	int socket, local_port, remote_port;
+	
+	connection_virt_socket_keyed_t socket_keyed, tmp;
+	HASH_ITER(hh, tcp_node->virt_socketToConnection, socket_keyed, tmp){
+		connection = socket_keyed->connection;
+		socket = socket_keyed->virt_socket;
+		local_port = tcp_connection_get_local_port(connection);
+		remote_port = tcp_connection_get_remote_port(connection);
+		printf("\n[Socket %d]:\n", socket);
+		printf("\t<Local Port: %d> <Remote Port: %d> <State: ", local_port, remote_port);
+		tcp_connection_print_state(connection);
+		printf(">\n");
+	}	
+}
 
 void tcp_node_start(tcp_node_t tcp_node){
 	/* tcp_node runs 4 threads: 

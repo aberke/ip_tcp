@@ -9,9 +9,20 @@ void tcp_connection_destroy(tcp_connection_t connection);
 uint16_t tcp_connection_get_remote_port(tcp_connection_t connection);
 uint16_t tcp_connection_get_local_port(tcp_connection_t connection);
 
+void tcp_connection_set_local_port(tcp_connection_t connection, uint16_t port);
+
 uint32_t tcp_connection_get_remote_ip(tcp_connection_t connection);
 uint32_t tcp_connection_get_local_ip(tcp_connection_t connection);
 
 int tcp_connection_get_socket(tcp_connection_t connection);
+
+void tcp_connection_print_state(tcp_connection_t connection);
+
+/********** State Changing Functions *************/
+
+
+int tcp_connection_passive_open(tcp_connection_t connection);
+
+/********** End of Sate Changing Functions *******/
 
 #endif //__TCP_CONNECTION_H__

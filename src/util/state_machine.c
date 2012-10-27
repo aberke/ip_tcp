@@ -9,11 +9,6 @@
 
 #include "utils.h"
 
-#ifdef TEST_STATES_ON
-#include "test_states.h"
-#else
-#include "tcp_states.h"
-#endif
 
 #include "state_machine.h"
 #include "array2d.h"
@@ -101,6 +96,10 @@ void _set_states(state_machine_t machine){
 void _set_state(state_machine_t machine, state_e state, transition_e transition, state_e next_state){
 	ARRAY_PUT(machine->transition_matrix, state, transition, next_state);
 }	
+
+void state_machine_print_state(state_machine_t state_machine){
+	tcp_states_print_state(state_machine->current_state);
+}
 
 
 

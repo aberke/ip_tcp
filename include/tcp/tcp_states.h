@@ -2,6 +2,8 @@
 #ifndef __TCP_STATES_H__ 
 #define __TCP_STATES_H__
 
+#include "states.h"
+
 #define NUM_STATES 5  //TODO: ADD MORE ONCE HAVE TEAR DOWN/CORNER CASES ETC
 #define NUM_TRANSITIONS 5  //TODO: ADD MORE ONCE HAVE CORNER CASES/TEARDOWN ETC
 
@@ -23,7 +25,8 @@ enum transition{
 	receiveACK
 	// TODO:  FINISH TRANSITIONS!  FOR TEARDOWN/CORNER CASES
 };
-	
+
+void tcp_states_print_state(state_e s);
 
       
 #endif // __TCP_STATES_H__
