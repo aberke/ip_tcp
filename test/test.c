@@ -8,7 +8,7 @@
 #include "routing_table.h"
 #include "state_machine.h"
 #include "queue.h"
-#include "window.h"
+#include "send_window.h"
 #include "ext_array.h"
 
 #include "test_states.h"
@@ -162,8 +162,8 @@ void debug_update_routing_table(routing_table_t rt, forwarding_table_t ft, struc
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 
-void test_window_scale(){
-	window_t window = window_init(1.0, 100, 50, 0);
+void test_send_window_scale(){
+	send_window_t window = send_window_init(1.0, 100, 50, 0);
 	
 	char buffer[BUFFER_SIZE];
 	
@@ -171,16 +171,16 @@ void test_window_scale(){
 	strcpy(buffer, "0123456789");
 
 	for(i=0;i<1000;i++)
-		window_push(window, buffer, str_length);
+		send_window_push(window, buffer, str_length);
 
 	strcpy(buffer, "THE END");
-	window_push(window,buffer,strlen("THE END"));
+	send_window_push(send_window,buffer,strlen("THE END"));
 
 	window_chunk_t got;
 	for(i=0;i<(1000/(50/10));i++){
-		got = window_get_next(window);
+		got = send_window_get_next(window);
 		if(got){
-			window_ack(window, (got->seqnum+got->length) % MAX_SEQNUM);
+			send_window_ack(window, (got->seqnum+got->length) % MAX_SEQNUM);
 			window_chunk_destroy_total(&got, util_free);
 		}
 		else{
@@ -189,7 +189,7 @@ void test_window_scale(){
 	}
 	puts("");
 
-	got = window_get_next(window);
+	got = send_window_get_next(window);
 	
 	ASSERT(got!=NULL);
 	TEST_EQ(got->length, strlen("THE END"), "");
@@ -202,24 +202,24 @@ void test_window_scale(){
 	window_chunk_destroy_total(&got, util_free);
 
 
-	window_destroy(&window);
+	send_window_destroy(&window);
 }
 
-void test_window(){
-	window_t window = window_init(1.0, 10, 5, 0);
+void test_send_window(){
+	send_window_t window = send_window_init(1.0, 10, 5, 0);
 	
 	char buffer[BUFFER_SIZE];
 	
 	strcpy(buffer, "Hello");
-	window_push(window, buffer, strlen(buffer));
+	send_window_push(window, buffer, strlen(buffer));
 	
 	strcpy(buffer, ", World!");
-	window_push(window, buffer, strlen(buffer));
+	send_window_push(window, buffer, strlen(buffer));
 	
-	window_chunk_t chunk;
+	send_window_chunk_t chunk;
 
 	// get the first 5 bytes out of the window (should pull other stuff in)
-	chunk = window_get_next(window);
+	chunk = send_window_get_next(window);
 	ASSERT(chunk!=NULL);
 	TEST_EQ(chunk->length, 5, "");
 	TEST_EQ(chunk->seqnum, 0, "");
@@ -232,7 +232,7 @@ void test_window(){
 
 
 	// rinse and repeat
-	chunk = window_get_next(window);
+	chunk = send_window_get_next(window);
 	ASSERT(chunk!=NULL);
 	TEST_EQ(chunk->length, 5, "");
 	TEST_EQ(chunk->seqnum, 5, "");
@@ -241,15 +241,15 @@ void test_window(){
 	buffer[5] = '\0';
 	TEST_STR_EQ(buffer, ", Wor", "");
 
-	window_chunk_destroy_total(&chunk, util_free);
+	send_window_chunk_destroy_total(&chunk, util_free);
 
 
  	// now 10 bytes should be in flight. So let's ack the first 5
-	window_ack(window, 5);
+	send_window_ack(window, 5);
 
 
 	// and try to get the tail 
-	chunk = window_get_next(window);
+	chunk = send_window_get_next(window);
 	ASSERT(chunk!=NULL);
 	TEST_EQ(chunk->length, 3, "");
 	TEST_EQ(chunk->seqnum, 10, "");
@@ -260,32 +260,32 @@ void test_window(){
 
 	window_chunk_destroy_total(&chunk, util_free);
 
-	window_ack(window, 10);
-	window_ack(window, 13);
+	send_window_ack(window, 10);
+	send_window_ack(window, 13);
 
 	// now do some more
 	strcpy(buffer, "012345");
-	window_push(window, buffer, 6);
-	window_push(window, buffer, 6);
-	window_push(window, buffer, 6);
+	send_window_push(window, buffer, 6);
+	send_window_push(window, buffer, 6);
+	send_window_push(window, buffer, 6);
 
-	chunk = window_get_next(window);
+	chunk = send_window_get_next(window);
 	ASSERT(chunk!=NULL);
-	window_ack(window, chunk->seqnum+chunk->length);
+	send_window_ack(window, chunk->seqnum+chunk->length);
+	send_window_chunk_destroy_total(&chunk, util_free);		
+
+	chunk = send_window_get_next(window);
+	ASSERT(chunk!=NULL);
+	send_window_ack(window, chunk->seqnum+chunk->length);
 	window_chunk_destroy_total(&chunk, util_free);		
 
-	chunk = window_get_next(window);
+	chunk = send_window_get_next(window);
 	ASSERT(chunk!=NULL);
-	window_ack(window, chunk->seqnum+chunk->length);
-	window_chunk_destroy_total(&chunk, util_free);		
-
-	chunk = window_get_next(window);
-	ASSERT(chunk!=NULL);
-	window_ack(window, chunk->seqnum+chunk->length);
+	send_window_ack(window, chunk->seqnum+chunk->length);
 	window_chunk_destroy_total(&chunk, util_free);		
 
 
-	window_destroy(&window);
+	send_window_destroy(&window);
 }
 	
 	
@@ -724,8 +724,8 @@ int main(int argc, char** argv){
 	
 	TEST(test_wrapping);
 	
-	TEST(test_window);
-	TEST(test_window_scale);
+	TEST(test_send_window);
+	TEST(test_send_window_scale);
 
 	/* RETURN */
 	return(0);
