@@ -13,6 +13,7 @@
 #include "util/list.h"
 #include "util/parselinks.h"
 #include "tcp_node.h"
+#include "tcp_connection.h"
 
 #include "ip_node.h" 
 
@@ -23,8 +24,6 @@
 #define SHUTDOWN_BOTH	2
 
 // TODO remove the below #defines, replace by linking with API implementation 
-#define v_socket()	0
-#define v_bind(a,b,c)	0
 #define v_listen(a)	0
 #define v_connect(a,b,c)	-ENOTSUP
 #define v_accept(a,b,c)	-ENOTSUP
@@ -32,6 +31,64 @@
 #define v_read(a,b,c)	-ENOTSUP
 #define v_shutdown(a,b)	-ENOTSUP
 #define v_close(a)	-ENOTSUP
+
+void sockets_cmd(const char *line, tcp_node_t tcp_node){
+	tcp_node_print(tcp_node);
+}
+
+int v_socket(tcp_node_t tcp_node){
+	tcp_connection_t connection = tcp_node_new_connection(tcp_node);
+	int socket = tcp_connection_get_socket(connection);
+	return socket;
+}
+void vv_socket(const char *line, tcp_node_t tcp_node){
+		int socket = v_socket(tcp_node);
+		printf("socket: %d\n", socket);	
+}
+/* binds a socket to a port
+always bind to all interfaces - which means addr is unused.
+returns 0 on success or negative number on failure */
+int v_bind(tcp_node_t tcp_node, int socket, char* addr, uint16_t port){
+
+	// check if port already in use
+	if(!tcp_node_port_unused(tcp_node, port))		
+		return EADDRINUSE;	//The given address is already in use.
+	
+	// get corresponding tcp_connection
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(connection == NULL)
+		return EBADF; 	//socket is not a valid descriptor
+		
+	if(tcp_connection_get_local_port(connection))
+		return EINVAL; 	// The socket is already bound to an address.
+		
+	tcp_node_assign_port(tcp_node, connection, port);
+
+	return 0;
+}
+void vv_bind(const char *line, tcp_node_t tcp_node){
+	
+	int socket;
+	char* addr;
+	int port;
+	
+	int ret = sscanf(line, "vv_bind %d %s %u", &socket, addr, &port);
+	if (ret != 3){
+		fprintf(stderr, "syntax error (usage: vv_bind [socket] [address] [port])\n");
+		return;
+	} 
+	ret = v_bind(tcp_node, socket, addr, port);
+	printf("bind result: %d\n", ret);
+}
+void vv_listen(const char *line, tcp_node_t tcp_node){
+	//todo: fille in
+}
+void vv_accept(const char *line, tcp_node_t tcp_node){
+
+}
+void vv_connect(const char *line, tcp_node_t tcp_node){
+
+}
 /*
 struct sendrecvfile_arg {
   int s;
@@ -619,8 +676,8 @@ struct {
   {"down", down_cmd},
   {"up", up_cmd},
   {"fp", fp_cmd},
-  {"rp", rp_cmd},/*
-  {"sockets", sockets_cmd},
+  {"rp", rp_cmd},
+  {"sockets", sockets_cmd},/*
   {"accept", accept_cmd},
   {"connect", connect_cmd},
   {"recv", recv_cmd},
@@ -629,7 +686,13 @@ struct {
   {"shutdown", shutdown_cmd},
   {"close", close_cmd},*/
   {"quit", quit_cmd},	// last two quit commands added by alex -- is this how we want to deal with quitting?
-  {"q", quit_cmd}
+  {"q", quit_cmd},
+  /*Also to directly test our api: */
+  {"v_socket", vv_socket}, // calls v_socket
+  {"v_bind", vv_bind}, // calls v_bind
+  {"v_listen", vv_listen}, // calls v_listen
+  {"v_connect", vv_connect}, // calls v_connect
+  {"v_accept", vv_accept} // calls v_accept
 };
 
 
