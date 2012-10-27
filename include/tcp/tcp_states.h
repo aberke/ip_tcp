@@ -27,6 +27,5 @@ enum transition{
 };
 
 void tcp_states_print_state(state_e s);
-
-      
+	
 #endif // __TCP_STATES_H__

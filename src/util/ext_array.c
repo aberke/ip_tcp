@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include "utils.h"
 #include "ext_array.h"
@@ -67,8 +68,10 @@ void ext_array_push(ext_array_t ext_array, void* data, int length){
 
 /* peels data from the beginning of the array */
 memchunk_t ext_array_peel(ext_array_t ext_array, int length){
+	assert(length >= 0);
+
 	int ret_length = length < ext_array->right - ext_array->left ? length : ext_array->right - ext_array->left;
-	if(ret_length == 0) 
+	if(ret_length <= 0) 
 		return NULL;
 
 	void* data = malloc(ret_length);

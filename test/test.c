@@ -56,6 +56,34 @@ do{																			\
 }																			\
 while(0)
 
+#define TEST_FALSE(cond,annotation)										\
+do{																		\
+	printf("!%-50s\t\t", (#cond) );										\
+	if(!cond){															\
+		printf("%sGood%s", ANSI_COLOR_GREEN, ANSI_COLOR_RESET);			\
+		ANNOTATE(annotation);											\
+	}																	\
+	else {																\
+		printf("%sBad%s", ANSI_COLOR_RED, ANSI_COLOR_RESET);			\
+		ANNOTATE(annotation);											\
+	}																	\
+}																		\
+while(0)
+
+#define TEST_TRUE(cond,annotation)										\
+do{																		\
+	printf("%-50s\t\t", (#cond) );										\
+	if(cond){															\
+		printf("%sGood%s", ANSI_COLOR_GREEN, ANSI_COLOR_RESET);			\
+		ANNOTATE(annotation);											\
+	}																	\
+	else {																\
+		printf("%sBad%s", ANSI_COLOR_RED, ANSI_COLOR_RESET);			\
+		ANNOTATE(annotation);											\
+	}																	\
+}																		\
+while(0)
+
 #define TEST_EQ(e1,e2,annotation)										\
 do{																		\
 	printf("%-50s == %-20s\t\t", (#e1), (#e2));							\
@@ -152,7 +180,7 @@ void test_window_scale(){
 	for(i=0;i<(1000/(50/10));i++){
 		got = window_get_next(window);
 		if(got){
-			window_ack(window, (got->seqnum+got->length) % (200));
+			window_ack(window, (got->seqnum+got->length) % MAX_SEQNUM);
 			window_chunk_destroy_total(&got, util_free);
 		}
 		else{
@@ -165,7 +193,7 @@ void test_window_scale(){
 	
 	ASSERT(got!=NULL);
 	TEST_EQ(got->length, strlen("THE END"), "");
-	TEST_EQ(got->seqnum, 0, "right?");
+	TEST_EQ(got->seqnum, 10000, "");
 
 	memcpy(buffer, got->data, got->length);
 	buffer[got->length] = '\0';
@@ -243,17 +271,17 @@ void test_window(){
 
 	chunk = window_get_next(window);
 	ASSERT(chunk!=NULL);
-	window_ack(window, (chunk->seqnum+chunk->length)%20);
+	window_ack(window, chunk->seqnum+chunk->length);
 	window_chunk_destroy_total(&chunk, util_free);		
 
 	chunk = window_get_next(window);
 	ASSERT(chunk!=NULL);
-	window_ack(window, (chunk->seqnum+chunk->length)%20);
+	window_ack(window, chunk->seqnum+chunk->length);
 	window_chunk_destroy_total(&chunk, util_free);		
 
 	chunk = window_get_next(window);
 	ASSERT(chunk!=NULL);
-	window_ack(window, (chunk->seqnum+chunk->length)%20);
+	window_ack(window, chunk->seqnum+chunk->length);
 	window_chunk_destroy_total(&chunk, util_free);		
 
 
@@ -263,7 +291,7 @@ void test_window(){
 	
 
 void test_wrapping(){
-	/* this function REALLY needs to be correct */
+	/* these functions REALLY needs to be correct */
 	
 	int x=0,y=10,z=5;
 	
@@ -277,6 +305,11 @@ void test_wrapping(){
 	TEST_EQ(WRAP_ADD(0,y,5), 0, "");
 	TEST_EQ(WRAP_ADD(9,1,10),0, "");
 	TEST_EQ(WRAP_ADD(y,101,11),1, ""); 
+
+	TEST_FALSE(CONGRUENT(10,12,5),"");
+	TEST_TRUE(CONGRUENT(10,12,2),"");
+	TEST_TRUE(CONGRUENT(20,0,10),"");
+	TEST_FALSE(CONGRUENT(3,0,4),"");
 }
 
 void test_queue(){
