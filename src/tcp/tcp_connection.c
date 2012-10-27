@@ -18,7 +18,7 @@
 #include "tcp_connection.h"
 #include "tcp_utils.h"
 #include "state_machine.h"
-#include "window.h"
+#include "send_window.h"
 
 
 
@@ -29,7 +29,7 @@ struct tcp_connection{
 	// owns state machine
 	state_machine_t state_machine;
 	// owns window
-	window_t window;
+	send_window_t window;
 };
 
 tcp_connection_t tcp_connection_init(int socket){
@@ -37,7 +37,7 @@ tcp_connection_t tcp_connection_init(int socket){
 	state_machine_t state_machine = state_machine_init();
 	// init window
 	// Neil I need some default args please
-	window_t window = NULL;  //TODO: CHANGE
+	send_window_t window = NULL;  //TODO: CHANGE
 	
 	tcp_connection_t connection = (tcp_connection_t)malloc(sizeof(struct tcp_connection));
 	

@@ -1,3 +1,5 @@
+#define TEST_STATES_ON
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -174,7 +176,7 @@ void test_send_window_scale(){
 		send_window_push(window, buffer, str_length);
 
 	strcpy(buffer, "THE END");
-	send_window_push(send_window,buffer,strlen("THE END"));
+	send_window_push(window,buffer,strlen("THE END"));
 
 	window_chunk_t got;
 	for(i=0;i<(1000/(50/10));i++){
@@ -216,7 +218,7 @@ void test_send_window(){
 	strcpy(buffer, ", World!");
 	send_window_push(window, buffer, strlen(buffer));
 	
-	send_window_chunk_t chunk;
+	window_chunk_t chunk;
 
 	// get the first 5 bytes out of the window (should pull other stuff in)
 	chunk = send_window_get_next(window);
@@ -241,7 +243,7 @@ void test_send_window(){
 	buffer[5] = '\0';
 	TEST_STR_EQ(buffer, ", Wor", "");
 
-	send_window_chunk_destroy_total(&chunk, util_free);
+	window_chunk_destroy_total(&chunk, util_free);
 
 
  	// now 10 bytes should be in flight. So let's ack the first 5
@@ -272,7 +274,7 @@ void test_send_window(){
 	chunk = send_window_get_next(window);
 	ASSERT(chunk!=NULL);
 	send_window_ack(window, chunk->seqnum+chunk->length);
-	send_window_chunk_destroy_total(&chunk, util_free);		
+	window_chunk_destroy_total(&chunk, util_free);		
 
 	chunk = send_window_get_next(window);
 	ASSERT(chunk!=NULL);

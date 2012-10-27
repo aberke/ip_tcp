@@ -4,9 +4,6 @@
 
 #include "states.h"
 
-#define NUM_STATES 5  //TODO: ADD MORE ONCE HAVE TEAR DOWN/CORNER CASES ETC
-#define NUM_TRANSITIONS 5  //TODO: ADD MORE ONCE HAVE CORNER CASES/TEARDOWN ETC
-
 enum state{
 	CLOSED,
 	LISTEN,
@@ -16,6 +13,7 @@ enum state{
 	NONE // is this the best way to handle transitions that don't exist??
 	// TODO:  FINISH STATES!  FOR TEARDOWN
 };
+#define NUM_STATES 5  //TODO: ADD MORE ONCE HAVE TEAR DOWN/CORNER CASES ETC
 
 enum transition{
 	passiveOPEN,
@@ -25,6 +23,9 @@ enum transition{
 	receiveACK
 	// TODO:  FINISH TRANSITIONS!  FOR TEARDOWN/CORNER CASES
 };
+#define NUM_TRANSITIONS 5  //TODO: ADD MORE ONCE HAVE CORNER CASES/TEARDOWN ETC
+
+#define START_STATE 5
 
 void tcp_states_print_state(state_e s);
 	

@@ -3,26 +3,6 @@
 #include "states.h"
 #include "tcp_states.h"
 
-
-/*
-enum state{
-	CLOSED,
-	LISTEN,
-	SYN_SENT,
-	SYN_RECEIVED,
-	ESTABLISHED,
-	NONE
-	// TODO:  FINISH STATES!  FOR TEARDOWN
-};
-enum transition{
-	passiveOPEN,
-	activeOPEN,
-	receiveSYN,
-	receiveSYN_ACK,  //receive SYN+ACK at same time
-	receiveACK
-	// TODO:  FINISH TRANSITIONS!  FOR TEARDOWN/CORNER CASES
-};*/
-
 state_e closed_next_state(transition_e t){
 	
 	switch(t){
@@ -106,8 +86,9 @@ state_e established_next_state(transition_e t){
 			return NONE;
 		case receiveACK:
 			return NONE;
+		default: 
+			return NONE;
 	}
-	return NONE;
 }
 
 state_e get_next_state(state_e s, transition_e t){
@@ -123,10 +104,12 @@ state_e get_next_state(state_e s, transition_e t){
 			return syn_received_next_state(t); break;
 		case ESTABLISHED:
 			return established_next_state(t); break;
+		default:
+			return NONE;
 	}
-	return NONE;
 }
-void tcp_states_print_state(state_e s){
+
+void print_state(state_e s){
 	switch(s){
 		case CLOSED:
 			printf("CLOSED");
@@ -143,7 +126,8 @@ void tcp_states_print_state(state_e s){
 		case ESTABLISHED:
 			printf("ESTABLISHED");
 			return;	
+		default:
+			printf("No Such State");
 	}
-	printf("No Such State");
 }
 

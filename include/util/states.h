@@ -6,7 +6,6 @@ typedef enum transition transition_e;
 
 state_e get_next_state(state_e s, transition_e t);
 
-
 void print_state(state_e s);
 void print_transition(transition_e t);
 
