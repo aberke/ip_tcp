@@ -113,15 +113,15 @@ state_e get_next_state(state_e s, transition_e t){
 	
 	switch(s){
 		case CLOSED:
-			return closed_next_state(t);
+			return closed_next_state(t); break;
 		case LISTEN:
-			return listen_next_state(t);
+			return listen_next_state(t); break;
 		case SYN_SENT:
-			return syn_sent_next_state(t);
+			return syn_sent_next_state(t); break;
 		case SYN_RECEIVED:
-			return syn_received_next_state(t);
+			return syn_received_next_state(t); break;
 		case ESTABLISHED:
-			return established_next_state(t);
+			return established_next_state(t); break;
 	}
 	return NONE;
 }
