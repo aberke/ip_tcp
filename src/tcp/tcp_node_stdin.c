@@ -24,7 +24,6 @@
 #define SHUTDOWN_BOTH	2
 
 // TODO remove the below #defines, replace by linking with API implementation 
-#define v_listen(a)	0
 #define v_connect(a,b,c)	-ENOTSUP
 #define v_accept(a,b,c)	-ENOTSUP
 #define v_write(a,b,c)	-ENOTSUP
@@ -53,15 +52,15 @@ int v_bind(tcp_node_t tcp_node, int socket, char* addr, uint16_t port){
 	// check if port already in use
 	if(!tcp_node_port_unused(tcp_node, port))		
 		return EADDRINUSE;	//The given address is already in use.
-	
+
 	// get corresponding tcp_connection
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(connection == NULL)
 		return EBADF; 	//socket is not a valid descriptor
-		
+
 	if(tcp_connection_get_local_port(connection))
 		return EINVAL; 	// The socket is already bound to an address.
-		
+
 	tcp_node_assign_port(tcp_node, connection, port);
 
 	return 0;
@@ -69,19 +68,54 @@ int v_bind(tcp_node_t tcp_node, int socket, char* addr, uint16_t port){
 void vv_bind(const char *line, tcp_node_t tcp_node){
 	
 	int socket;
-	char* addr;
+	char* addr = malloc(sizeof(char)*FILE_BUF_SIZE);
 	int port;
 	
-	int ret = sscanf(line, "vv_bind %d %s %u", &socket, addr, &port);
+	int ret = sscanf(line, "v_bind %d %s %d", &socket, addr, &port);
 	if (ret != 3){
-		fprintf(stderr, "syntax error (usage: vv_bind [socket] [address] [port])\n");
+		fprintf(stderr, "syntax error (usage: v_bind [socket] [address] [port])\n");
+		free(addr);
 		return;
-	} 
+	} 	
 	ret = v_bind(tcp_node, socket, addr, port);
 	printf("bind result: %d\n", ret);
+	free(addr);
 }
+// returns port that connection is listening on, negative number on failure
+int v_listen(tcp_node_t tcp_node, int socket){
+
+	int port;
+
+	// get corresponding tcp_connection
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(connection == NULL)
+		return EBADF; 	//socket is not a valid descriptor
+
+	if(!tcp_connection_get_local_port(connection)){
+		// port not already set -- must bind to random port	
+		port = tcp_node_next_port(tcp_node);
+		tcp_node_assign_port(tcp_node, connection, port);
+	}
+	
+	if(tcp_connection_passive_open(connection) < 0){ // returns -1 on failure
+		return -1;
+	}
+	
+	port = (int)tcp_connection_get_local_port(connection);
+	
+	return port; // returns 0 on success
+}
+
 void vv_listen(const char *line, tcp_node_t tcp_node){
-	//todo: fille in
+	
+	int socket;
+	int ret = sscanf(line, "v_listen %d", &socket);
+	if(ret !=1){
+		fprintf(stderr, "syntax error (usage: v_listen [socket])\n");
+		return;
+	}
+	ret = v_listen(tcp_node, socket);
+	printf("listen result: %d\n", ret);
 }
 void vv_accept(const char *line, tcp_node_t tcp_node){
 
