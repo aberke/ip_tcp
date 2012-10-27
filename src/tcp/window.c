@@ -16,13 +16,23 @@ do{															\
 	memcpy((dst)+write_right, (src)+0, (size)-write_right);	\
 } 															\
 while(0)
-
+/*
 #define wrap_dst_memcpy(dst, dst_offset, src, size, modulo) \
 do{															\
 	int write_right = MIN((modulo) - (dst_offset), size);	\
 	memcpy((dst)+(dst_offset), (src), write_right);			\
 	memcpy((dst)+0, (src)+write_right, (size)-write_right);	\
 } 															\
+while(0)
+*/
+
+#define window_memcpy(win, src, length) 						\
+do{																\
+	int write_right = MIN(((win)->size+1) - (((win)->right)%((win)->size+1)), length);\
+	memcpy(((win)->slider)+(((win)->right)%((win)->size+1)), 	\
+			(src), write_right);								\
+	memcpy(((win)->slider)+0, (src)+write_right, (length)-write_right);\
+} 																\
 while(0)
 
 #define window_get_seqnum(window, offset)\
@@ -79,9 +89,9 @@ timed_chunk_t timed_chunk_init(int left, int right){
 /* gets data from left all the way up to (but NOT including) right */
 window_chunk_t window_chunk_init(window_t window, int left, int right){
 	window_chunk_t window_chunk = malloc(sizeof(struct window_chunk));
-	int wrap_length = WRAP_DIFF(left, right, window->size+1);
+	int wrap_length = WRAP_DIFF(left, right, MAX_SEQNUM);
 	window_chunk->data = malloc(wrap_length);
-	wrap_src_memcpy(window_chunk->data, window->slider, left, wrap_length, window->size+1);
+	wrap_src_memcpy(window_chunk->data, window->slider, (left%(window->size+1)), wrap_length, window->size+1);
 
 	window_chunk->seqnum = window_get_seqnum(window, left);
 	window_chunk->length = wrap_length;
@@ -130,7 +140,7 @@ window_t window_init(double timeout, int window_size, int send_size, int ISN){
 		isn't on the left of the window */
 	window->acked_chunk_placeholder = timed_chunk_init(0, 0);
 
-	window->left = window->right = window->sent_left = 0;
+	window->left = window->right = window->sent_left = ISN;
 	window->wrap_count = 0;
 	window->ISN = ISN;
 
@@ -151,88 +161,88 @@ void window_destroy(window_t* window){
 }
 
 void window_push(window_t window, void* data, int length){
-	puts("___________________");
-	window_print(window);
-	puts("");
 
-	int left_in_window = window->size - WRAP_DIFF(window->left, window->right, window->size+1);
+	int left_in_window = window->size - WRAP_DIFF(window->left, window->right, MAX_SEQNUM);
 	int to_write       = MIN(left_in_window, length);
-	wrap_dst_memcpy(window->slider,window->right, data, to_write, window->size+1);
-	ext_array_push(window->data_queue, data+to_write, left_in_window-to_write);
-	window->right = (window->right + to_write) % (window->size+1);
-
-	window_print(window);
-	puts("===================");
+	window_memcpy(window, data, to_write);
+	ext_array_push(window->data_queue, data+to_write, length-to_write);
+	window->right = (window->right + to_write) % MAX_SEQNUM;
+	
 }
 
 window_chunk_t window_get_next(window_t window){
-	puts("***************************");
-	window_print(window);
-	puts("");
-
 	timed_chunk_t chunk;
 	if((chunk = (timed_chunk_t)queue_pop(window->to_send)) == NULL){
-		int left_to_send = WRAP_DIFF(window->sent_left, window->right, window->size+1);
+		int left_to_send = WRAP_DIFF(window->sent_left, window->right, MAX_SEQNUM);
 		if(!left_to_send) 
 			return NULL;
 		else 
 		{
 			int chunk_size = MIN(window->send_size, left_to_send);
-			chunk 	  	   = timed_chunk_init(window->sent_left, (window->sent_left + chunk_size) % (window->size + 1));
+			chunk 	  	   = timed_chunk_init(window->sent_left, (window->sent_left + chunk_size) % MAX_SEQNUM);
 
 			int i;
 			for(i=0;i<chunk_size;i++){
 				window->timed_chunks[(window->sent_left + i) % (window->size + 1)] = chunk;
 			}
 
-			window->sent_left = (window->sent_left + chunk_size) % (window->size+1);
+			window->sent_left = (window->sent_left + chunk_size) % MAX_SEQNUM;
 		}
 	}
 
 	time(&(chunk->start_time));
 	chunk->status = WAITING;
-	
-	window_print(window);
-	puts("==========================");
 
 	return window_chunk_init(window, chunk->left, chunk->right);
 }
 
 void window_ack(window_t window, int seqnum){
-	int window_min = window_get_seqnum(window, window->left),
-		window_max = window_get_seqnum(window, window->right);
+
+	int window_min = window->left,
+		window_max = window->right;
 	
 	if(!BETWEEN(seqnum, window_min, window_max))
-		{ LOG(("Received invalid seqnum: %d\n", seqnum)); return; }
+		{ LOG(("Received invalid seqnum: %d, current window_min: %d, window_max: %d\n", seqnum, window_min, window_max)); return; }
 
-	seqnum = seqnum==0 ? MAX_SEQNUM  : (seqnum-1)%(window->size+1);
+	seqnum = seqnum==0 ? MAX_SEQNUM  : seqnum-1;
 	
-	timed_chunk_t acked_chunk = window->timed_chunks[seqnum];
+	timed_chunk_t acked_chunk = window->timed_chunks[(seqnum)%(window->size+1)];
 	if(!acked_chunk)
 		{ LOG(("NULL acked_chunk")); return; }
 
+
 	int acked_left = acked_chunk->left;
-	printf("[seqnum %d] [acked_left %d]\n", seqnum, acked_left);
 	if (window->left == acked_left) {
 		int acked_right = seqnum;
-		do{ acked_right = (acked_right+1) % (window->size+1); }
-		while(window->timed_chunks[acked_right] == window->acked_chunk_placeholder);
-		
+		do{ 
+			acked_right = (acked_right+1) % MAX_SEQNUM;
+			if(CONGRUENT(acked_left, acked_right, window->size+1)) break;
+		}
+		while(window->timed_chunks[(acked_right % (window->size+1))] == window->acked_chunk_placeholder);
+
 		int i;
-		for(i=acked_left;i!=acked_right;i=(i+1)%(window->size+1)) window->timed_chunks[i] = NULL;
+		for( i=(acked_left%(window->size+1));
+				!CONGRUENT(i, acked_right, window->size+1);
+					i=(i+1)%(window->size+1)) {
+			window->timed_chunks[i] = NULL;
+		}
+	
 		free(acked_chunk);
 
 		window->left = acked_right;
-		memchunk_t from_queue = ext_array_peel(window->data_queue, window->size-WRAP_DIFF(window->left, window->right, window->size+1));
+		memchunk_t from_queue = ext_array_peel(window->data_queue, window->size-WRAP_DIFF(window->left, window->right, MAX_SEQNUM));
 		if(from_queue){
-			wrap_dst_memcpy(window->slider, window->right, from_queue->data, from_queue->length, window->size+1);
-			window->right = (window->right + from_queue->length) % (window->size + 1);
-			memchunk_destroy(&from_queue);
+			window_memcpy(window, from_queue->data, from_queue->length);
+			window->right = (window->right + from_queue->length) % MAX_SEQNUM;
+			memchunk_destroy_total(&from_queue, util_free);
 		}
 	}
 	else{
 		int i;
-		for(i=acked_left;i!=seqnum;i=(i+1)%(window->size+1)) window->timed_chunks[i] = window->acked_chunk_placeholder;
+		for(i=(acked_left%(window->size+1));
+			!CONGRUENT(i,seqnum,(window->size+1));
+				i=(i+1)%(window->size+1)) 
+			window->timed_chunks[i] = window->acked_chunk_placeholder;
 		acked_chunk->left=seqnum;
 	}
 }
@@ -269,13 +279,14 @@ void window_check_timers(window_t window){
 }	
 
 void _free_timers(window_t* window){
+	
 	timed_chunk_t chunk;
 	if((*window)->size > 0){
 		chunk = (*window)->timed_chunks[0];
 
 		int until;
 		if (chunk)
-			until = chunk->left == 0 ? (*window)->size : chunk->left;
+			until = chunk->left == 0 ? (*window)->size : chunk->left%((*window)->size+1);
 		else 
 			until = (*window)->size;
 

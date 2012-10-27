@@ -24,6 +24,4 @@ enum transition{
 	// TODO:  FINISH TRANSITIONS!  FOR TEARDOWN/CORNER CASES
 };
 	
-
-      
 #endif // __TCP_STATES_H__

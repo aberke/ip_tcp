@@ -16,6 +16,7 @@
 #define MAX(x,y) ((x) > (y) ? (x) : (y))
 #define MIN(x,y) ((x) < (y) ? (x) : (y))
 #define BETWEEN(x,lo,hi) (((lo) <= (x)) && ((x) <= (hi)))
+#define CONGRUENT(a,b,mod) ((a) % (mod) == (b) % (mod))
 #define WRAP_DIFF(x,y,length) ((y) >= (x) ? (y) - (x) : (length) - (x) + (y)) 
 #define WRAP_ADD(x,y,mod) (((x) + (y)) % (mod))
 
