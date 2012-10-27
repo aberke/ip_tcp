@@ -1,3 +1,10 @@
+		
+/* state machine notes:
+	The sequence number of the first data octet in this segment (except
+    when SYN is present). If SYN is present the sequence number is the
+    initial sequence number (ISN) and the first data octet is ISN+1.
+*/	
+
 #include <stdlib.h>
 
 #include "utils.h"
@@ -10,6 +17,8 @@
 
 #include "state_machine.h"
 #include "array2d.h"
+
+#define START_STATE CLOSED
 
 /* Some internal functions: */
 void _set_state(state_machine_t machine, state_e s, transition_e t, state_e next_state);
@@ -31,7 +40,7 @@ struct state_machine {
 	state to the start state */
 state_machine_t state_machine_init(){
 	state_machine_t state_machine = (struct state_machine*)malloc(sizeof(struct state_machine));
-	ARRAY_INIT(state_machine->transition_matrix, state_e, NUM_STATES, NUM_TRANSITIONS, EMPTY_STATE);
+	ARRAY_INIT(state_machine->transition_matrix, state_e, NUM_STATES, NUM_TRANSITIONS, NONE);
 	state_machine->current_state = START_STATE;
 	_set_states(state_machine);
 	

@@ -1,6 +1,7 @@
 NEIL:
 state_machine -- done
 window        -- struct that implements a very abstract, high-level version of the sliding window protocol -- almost done
+					-- please make some default init args
 
 Change Alex made to IP: We have added a type: TCP_DATA=6  which is the protocol number in the IP packet for TCP
 					This is now defined where RIP_DATA and TEST_DATA defined
@@ -12,7 +13,7 @@ Change Alex made to IP: We have added a type: TCP_DATA=6  which is the protocol 
 		_________________________________ __ __ __
 		int socket_id		| 	| 	|	|				<-- exactly what socket_api passes back when call socket(), accept() etc
 		___________________________________________
-		int port			|	|	|	|				<-- needs unique identifier for stdin 
+		uint16 port			|	|	|	|				<-- needs unique identifier for stdin 
 		___________________________________________			int value assigned only once bind accept, or connect called
 		struct tcp_connection|	|	|	|
 		_____________________________________ _ ___ __
@@ -82,18 +83,13 @@ tcp_node runs ip_node in 3 separate threads that handle different responsibiliti
 			
 NEIL:
 
-TODO: THINK ABOUT DESIGN AND COMMUNICATE WITH ALEX PLEASE
-please accomodate for new util files: circular_buffer.c, bqueue.c, node_readline.c, bq_list.h, node.c etc in makefile
-
-
 ALEX:
-	implement ***
-	
-	QUESTION: I malloc data structures to pass into threads -- where should those be freed?  within thread
-	or within the function that created them?  -- important question since idk what happens if thread fails to create
 
-TODO:	
+	TODO:	
 	fix checksum!!!
 	create better way of dealing with new sockets/ports -- see tcp_node struct  
 		// for now virt_socket is the index of the tcp_connection in the array
+		
+	DEAL WITH ESTABLISHED STATE AND TEAR-DOWN	
+	fix states.c to deal with corner conditions
 	
