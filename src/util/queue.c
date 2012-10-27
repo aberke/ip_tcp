@@ -12,6 +12,8 @@ struct queue_el{
 struct queue{
 	struct queue_el* head;
 	struct queue_el* tail;
+	int size;
+	int length;
 };
 
 typedef struct queue_el* queue_el_t;
@@ -30,14 +32,33 @@ void queue_el_destroy(queue_el_t* el){
 	*el = NULL;
 }
 
+
 /* inits the queue, will initially be empty */
 queue_t queue_init(){
 	queue_t q = malloc(sizeof(struct queue));
 	q->head = q->tail = NULL;
+	q->size = -1;
+	q->length = 0;
 	return q;
 }
 
-void queue_push(queue_t q, void* data){
+void queue_set_size(queue_t q, int size){
+	q->size = size;
+}
+
+int queue_full(queue_t q){
+	return q->size >= 0 && q->length >= q->size;
+}
+
+/* 
+returns 
+	-1  unable to push
+	 0  successful
+*/
+int queue_push(queue_t q, void* data){
+	if(q->size >= 0 && q->length >= q->size)	
+		return -1;
+
 	queue_el_t tail = q->tail;
 	if(!tail){
 		q->head = q->tail = queue_el_init(data);
@@ -46,9 +67,20 @@ void queue_push(queue_t q, void* data){
 		tail->next = queue_el_init(data);
 		q->tail = tail->next; 
 	}
+
+	q->length++;
+	return 0;
 }
 
-void queue_push_front(queue_t q, void* data){
+/*
+returns
+	-1  unable to push
+	 0  successful
+*/
+int queue_push_front(queue_t q, void* data){
+	if(q->size >= 0 && q->length >= q->size)	
+		return -1;
+
 	queue_el_t head = q->head;
 	if(!head){
 		q->head = q->tail = queue_el_init(data);
@@ -57,6 +89,9 @@ void queue_push_front(queue_t q, void* data){
 		q->head = queue_el_init(data);
 		q->head->next = head;
 	}
+	
+	q->length++;
+	return 0;
 }
 
 /* Peek at the head of the queue, but don't remove it */
@@ -82,6 +117,7 @@ void* queue_pop(queue_t q){
 	
 	void* result = tmp->data;
 	queue_el_destroy(&tmp);	
+	q->length--;
 	return result;
 }
 

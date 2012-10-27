@@ -5,7 +5,6 @@
 
 #ifdef TEST_STATES_ON
 #include "test_states.h"
-#error test_states_on
 #else
 #include "tcp_states.h"
 #endif

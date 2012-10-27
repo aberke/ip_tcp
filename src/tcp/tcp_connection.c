@@ -18,7 +18,7 @@
 #include "tcp_connection.h"
 #include "tcp_utils.h"
 #include "state_machine.h"
-#include "window.h"
+#include "send_window.h"
 
 #define WINDOW_DEFAULT_TIMEOUT 3;
 
@@ -29,6 +29,7 @@ struct tcp_connection{
 	tcp_socket_address_t remote_addr;
 	// owns state machine
 	state_machine_t state_machine;
+
 	// owns window for sending and window for receiving
 	send_window_t send_window;
 	//receive_window_t receive_window;
@@ -41,6 +42,7 @@ tcp_connection_t tcp_connection_init(int socket){
 	state_machine_t state_machine = state_machine_init();
 	// init window
 	// Neil I need some default args please
+
 	send_window_t send_window = send_window_init(
 	
 	tcp_connection_t connection = (tcp_connection_t)malloc(sizeof(struct tcp_connection));

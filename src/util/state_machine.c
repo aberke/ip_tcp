@@ -8,8 +8,6 @@
 #include <stdlib.h>
 
 #include "utils.h"
-
-
 #include "state_machine.h"
 #include "array2d.h"
 
@@ -98,7 +96,7 @@ void _set_state(state_machine_t machine, state_e state, transition_e transition,
 }	
 
 void state_machine_print_state(state_machine_t state_machine){
-	tcp_states_print_state(state_machine->current_state);
+	print_state(state_machine->current_state);
 }
 
 
