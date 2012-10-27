@@ -20,6 +20,7 @@
 #include "state_machine.h"
 #include "window.h"
 
+#define WINDOW_DEFAULT_TIMEOUT 3;
 
 
 struct tcp_connection{
