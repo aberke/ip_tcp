@@ -29,8 +29,11 @@ struct tcp_connection{
 	tcp_socket_address_t remote_addr;
 	// owns state machine
 	state_machine_t state_machine;
-	// owns window
-	window_t window;
+	// owns window for sending and window for receiving
+	send_window_t send_window;
+	//receive_window_t receive_window;
+	
+	//
 };
 
 tcp_connection_t tcp_connection_init(int socket){
@@ -38,7 +41,7 @@ tcp_connection_t tcp_connection_init(int socket){
 	state_machine_t state_machine = state_machine_init();
 	// init window
 	// Neil I need some default args please
-	window_t window = NULL;  //TODO: CHANGE
+	send_window_t send_window = send_window_init(
 	
 	tcp_connection_t connection = (tcp_connection_t)malloc(sizeof(struct tcp_connection));
 	
@@ -50,7 +53,7 @@ tcp_connection_t tcp_connection_init(int socket){
 	connection->remote_addr.virt_port = 0;
 	
 	connection->state_machine = state_machine;
-	connection->window = window;
+	connection->send_window = send_window;
 	
 	return connection;
 }
