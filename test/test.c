@@ -7,10 +7,11 @@
 #include "utils.h"
 #include "routing_table.h"
 #include "state_machine.h"
-#include "config.h"
 #include "queue.h"
 #include "window.h"
 #include "ext_array.h"
+
+#include "test_states.h"
 
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
@@ -41,7 +42,7 @@ while(0)
 do{																			\
 	printf("%-50s == %-20s\t\t", (#e1), (#e2));								\
 	if(!strcmp(e1,e2)){														\
-		printf("%sGood%s\n", ANSI_COLOR_GREEN, ANSI_COLOR_RESET);			\
+		printf("%sGood%s", ANSI_COLOR_GREEN, ANSI_COLOR_RESET);			\
 		ANNOTATE(annotation);												\
 	}																		\
 	else {																	\
@@ -134,7 +135,7 @@ void debug_update_routing_table(routing_table_t rt, forwarding_table_t ft, struc
 /////////////////////////////////////////////////////////////////////////////////////////
 
 void test_window_scale(){
-	window_t window = window_init(1.0, 100, 50);
+	window_t window = window_init(1.0, 100, 50, 0);
 	
 	char buffer[BUFFER_SIZE];
 	
@@ -151,7 +152,7 @@ void test_window_scale(){
 	for(i=0;i<(1000/(50/10));i++){
 		got = window_get_next(window);
 		if(got){
-			window_ack(window, (got->seqnum+1) % (200));
+			window_ack(window, (got->seqnum+got->length) % (200));
 			window_chunk_destroy_total(&got, util_free);
 		}
 		else{
@@ -164,18 +165,20 @@ void test_window_scale(){
 	
 	ASSERT(got!=NULL);
 	TEST_EQ(got->length, strlen("THE END"), "");
-	TEST_EQ(got->seqnum, strlen("THE END"), "right?");
+	TEST_EQ(got->seqnum, 0, "right?");
 
 	memcpy(buffer, got->data, got->length);
 	buffer[got->length] = '\0';
 	TEST_STR_EQ(buffer, "THE END", "");
 	
 	window_chunk_destroy_total(&got, util_free);
+
+
 	window_destroy(&window);
 }
 
 void test_window(){
-	window_t window = window_init(1.0, 10, 5);
+	window_t window = window_init(1.0, 10, 5, 0);
 	
 	char buffer[BUFFER_SIZE];
 	
@@ -191,7 +194,7 @@ void test_window(){
 	chunk = window_get_next(window);
 	ASSERT(chunk!=NULL);
 	TEST_EQ(chunk->length, 5, "");
-	TEST_EQ(chunk->seqnum, 4, "");
+	TEST_EQ(chunk->seqnum, 0, "");
 	
 	memcpy(buffer, chunk->data, 5);
 	buffer[5] = '\0';
@@ -204,7 +207,7 @@ void test_window(){
 	chunk = window_get_next(window);
 	ASSERT(chunk!=NULL);
 	TEST_EQ(chunk->length, 5, "");
-	TEST_EQ(chunk->seqnum, 9, "");
+	TEST_EQ(chunk->seqnum, 5, "");
 	
 	memcpy(buffer, chunk->data, 5);
 	buffer[5] = '\0';
@@ -213,8 +216,7 @@ void test_window(){
 	window_chunk_destroy_total(&chunk, util_free);
 
 
- 	// now 10 bytes should be in flight. So let's ack 7 of them
-	// that should be enough to get the rest of the stuff
+ 	// now 10 bytes should be in flight. So let's ack the first 5
 	window_ack(window, 5);
 
 
@@ -222,7 +224,7 @@ void test_window(){
 	chunk = window_get_next(window);
 	ASSERT(chunk!=NULL);
 	TEST_EQ(chunk->length, 3, "");
-	TEST_EQ(chunk->seqnum, 12, "");
+	TEST_EQ(chunk->seqnum, 10, "");
 	
 	memcpy(buffer, chunk->data, 3);
 	buffer[3] = '\0';
@@ -230,6 +232,8 @@ void test_window(){
 
 	window_chunk_destroy_total(&chunk, util_free);
 
+	window_ack(window, 10);
+	window_ack(window, 13);
 
 	// now do some more
 	strcpy(buffer, "012345");
@@ -239,17 +243,17 @@ void test_window(){
 
 	chunk = window_get_next(window);
 	ASSERT(chunk!=NULL);
-	window_ack(window, chunk->seqnum);
+	window_ack(window, (chunk->seqnum+chunk->length)%20);
 	window_chunk_destroy_total(&chunk, util_free);		
 
 	chunk = window_get_next(window);
 	ASSERT(chunk!=NULL);
-	window_ack(window, chunk->seqnum);
+	window_ack(window, (chunk->seqnum+chunk->length)%20);
 	window_chunk_destroy_total(&chunk, util_free);		
 
 	chunk = window_get_next(window);
 	ASSERT(chunk!=NULL);
-	window_ack(window, chunk->seqnum);
+	window_ack(window, (chunk->seqnum+chunk->length)%20);
 	window_chunk_destroy_total(&chunk, util_free);		
 
 
@@ -268,6 +272,11 @@ void test_wrapping(){
 	TEST_EQ(WRAP_DIFF(y,y,0), 0, "");
 	TEST_EQ(WRAP_DIFF(y,x,11),1, "");
 	TEST_EQ(WRAP_DIFF(z,y,12),5, "");
+
+	TEST_EQ(WRAP_ADD(z,y,8), 7, "");
+	TEST_EQ(WRAP_ADD(0,y,5), 0, "");
+	TEST_EQ(WRAP_ADD(9,1,10),0, "");
+	TEST_EQ(WRAP_ADD(y,101,11),1, ""); 
 }
 
 void test_queue(){
@@ -683,7 +692,7 @@ int main(int argc, char** argv){
 	TEST(test_wrapping);
 	
 	TEST(test_window);
-	//TEST(test_window_scale);
+	TEST(test_window_scale);
 
 	/* RETURN */
 	return(0);
