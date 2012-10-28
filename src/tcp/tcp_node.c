@@ -2,6 +2,7 @@
 #include <inttypes.h>
 #include <netinet/ip.h>
 #include <time.h>
+#include <sys/time.h>
 
 #include "tcp_utils.h"
 #include "tcp_node_stdin.h"
@@ -22,8 +23,8 @@
 #include "uthash.h"
 
 
-
 // static functions
+static void _handle_packet(void* packet);
 static void _handle_read(tcp_node_t tcp_node);
 static int _start_ip_threads(tcp_node_t tcp_node, 
 			pthread_t* ip_link_interface_thread, pthread_t* ip_send_thread, pthread_t* ip_command_thread);
@@ -159,7 +160,14 @@ tcp_node_t tcp_node_init(iplist_t* links){
 	return tcp_node;
 }
 
+/* will this do it? */
+void tcp_node_stop(tcp_node_t tcp_node){
+	tcp_node->running = 0;
+}
+
 void tcp_node_destroy(tcp_node_t tcp_node){
+	puts("destroying?");
+
 	// destroy ip_node
 	ip_node_t ip_node = tcp_node->ip_node;
 	ip_node_destroy(&ip_node);
@@ -188,7 +196,7 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	//// NOW destroy all the connections
 	int i;
 	for(i=0; i<(tcp_node->num_connections); i++){
-		tcp_connection_destroy(tcp_node->connections[i]);
+		tcp_connection_destroy(&(tcp_node->connections[i]));
 	}
 	
 	free(tcp_node);
@@ -297,6 +305,7 @@ void tcp_node_start(tcp_node_t tcp_node){
 	pthread_t tcp_stdin_thread, ip_link_interface_thread, ip_send_thread, ip_command_thread;
 	
 	// start up ip_node threads
+	
 	if(!_start_ip_threads(tcp_node, &ip_link_interface_thread, &ip_send_thread, &ip_command_thread)){
 		// failed to start thread that runs ip_node_start() -- get out and destroy
 		puts("Failed to start ip_node");
@@ -311,12 +320,40 @@ void tcp_node_start(tcp_node_t tcp_node){
 	}
 		
 	// create timespec for timeout on pthread_cond_timedwait(&to_read);
-	struct timespec wait_cond = {PTHREAD_COND_TIMEOUT_SEC, PTHREAD_COND_TIMEOUT_NSEC}; //
-	int wait_cond_ret;
+	struct timespec wait_cond;// = {PTHREAD_COND_TIMEOUT_SEC, PTHREAD_COND_TIMEOUT_NSEC}; //
+	//struct timeval now;
+	//int wait_cond_ret;
 	
+	bqueue_t* to_read = tcp_node->to_read;
+	struct timeval now;
+	void* packet;
+	int ret;
 	while((tcp_node->running)&&(ip_node_running(tcp_node->ip_node))){	
-		bqueue_t *to_read = tcp_node->to_read;
 
+		/* get the time of the day so that we are passing in to bqueue_timed_dequeue_abs
+			the absolute time when we want the timeout to occur (the docs in bqueue.c say
+			relative, but then the argument is called abs_ts so its unclear what they intended).
+			This works for now but we might need to change it when we port over to linux */
+		gettimeofday(&now, NULL);	
+		wait_cond.tv_sec = now.tv_sec+PTHREAD_COND_TIMEOUT_SEC;
+		wait_cond.tv_nsec = 1000*now.tv_usec+PTHREAD_COND_TIMEOUT_NSEC;
+		
+		/* try to get the next thing on queue */
+		ret = bqueue_timed_dequeue_abs(to_read, &packet, &wait_cond);
+		if (ret != 0) 
+			/* should probably check at this point WHY we failed (for instance perhaps the queue
+				was destroyed */
+			continue;
+			
+		/* otherwise there's a packet waiting for you! */
+		_handle_packet(packet);
+	}
+
+		/*
+			Changed by Neil:
+				the job of the blocking queue (the call of dequeue is to block until
+				there is something 
+		
 		if(!(bqueue_empty(to_read))){
 			// handle reading tcp packet from ip_node
 			_handle_read(tcp_node);	
@@ -324,10 +361,17 @@ void tcp_node_start(tcp_node_t tcp_node){
 		else{
 			// wait a moment for to_read to fill -- or continue through while loop after a moment passes
 			pthread_mutex_lock(&(to_read->q_mtx));
+
+			// timedwait waits until the absolute system time is greater than the argument
+			//	passed in as wait_cond, so we have to get the current time before we call it 
+			gettimeofday(&now, NULL);
+			wait_cond.tv_sec += now.tv_sec;
+			wait_cond.tv_nsec += 1000*now.tv_usec;
+
         	if((wait_cond_ret = pthread_cond_timedwait(&(to_read->q_cond), &(to_read->q_mtx), &wait_cond))!=0){
         		if(wait_cond_ret == ETIMEDOUT){
         			// timed out
-      				//puts("pthread_cond_timed_wait for to_read timed out");
+      				puts("pthread_cond_timed_wait for to_read timed out");
       			}
       			else{
       				printf("ERROR: pthread_cond_timed_wait errored out\n");
@@ -339,29 +383,46 @@ void tcp_node_start(tcp_node_t tcp_node){
 			pthread_mutex_unlock(&(to_read->q_mtx));
 			_handle_read(tcp_node);
 		}
-	}
+	}*/
 	
+	/* sorry I may just misunderstand what's going on here, but if
+		we've gotten to this point, don't we want to stop? so we should
+		tell ip_node to shut down? maybe that was done somewhere else, but
+		I'm doing it now. see tcp_node_stop, which is why this matters */
+
+	puts("stopping ip node");
+	ip_node_stop(tcp_node->ip_node);
+
+	puts("waiting on link_interface_thread");
 	int rc;
 	rc = pthread_join(ip_link_interface_thread, NULL);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
+
+	puts("waiting on ip_send_thread");
 	rc = pthread_join(ip_send_thread, NULL);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
+
+	puts("Waiting on command thread");
 	rc = pthread_join(ip_command_thread, NULL);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
+
+	puts("canceling stdin thread");
 	rc = pthread_cancel(tcp_stdin_thread);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
+
+	puts("finished.");
 }
 // puts command on to stdin_commands queue
 // returns 1 on success, -1 on failure (failure when queue actually already destroyed)
@@ -422,6 +483,10 @@ static int _insert_connection_array(tcp_node_t tcp_node, tcp_connection_t connec
 	tcp_node->num_connections = num_connections + 1;
 	
 	return tcp_node->num_connections;
+}
+
+static void _handle_packet(void* packet){
+	///
 }
 
 static void _handle_read(tcp_node_t tcp_node){

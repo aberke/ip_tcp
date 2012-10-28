@@ -154,6 +154,7 @@ int recv_window_receive(recv_window_t recv_window, void* data, int length, int s
 		return -1;
 	}
 
+	int window_max = recv_window->left + recv_window->size;	
 
 	/* this will be what we store in the receiving buffer */
 	recv_window_chunk_t to_store = recv_window_chunk_init(data, length);
@@ -163,7 +164,7 @@ int recv_window_receive(recv_window_t recv_window, void* data, int length, int s
 	for(i=0;i<length;i++){
 
 		index = (seqnum + i) % (recv_window->size+1);
-		if (index==window_max) 
+		if (index==window_max)
 			break;
 
 		stored = recv_window->slider[index];

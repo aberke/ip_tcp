@@ -11,6 +11,7 @@ int main(int argc, char *argv[]){
 		printf("usage: ./node linkfile.lnx\n");
 		return 0;
 	}
+
 	// get linked-list of link_t's
 	iplist_t* linkedlist = parse_links(argv[1]);
 	

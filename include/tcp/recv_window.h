@@ -17,6 +17,7 @@ typedef struct recv_window_chunk* recv_window_chunk_t;
 recv_window_chunk_t recv_window_chunk_init(void* data, int length);
 void recv_window_chunk_destroy(recv_window_chunk_t* rwc);
 void recv_window_chunk_destroy_total(recv_window_chunk_t* rwc, destructor_f destructor);
+void recv_window_chunk_destroy_free(recv_window_chunk_t* rwc);
 
 recv_window_t recv_window_init(int window_size, int ISN);
 void recv_window_destroy(recv_window_t* recv_window);

@@ -76,6 +76,15 @@ do{								\
 }								\
 while(0);				
 
+#define ARRAY_DESTROY_TOTAL(ar_ptr, destructor) 			 \
+do{															 \
+	int i;													 \
+	for(i=0;i<((*(ar_ptr))->height)*((*(ar_ptr))->width);i++)\
+		destructor(&((*(ar_ptr))->elems[i]));				 \
+	free(*(ar_ptr));										 \
+	*(ar_ptr) = NULL;										 \
+}															 \
+while(0);
 
 
 #endif // __ARRAY2D_H__

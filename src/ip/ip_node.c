@@ -180,6 +180,10 @@ ip_node_t ip_node_init(iplist_t* links){
 	return ip_node;
 }
 
+void ip_node_stop(ip_node_t ip_node){	
+	ip_node->running = 0;
+}
+
 void ip_node_destroy(ip_node_t* ip_node){
 	//// destroy forwarding/routing tables
 	forwarding_table_destroy(&((*ip_node)->forwarding_table));
@@ -336,6 +340,8 @@ void *ip_link_interface_thread_run(void *ipdata){
 	time_t last_update,now;
 	time(&last_update);
 	while(ip_node->running){
+		puts("still running.");
+
 		//// first update the list (rebuild it)
 		_update_select_list(ip_node);
 
@@ -358,7 +364,9 @@ void *ip_link_interface_thread_run(void *ipdata){
 			time(&last_update);
 		}
 	}
-	pthread_exit(NULL);
+	puts("interafce thread done");
+	//pthread_exit(NULL);
+	return NULL;
 }
 /* ************************ END OF IP_THREADS ******************************* */
 
@@ -603,7 +611,7 @@ static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands){
 		
 		//// handle the commands
 		if(!strcmp(buffer, "quit") || !strcmp(buffer, "q")){
-			ip_node->running = 0;
+			ip_node_stop(ip_node);
 		}
 		else if(!strcmp(buffer, "interfaces"))
 			ip_node_print_interfaces(ip_node);

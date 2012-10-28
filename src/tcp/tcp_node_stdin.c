@@ -40,10 +40,12 @@ int v_socket(tcp_node_t tcp_node){
 	int socket = tcp_connection_get_socket(connection);
 	return socket;
 }
+
 void vv_socket(const char *line, tcp_node_t tcp_node){
 		int socket = v_socket(tcp_node);
 		printf("socket: %d\n", socket);	
 }
+
 /* binds a socket to a port
 always bind to all interfaces - which means addr is unused.
 returns 0 on success or negative number on failure */
@@ -65,6 +67,7 @@ int v_bind(tcp_node_t tcp_node, int socket, char* addr, uint16_t port){
 
 	return 0;
 }
+
 void vv_bind(const char *line, tcp_node_t tcp_node){
 	
 	int socket;
@@ -81,6 +84,7 @@ void vv_bind(const char *line, tcp_node_t tcp_node){
 	printf("bind result: %d\n", ret);
 	free(addr);
 }
+
 // returns port that connection is listening on, negative number on failure
 int v_listen(tcp_node_t tcp_node, int socket){
 
@@ -117,9 +121,11 @@ void vv_listen(const char *line, tcp_node_t tcp_node){
 	ret = v_listen(tcp_node, socket);
 	printf("listen result: %d\n", ret);
 }
+
 void vv_accept(const char *line, tcp_node_t tcp_node){
 
 }
+
 void vv_connect(const char *line, tcp_node_t tcp_node){
 
 }
@@ -205,8 +211,8 @@ void ip_handle_cmd(const char *line, tcp_node_t tcp_node){
 }
 
 void quit_cmd(const char *line, tcp_node_t tcp_node){
-
-	ip_handle_cmd(line, tcp_node);	
+	tcp_node_stop(tcp_node);
+	//ip_handle_cmd(line, tcp_node);	
 	return;
 }
 void fp_cmd(const char *line, tcp_node_t tcp_node){

@@ -20,6 +20,10 @@
 #include "state_machine.h"
 #include "send_window.h"
 
+#define DEFAULT_TIMEOUT 12.0
+#define DEFAULT_WINDOW_SIZE 1000
+#define DEFAULT_CHUNK_SIZE 100
+#define RAND_ISN rand()
 
 
 struct tcp_connection{
@@ -35,9 +39,9 @@ struct tcp_connection{
 tcp_connection_t tcp_connection_init(int socket){
 	// init state machine
 	state_machine_t state_machine = state_machine_init();
+
 	// init window
-	// Neil I need some default args please
-	send_window_t window = NULL;  //TODO: CHANGE
+	send_window_t window = send_window_init(DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_CHUNK_SIZE, RAND_ISN);
 	
 	tcp_connection_t connection = (tcp_connection_t)malloc(sizeof(struct tcp_connection));
 	
@@ -51,22 +55,23 @@ tcp_connection_t tcp_connection_init(int socket){
 	connection->state_machine = state_machine;
 	connection->window = window;
 	
+	state_machine_set_argument(state_machine, connection);		
+
 	return connection;
 }
 
-void tcp_connection_destroy(tcp_connection_t connection){
-// TODO FILL IN
-	// destroy state machine
-	state_machine_destroy(&(connection->state_machine));
-	//destroy window
-	//window_destroy(&(connection->window));
+void tcp_connection_destroy(tcp_connection_t* connection){
 
-	free(connection);
-	connection = NULL;
+	// destroy window
+	send_window_destroy(&((*connection)->window));
+	// destroy state machine
+	state_machine_destroy(&((*connection)->state_machine));
+
+	free(*connection);
+	*connection = NULL;
 }
 
 /********** State Changing Functions *************/
-
 
 int tcp_connection_passive_open(tcp_connection_t connection){
 
@@ -76,11 +81,12 @@ int tcp_connection_passive_open(tcp_connection_t connection){
 		printf("Calling passiveOPEN on a connection not in the CLOSED state\n");
 		return -1;
 	}
+
 	state_machine_transition(connection->state_machine, passiveOPEN);
 	return 1;
 }
 
-/********** End of Sate Changing Functions *******/
+/********** End of State Changing Functions *******/
 
 
 uint16_t tcp_connection_get_local_port(tcp_connection_t connection){
@@ -116,7 +122,7 @@ void tcp_connection_print_state(tcp_connection_t connection){
 	state_machine_print_state(connection->state_machine);	
 }
 
-	
-	
-
+void tcp_connection_print(tcp_connection_t connection){
+	puts( "IT WORKS!!" );
+}
 	
