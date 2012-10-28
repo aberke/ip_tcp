@@ -11,7 +11,6 @@
 #include "state_machine.h"
 #include "array2d.h"
 
-#define START_STATE CLOSED
 
 /* Some internal functions: */
 void _set_state(state_machine_t machine, state_e s, transition_e t, state_e next_state);
