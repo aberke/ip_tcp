@@ -52,12 +52,15 @@ int tcp_node_next_virt_socket(tcp_node_t tcp_node);
 // returns next available, currently unused, port to bind or connect/accept a new tcp_connection with
 int tcp_node_next_port(tcp_node_t tcp_node);
 
+
+/************************************ These commands currently unused due to Neil's commands below being used instead ****/
 // puts command on to stdin_commands queue
 // returns 1 on success, -1 on failure (failure when queue actually already destroyed)
 int tcp_node_queue_ip_cmd(tcp_node_t tcp_node, char* buffered_cmd);
 // puts command on to to_send queue
 // returns 1 on success, -1 on failure (failure when queue actually already destroyed)
 int tcp_node_queue_ip_send(tcp_node_t tcp_node, char* buffered_cmd);
+/***************************************************************************************/
 
 // returns whether ip_node running still
 int tcp_node_ip_running(tcp_node_t tcp_node);

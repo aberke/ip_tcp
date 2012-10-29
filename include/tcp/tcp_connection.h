@@ -6,7 +6,7 @@
 typedef struct tcp_connection* tcp_connection_t;  
 
 tcp_connection_t tcp_connection_init(int socket);
-void tcp_connection_destroy(tcp_connection_t* connection);
+void tcp_connection_destroy(tcp_connection_t connection);
 
 uint16_t tcp_connection_get_remote_port(tcp_connection_t connection);
 uint16_t tcp_connection_get_local_port(tcp_connection_t connection);

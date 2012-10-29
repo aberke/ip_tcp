@@ -61,17 +61,17 @@ int bqueue_destroy( bqueue_t *q ) {
 
     q->q_status = 1;
     pthread_cond_broadcast( &q->q_cond );
-
+	
     /* wait for all bqueue_debqueue-ing threads to wake and notice that
        the bqueue is going away */
     while( q->q_count )
         pthread_cond_wait( &q->q_cond, &q->q_mtx );
-
+	
     /* free all list elements, leaving data */
     list_iterate_begin( &q->q_list, qi, bqueue_item_t, qi_link ) {
         free( qi );
     } list_iterate_end();
-
+	
     return 0;
 }
 
@@ -206,6 +206,7 @@ int __bqueue_dequeue( bqueue_t *q, void **data,
         if (ret == ETIMEDOUT)
         {
           //dbg(DBG_UTIL, "__bqueue_dequeue: cond timed out\n");	--COMMENTED OUT BY ALEX
+          q->q_count--; //ADDED BY ALEX -- HELLS YES ALEX FOUND THAT BUG -- STEP IT UP TAS BAHAHHA
           return -ETIMEDOUT;
         }
       }

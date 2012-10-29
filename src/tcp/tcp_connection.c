@@ -19,6 +19,9 @@
 #include "tcp_utils.h"
 #include "state_machine.h"
 #include "send_window.h"
+#include "recv_window.h"
+#include "queue.h"
+
 
 #define WINDOW_DEFAULT_TIMEOUT 3.0
 #define WINDOW_DEFAULT_SEND_WINDOW_SIZE 100
@@ -42,7 +45,7 @@ struct tcp_connection{
 
 	// owns window for sending and window for receiving
 	send_window_t send_window;
-	receive_window_t receive_window;
+	recv_window_t receive_window;
 	
 	// owns accept queue to queue syns when listening
 	queue_t accept_queue;
@@ -53,12 +56,11 @@ tcp_connection_t tcp_connection_init(int socket){
 	state_machine_t state_machine = state_machine_init();
 
 	// init windows
-	send_window_t send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DFAULT_SEND_WINDOW_SIZE, WINDOW_DEFAULT_SEND_SIZE, RAND_ISN);
-	//TODO: init receive window
-	receive_window_t receive_window = NULL;
+	send_window_t send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, RAND_ISN);
+	recv_window_t receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, RAND_ISN);
 	
 	queue_t accept_queue = queue_init();
-	queue_set_size(ACCEPT_QUEUE_DEFAULT_SIZE);
+	queue_set_size(accept_queue, ACCEPT_QUEUE_DEFAULT_SIZE);
 	
 	tcp_connection_t connection = (tcp_connection_t)malloc(sizeof(struct tcp_connection));
 	
@@ -79,15 +81,17 @@ tcp_connection_t tcp_connection_init(int socket){
 	return connection;
 }
 
-void tcp_connection_destroy(tcp_connection_t* connection){
+void tcp_connection_destroy(tcp_connection_t connection){
 
-	// destroy window
-	send_window_destroy(&((*connection)->window));
+	// destroy windows
+	send_window_destroy(&(connection->send_window));
+	recv_window_destroy(&(connection->receive_window));
+	
 	// destroy state machine
-	state_machine_destroy(&((*connection)->state_machine));
+	state_machine_destroy(&(connection->state_machine));
 
-	free(*connection);
-	*connection = NULL;
+	free(connection);
+	connection = NULL;
 }
 
 /********** State Changing Functions *************/

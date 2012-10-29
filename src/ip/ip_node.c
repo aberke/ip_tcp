@@ -342,37 +342,6 @@ void *ip_command_thread_run(void *ipdata){
 		/* otherwise there's a packet waiting for you! */
 		_handle_reading_stdin(ip_node, cmd);
 	}
-
-/*
-	// create timespec for timeout on pthread_cond_timedwait(&to_send);
-	struct timespec wait_cond = {PTHREAD_COND_TIMEOUT_SEC, PTHREAD_COND_TIMEOUT_NSEC}; //
-	int wait_cond_ret;
-	
-	while(ip_node->running){
-		
-		if(!bqueue_empty(stdin_commands)){
-			_handle_reading_stdin(ip_node, stdin_commands); 	
-		}
-		else{
-			// wait a moment for queue to fill -- or continue through while loop after a moment passes
-			pthread_mutex_lock(&(stdin_commands->q_mtx));
-        	if((wait_cond_ret = pthread_cond_timedwait(&(stdin_commands->q_cond), &(stdin_commands->q_mtx), &wait_cond))!=0){
-        		if(wait_cond_ret == ETIMEDOUT){
-        			// timed out
-      				//puts("pthread_cond_timed_wait for to_read timed out");
-      			}
-      			else{
-      				printf("ERROR: pthread_cond_timed_wait errored out\n");
-      			}
-      			// unlock and continue
-      			pthread_mutex_unlock(&(stdin_commands->q_mtx));
-      			continue;
-      		}
-			pthread_mutex_unlock(&(stdin_commands->q_mtx));
-			_handle_reading_stdin(ip_node, stdin_commands); 	
-		}
-	}	
-*/
 	pthread_exit(NULL);
 }
 
@@ -387,8 +356,7 @@ void *ip_send_thread_run(void *ipdata){
 	
 	free(ip_data);
 
-	struct timespec wait_cond;
-	
+	struct timespec wait_cond;	
 	struct timeval now;
 	void* packet;
 	int ret;
@@ -408,35 +376,6 @@ void *ip_send_thread_run(void *ipdata){
 		/* otherwise there's a packet waiting for you! */
 		_handle_to_send_queue(ip_node, packet);
 	}
-	
-	/*
-	// create timespec for timeout on pthread_cond_timedwait(&to_send);
-	struct timespec wait_cond = {PTHREAD_COND_TIMEOUT_SEC, PTHREAD_COND_TIMEOUT_NSEC}; //
-	int wait_cond_ret;
-	while(ip_node->running){
-		
-		if(!bqueue_empty(to_send))
-			_handle_to_send_queue(ip_node, to_send);		
-		
-		else{
-			// wait a moment for queue to fill -- or continue through while loop after a moment passes
-			pthread_mutex_lock(&(to_send->q_mtx));
-        	if((wait_cond_ret = pthread_cond_timedwait(&(to_send->q_cond), &(to_send->q_mtx), &wait_cond))!=0){
-        		if(wait_cond_ret == ETIMEDOUT){
-        			// timed out
-      				//puts("pthread_cond_timed_wait for to_read timed out");
-      			}
-      			else{
-      				printf("ERROR: pthread_cond_timed_wait errored out\n");
-      			}
-      			// unlock and continue
-      			pthread_mutex_unlock(&(to_send->q_mtx));
-      			continue;
-      		}
-			pthread_mutex_unlock(&(to_send->q_mtx));
-			_handle_to_send_queue(ip_node, to_send);				
-		}
-	} */
 	pthread_exit(NULL);
 }
 
@@ -491,8 +430,7 @@ void *ip_link_interface_thread_run(void *ipdata){
 			time(&last_update);
 		}
 	}
-	//pthread_exit(NULL);
-	return NULL;
+	pthread_exit(NULL);
 }
 /* ************************ END OF IP_THREADS ******************************* */
 

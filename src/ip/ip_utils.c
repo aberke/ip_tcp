@@ -35,7 +35,7 @@ int ip_check_valid_packet(char* buffer, int bytes_read){
 	struct ip* ip_header = (struct ip*)buffer;
 
 	//run checksum
-	checksum = ip_header->ip_sum;
+	checksum = ntohs(ip_header->ip_sum);
 	ip_header->ip_sum = 0; // !! because we're computing it! 
 	int ttl = ip_header->ip_ttl;
 	ip_header->ip_ttl = 0;
