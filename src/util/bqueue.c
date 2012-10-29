@@ -6,6 +6,36 @@
 #include <errno.h>
 #include <pthread.h>
 
+/*
+	http://lists.apple.com/archives/xcode-users/2007/Apr/msg00331.html
+*/
+int pthread_mutex_timedlock(pthread_mutex_t* mutex, const struct timespec* abs_timeout){
+	int result;
+	struct timeval now;
+	struct timespec ts;
+	do
+	{
+		result = pthread_mutex_trylock(mutex);
+		if (result == EBUSY)
+		{
+			ts.tv_sec = 0;
+			ts.tv_sec = 10000000;
+
+			/* Sleep for 10,000,000 nanoseconds before trying again. */
+			int status = -1;
+			while (status == -1)
+			status = nanosleep(&ts, &ts);
+		}
+		else
+			break;
+		
+		gettimeofday(&now, NULL);
+	}
+	while (result != 0 && abs_timeout != NULL && now.tv_sec <= (*abs_timeout).tv_sec && now.tv_usec < (*abs_timeout).tv_nsec*1000);
+
+ 	return result;
+}
+
 static int __bqueue_dequeue( bqueue_t *q, void **data,
                              const struct timespec *rel_timeout );
 
@@ -102,13 +132,10 @@ int bqueue_timed_dequeue_abs( bqueue_t *q, void ** data,
                               const struct timespec *abs_ts) {
   int ret;
   if (abs_ts != NULL) {
-  	puts("YOU CALLED BQUEUE_TIMED_DEQUEUE_ABS WHERE ABS!=NULL -- crash and burn");
-  	exit(1);
-  	/*
     ret = pthread_mutex_timedlock( &q->q_mtx, abs_ts );
     if (ret == ETIMEDOUT) 
       return -ETIMEDOUT;
-	*/
+
     ret = __bqueue_dequeue( q, data , abs_ts );
     pthread_mutex_unlock( &q->q_mtx );
     return ret;

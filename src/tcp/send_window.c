@@ -87,31 +87,31 @@ timed_chunk_t timed_chunk_init(int left, int right){
 ///////////// WINDOW CHUNK ////////////
 
 /* gets data from left all the way up to (but NOT including) right */
-window_chunk_t window_chunk_init(send_window_t send_window, int left, int right){
-	window_chunk_t window_chunk = malloc(sizeof(struct window_chunk));
+send_window_chunk_t send_window_chunk_init(send_window_t send_window, int left, int right){
+	send_window_chunk_t send_window_chunk = malloc(sizeof(struct send_window_chunk));
 	int wrap_length = WRAP_DIFF(left, right, MAX_SEQNUM);
-	window_chunk->data = malloc(wrap_length);
-	wrap_src_memcpy(window_chunk->data, send_window->slider, (left%(send_window->size+1)), wrap_length, send_window->size+1);
+	send_window_chunk->data = malloc(wrap_length);
+	wrap_src_memcpy(send_window_chunk->data, send_window->slider, (left%(send_window->size+1)), wrap_length, send_window->size+1);
 
-	window_chunk->seqnum = send_window_get_seqnum(send_window, left);
-	window_chunk->length = wrap_length;
+	send_window_chunk->seqnum = send_window_get_seqnum(send_window, left);
+	send_window_chunk->length = wrap_length;
 	
-	return window_chunk;
+	return send_window_chunk;
 }
 
-void window_chunk_destroy(window_chunk_t* wc){ 
+void send_window_chunk_destroy(send_window_chunk_t* wc){ 
 	free(*wc); 
 	*wc = NULL;
 }
 
-void window_chunk_destroy_total(window_chunk_t* wc, destructor_f destructor){
+void send_window_chunk_destroy_total(send_window_chunk_t* wc, destructor_f destructor){
 	destructor(&((*wc)->data));
-	window_chunk_destroy(wc);
+	send_window_chunk_destroy(wc);
 }	
 
-void window_chunk_destroy_free(window_chunk_t* wc){
+void send_window_chunk_destroy_free(send_window_chunk_t* wc){
 	free((*wc)->data);
-	window_chunk_destroy(wc);
+	send_window_chunk_destroy(wc);
 }
 
 
@@ -152,7 +152,7 @@ void send_window_destroy(send_window_t* send_window){
 
 	_free_timers(send_window);
 
-	queue_destroy_total(&((*send_window)->to_send), (destructor_f)window_chunk_destroy_free);
+	queue_destroy_total(&((*send_window)->to_send), (destructor_f)send_window_chunk_destroy_free);
 	free((*send_window)->acked_chunk_placeholder);
 	free((*send_window)->slider);
 	free((*send_window)->timed_chunks);
@@ -170,7 +170,7 @@ void send_window_push(send_window_t send_window, void* data, int length){
 	
 }
 
-window_chunk_t send_window_get_next(send_window_t send_window){
+send_window_chunk_t send_window_get_next(send_window_t send_window){
 	timed_chunk_t chunk;
 	if((chunk = (timed_chunk_t)queue_pop(send_window->to_send)) == NULL){
 		int left_to_send = WRAP_DIFF(send_window->sent_left, send_window->right, MAX_SEQNUM);
@@ -193,7 +193,7 @@ window_chunk_t send_window_get_next(send_window_t send_window){
 	time(&(chunk->start_time));
 	chunk->status = WAITING;
 
-	return window_chunk_init(send_window, chunk->left, chunk->right);
+	return send_window_chunk_init(send_window, chunk->left, chunk->right);
 }
 
 void send_window_ack(send_window_t send_window, int seqnum){
@@ -202,8 +202,8 @@ void send_window_ack(send_window_t send_window, int seqnum){
 		send_window_max = send_window->right;
 	
 	
-	if(send_window_min < send_window_max && !BETWEEN(seqnum, send_window_min, send_window_max)
-		|| send_window_min > send_window_max && !BETWEEN(seqnum, send_window_min, send_window_min + send_window_max))
+	if((send_window_min < send_window_max && !BETWEEN(seqnum, send_window_min, send_window_max))
+		|| (send_window_min > send_window_max && !BETWEEN(seqnum, send_window_min, send_window_min + send_window_max)))
 		{ LOG(("Received invalid seqnum: %d, current send_window_min: %d, send_window_max: %d\n", seqnum, send_window_min, send_window_max)); return; }
 
 	seqnum = seqnum==0 ? MAX_SEQNUM  : seqnum-1;

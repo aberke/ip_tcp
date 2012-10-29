@@ -94,7 +94,12 @@ ALEX:
 	fix states.c to deal with corner conditions
 	
 	
-notes from tcp_session:
+alex's questions for neil:
+
+	in tcp_utils.c tcp_header_init, why not use htonl for seq and ack?
+	
+	
+	
 
 	
 	

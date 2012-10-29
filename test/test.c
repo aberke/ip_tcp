@@ -11,6 +11,7 @@
 #include "state_machine.h"
 #include "queue.h"
 #include "send_window.h"
+#include "recv_window.h"
 #include "ext_array.h"
 
 #include "test_states.h"
@@ -178,12 +179,12 @@ void test_send_window_scale(){
 	strcpy(buffer, "THE END");
 	send_window_push(window,buffer,strlen("THE END"));
 
-	window_chunk_t got;
+	send_window_chunk_t got;
 	for(i=0;i<(1000/(50/10));i++){
 		got = send_window_get_next(window);
 		if(got){
 			send_window_ack(window, (got->seqnum+got->length) % MAX_SEQNUM);
-			window_chunk_destroy_total(&got, util_free);
+			send_window_chunk_destroy_total(&got, util_free);
 		}
 		else{
 			printf(".");
@@ -201,7 +202,7 @@ void test_send_window_scale(){
 	buffer[got->length] = '\0';
 	TEST_STR_EQ(buffer, "THE END", "");
 	
-	window_chunk_destroy_total(&got, util_free);
+	send_window_chunk_destroy_total(&got, util_free);
 
 
 	send_window_destroy(&window);
@@ -218,7 +219,7 @@ void test_send_window(){
 	strcpy(buffer, ", World!");
 	send_window_push(window, buffer, strlen(buffer));
 	
-	window_chunk_t chunk;
+	send_window_chunk_t chunk;
 
 	// get the first 5 bytes out of the window (should pull other stuff in)
 	chunk = send_window_get_next(window);
@@ -230,7 +231,7 @@ void test_send_window(){
 	buffer[5] = '\0';
 	TEST_STR_EQ(buffer, "Hello", "I will be amazed if this works");
 
-	window_chunk_destroy_total(&chunk, util_free);
+	send_window_chunk_destroy_total(&chunk, util_free);
 
 
 	// rinse and repeat
@@ -243,7 +244,7 @@ void test_send_window(){
 	buffer[5] = '\0';
 	TEST_STR_EQ(buffer, ", Wor", "");
 
-	window_chunk_destroy_total(&chunk, util_free);
+	send_window_chunk_destroy_total(&chunk, util_free);
 
 
  	// now 10 bytes should be in flight. So let's ack the first 5
@@ -260,7 +261,7 @@ void test_send_window(){
 	buffer[3] = '\0';
 	TEST_STR_EQ(buffer, "ld!", "");
 
-	window_chunk_destroy_total(&chunk, util_free);
+	send_window_chunk_destroy_total(&chunk, util_free);
 
 	send_window_ack(window, 10);
 	send_window_ack(window, 13);
@@ -274,23 +275,46 @@ void test_send_window(){
 	chunk = send_window_get_next(window);
 	ASSERT(chunk!=NULL);
 	send_window_ack(window, chunk->seqnum+chunk->length);
-	window_chunk_destroy_total(&chunk, util_free);		
+	send_window_chunk_destroy_total(&chunk, util_free);		
 
 	chunk = send_window_get_next(window);
 	ASSERT(chunk!=NULL);
 	send_window_ack(window, chunk->seqnum+chunk->length);
-	window_chunk_destroy_total(&chunk, util_free);		
+	send_window_chunk_destroy_total(&chunk, util_free);		
 
 	chunk = send_window_get_next(window);
 	ASSERT(chunk!=NULL);
 	send_window_ack(window, chunk->seqnum+chunk->length);
-	window_chunk_destroy_total(&chunk, util_free);		
+	send_window_chunk_destroy_total(&chunk, util_free);		
 
 
 	send_window_destroy(&window);
 }
 	
+
+void test_recv_window(){
+	recv_window_t rw = recv_window_init(100, 0);
 	
+	recv_window_chunk_t got;
+	int ack;
+
+	got = recv_window_get_next(rw);
+	ASSERT(got==NULL);
+	
+	char buffer[BUFFER_SIZE];
+	strcpy(buffer, "hello world");
+	ack = recv_window_receive(rw, buffer,strlen("hello world"), 0);
+	TEST_EQ(ack, strlen("hello world"), "");
+	
+	got = recv_window_get_next(rw);
+	ASSERT(got!=NULL);
+	memcpy(buffer, got->data, got->length);
+	buffer[got->length] = '\0';
+	TEST_STR_EQ(buffer, "hello world", "");
+	recv_window_chunk_destroy_free(&got);
+	
+	recv_window_destroy(&rw);
+}	
 
 void test_wrapping(){
 	/* these functions REALLY needs to be correct */
@@ -718,8 +742,7 @@ int main(int argc, char** argv){
 	TEST(test_overflow);
 
 	TEST(test_state_machine); 
-
-	TEST(test_queue); */
+	TEST(test_queue); 
 	
 	TEST(test_ext_array);
 	TEST(test_ext_array_scale);
@@ -727,7 +750,9 @@ int main(int argc, char** argv){
 	TEST(test_wrapping);
 	
 	TEST(test_send_window);
-	TEST(test_send_window_scale);
+	TEST(test_send_window_scale);*/
+
+	TEST(test_recv_window);
 
 	/* RETURN */
 	return(0);

@@ -32,8 +32,7 @@ int ip_check_valid_packet(char* buffer, int bytes_read){
 	}
 
 	u_short checksum;
-	struct ip* ip_header = malloc(IP_HEADER_SIZE);
-	memcpy(ip_header, buffer, IP_HEADER_SIZE);
+	struct ip* ip_header = (struct ip*)buffer;
 
 	//run checksum
 	checksum = ip_header->ip_sum;
@@ -45,26 +44,22 @@ int ip_check_valid_packet(char* buffer, int bytes_read){
 		puts("Packet ip_sum != actually checksum");
 		ip_header->ip_sum = checksum; // set it back
 		ip_header->ip_ttl = ttl;
-		free(ip_header);
-		return -1;
+		return ntohs(ip_header->ip_len) - ip_header->ip_hl*4;//-1;
 	}
 
 	ip_header->ip_sum = checksum; // set it back
 	ip_header->ip_ttl = ttl;
-	//make sure as long as its supposed to be
-	u_short ip_len;
-	ip_len = ntohs(ip_header->ip_len);
+	u_short ip_len = ntohs(ip_header->ip_len);
+
 	if(bytes_read < ip_len){
 		//didn't read in entire packet -- error
 		puts("bytes read in less than packet length");
-		free(ip_header);
 		return -1;
 	}
 	u_int header_length;
 	header_length = ip_header->ip_hl*4;
 	int data_len = ip_len - header_length;
 
-	free(ip_header);
 	return data_len;
 }
 
@@ -92,6 +87,7 @@ uint32_t ip_get_dest_addr(char* buffer){
 	d_addr = ntohl(dest_ip.s_addr);
 	return d_addr;
 }
+
 // int is type: RIP vs other  --return -1 if bad packet
 // fills packet_unwrapped with data within packet
 int ip_unwrap_packet(char* buffer, char* packet_unwrapped, int packet_data_size){

@@ -10,22 +10,35 @@ enum state{
 	SYN_SENT,
 	SYN_RECEIVED,
 	ESTABLISHED,
-	NONE // is this the best way to handle transitions that don't exist??
-	// TODO:  FINISH STATES!  FOR TEARDOWN
+	
+	FIN_WAIT_1,
+	FIN_WAIT_2,
+	CLOSE_WAIT,
+	TIME_WAIT,
+	LAST_ACK,
+
+	CLOSING
 };
-#define NUM_STATES 5  //TODO: ADD MORE ONCE HAVE TEAR DOWN/CORNER CASES ETC
+#define NUM_STATES 11 //TODO: ADD MORE ONCE HAVE TEAR DOWN/CORNER CASES ETC
+#define START_STATE CLOSED
 
 enum transition{
 	passiveOPEN,
 	activeOPEN,
 	receiveSYN,
 	receiveSYN_ACK,  //receive SYN+ACK at same time
-	receiveACK
-	// TODO:  FINISH TRANSITIONS!  FOR TEARDOWN/CORNER CASES
+	receiveACK,
+	CLOSE,
+	TIME_ELAPSED,
+	receiveFIN,
+	SEND
 };
-#define NUM_TRANSITIONS 5  //TODO: ADD MORE ONCE HAVE CORNER CASES/TEARDOWN ETC
+#define NUM_TRANSITIONS 9  //TODO: ADD MORE ONCE HAVE CORNER CASES/TEARDOWN ETC
 
-#define START_STATE 5
+struct transitioning {
+	state_e next_state;
+	action_f action;
+};
 
 void tcp_states_print_state(state_e s);
 	

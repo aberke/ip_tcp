@@ -11,23 +11,45 @@
 #define TCP_HEADER_SIZE sizeof(struct tcphdr);
 
 
-// takes in data and wraps data in header with correct addresses.  
-// frees parameter data and mallocs new packet  -- sets data to point to new packet
-// returns size of new packet that data points to
-int tcp_utils_wrap_packet(void** data, int data_len, tcp_connection_t connection){
-	struct ip* ip_header = (struct ip*)malloc(IP_HEADER_SIZE);
-	memset(ip_header, 0, IP_HEADER_SIZE);
-		
-	struct tcphdr header;
-	char* packet = malloc(sizeof(struct tcphdr) + data_len);
-	
-	header->th_sport = htons(tcp_connection_get_local_port(connection));
-	header->th_dport = htons(tcp_connection_get_remote_port(connection)):
-	header->th_off = htons(5);
-	
-	
+#define NO_OPTIONS_HEADER_LENGTH 5
+
+/* just encapsulates unwrapping the header. the reason this is its own
+	function is because we may want to (or at least we should be able to)
+	puts some logic in here thats actually checking whether or not the void*
+	is indeed a tcp_header. But for now we're just casting it. the length
+	parameter is to make these functions all look and feel the same 
+
+	PARAMETERS:
+		void* packet 		packet to be unwrapped
+		int length 			length of the TCP packet, not any original encapsulation
+*/
+struct tcphdr* tcp_unwrap_header(void* packet, int length){
+	struct tcphdr* header = (struct tcphdr*)packet;
+	return header;
 }
 
+/* returns a memchunk with the data in the packet, or NULL if there is no data 
+
+	PARAMETERS:
+		void* packet 		packet to be unwrapped
+		int length 			length of the TCP packet, not any original encapsulation
+*/
+memchunk_t tcp_unwrap_data(void* packet, int length){
+	struct tcphdr* header = (struct tcphdr*)packet;
+	unsigned int data_offset = 4*header->th_off; /* because it's the length in 32-bit words */
+	memchunk_t payload = memchunk_init(packet+data_offset, length-data_offset);
+	return payload;
+}
+
+struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_port, uint32_t seq, uint32_t ack){
+	struct tcphdr* header = malloc(sizeof(struct tcphdr));
+	header->th_sport = htons(host_port);
+	header->th_dport = htons(dest_port);
+	header->th_seq = seq;
+	header->th_ack = ack;
+	header->th_off = NO_OPTIONS_HEADER_LENGTH;
+	return header;
+}
 
 // a tcp_connection owns a local and remote tcp_socket_address.  This pair defines the connection
 // struct tcp_socket_address{

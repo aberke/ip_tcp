@@ -24,6 +24,6 @@ enum transition{
 #define EMPTY_STATE -1
 
 void print_state(state_e s);
-state_e get_next_state(state_e s, transition_e t);
+transitioning_t get_next_state(state_e s, transition_e t);
 
 #endif // __TEST_STATES_H__
