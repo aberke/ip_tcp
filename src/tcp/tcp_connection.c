@@ -86,6 +86,19 @@ int tcp_connection_passive_open(tcp_connection_t connection){
 	return 1;
 }
 
+/* in the same vein, these are the functions that will be called
+	during transitions between states, handled by the state machine */
+
+/* 
+tcp_connection_transition_passive_open
+	will be called when the connection is transitioning from CLOSED with a passiveOPEN
+	transition
+*/
+void tcp_connection_transition_passive_open(tcp_connection_t connection){
+	
+}
+	
+
 /********** End of State Changing Functions *******/
 
 
@@ -122,7 +135,13 @@ void tcp_connection_print_state(tcp_connection_t connection){
 	state_machine_print_state(connection->state_machine);	
 }
 
+/* FOR TESTING */
 void tcp_connection_print(tcp_connection_t connection){
 	puts( "IT WORKS!!" );
+}
+	
+void tcp_connection_set_remote(tcp_connection_t connection, uint32_t remote, uint16_t port){
+	connection->remote_addr.virt_ip = remote;
+	connection->remote_addr.virt_port = port;
 }
 	

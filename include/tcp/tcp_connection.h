@@ -20,7 +20,6 @@ int tcp_connection_get_socket(tcp_connection_t connection);
 
 void tcp_connection_print_state(tcp_connection_t connection);
 
-void tcp_connection_print(tcp_connection_t connection);
 
 /********** State Changing Functions *************/
 
@@ -28,5 +27,9 @@ void tcp_connection_print(tcp_connection_t connection);
 int tcp_connection_passive_open(tcp_connection_t connection);
 
 /********** End of Sate Changing Functions *******/
+
+/* for testing */
+void tcp_connection_print(tcp_connection_t connection);
+void tcp_connection_set_remote(tcp_connection_t connection, uint32_t remote_ip, uint16_t remote_port);
 
 #endif //__TCP_CONNECTION_H__

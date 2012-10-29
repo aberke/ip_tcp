@@ -5,20 +5,6 @@
 #include "tcp_states.h"
 #include "tcp_connection.h"
 
-/*
-transitioning_t transitioning_init(state_e next, action_f action){
-	transitioning_t t = malloc(sizeof(struct transitioning));
-	t->next_state = next;
-	t->action = action;
-	return t;
-}
-
-void transitioning_destroy(transitioning_t* transitioning){
-	free(*transitioning);
-	*transitioning=NULL;
-}
-*/
-
 transitioning_t closed_next_state(transition_e t){
 	switch(t){
 		case passiveOPEN:

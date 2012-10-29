@@ -1,6 +1,7 @@
 #include <inttypes.h>
 #include <netinet/ip.h>
 #include <time.h>
+#include <sys/time.h>
 
 
 #include "bqueue.h"
@@ -32,14 +33,14 @@
 /* Static functions for internal use */
 static void _update_select_list(ip_node_t node);
 static void _update_all_interfaces(ip_node_t node);
-static void _handle_selected(ip_node_t ip_node, link_interface_t interface, bqueue_t *to_read);
-static void _handle_reading_stdin(ip_node_t ip_node, bqueue_t *stdin_commands);
-static void _handle_reading_sockets(ip_node_t ip_node, bqueue_t *to_read);
-static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands);
+static void _handle_selected(ip_node_t ip_node, link_interface_t interface);
+static void _handle_reading_stdin(ip_node_t ip_node, char* command);//bqueue_t *stdin_commands);
+static void _handle_reading_sockets(ip_node_t ip_node);
+static void _handle_user_command(ip_node_t ip_node, char* command);//bqueue_t *stdin_commands);
 static int _is_local_ip(ip_node_t ip_node, uint32_t ip);
 static void _handle_query_interfaces(ip_node_t ip_node);
 static void _handle_user_command_down(ip_node_t ip_node, char* buffer);
-static void _handle_to_send_queue(ip_node_t ip_node, bqueue_t *to_send);
+static void _handle_to_send_queue(ip_node_t ip_node, void* packet);//bqueue_t *to_send);
 static void _request_RIP(ip_node_t ip_node);
 
 /* STRUCTS */
@@ -83,6 +84,10 @@ struct ip_node{
 	interface_socket_keyed_t socketToInterface;
 	interface_ip_keyed_t addressToInterface;
 
+	bqueue_t* stdin_queue;
+	bqueue_t* send_queue;
+	bqueue_t* read_queue;
+	
 	fd_set read_fds;
 	int highsock;
 
@@ -126,6 +131,9 @@ void interface_ip_keyed_destroy(interface_ip_keyed_t* ip_keyed){
    it in the ip_node's interface array, and also adds each interface to both hash-maps. */
 
 ip_node_t ip_node_init(iplist_t* links){
+	if(!links)
+		return NULL;
+
 	ip_node_t ip_node = (ip_node_t)malloc(sizeof(struct ip_node));
 	ip_node->forwarding_table = forwarding_table_init();
 	ip_node->routing_table = routing_table_init();
@@ -134,6 +142,9 @@ ip_node_t ip_node_init(iplist_t* links){
 	ip_node->interfaces = (link_interface_t*)malloc(sizeof(link_interface_t)*(ip_node->num_interfaces));
 	ip_node->socketToInterface = NULL;
 	ip_node->addressToInterface = NULL;
+	ip_node->read_queue = NULL;
+	ip_node->stdin_queue = NULL;
+	ip_node->send_queue = NULL;
 	
 	link_interface_t interface; 
 	link_t* link;
@@ -180,10 +191,6 @@ ip_node_t ip_node_init(iplist_t* links){
 	return ip_node;
 }
 
-void ip_node_stop(ip_node_t ip_node){	
-	ip_node->running = 0;
-}
-
 void ip_node_destroy(ip_node_t* ip_node){
 	//// destroy forwarding/routing tables
 	forwarding_table_destroy(&((*ip_node)->forwarding_table));
@@ -216,6 +223,76 @@ void ip_node_destroy(ip_node_t* ip_node){
 	//// and we're done!
 }
 
+void ip_node_stop(ip_node_t ip_node){	
+	ip_node->running = 0;
+}
+/*
+ip_node_read
+	takes in an ip_node and a packet of data. The specific way this
+	will be implemented is to add it to the queue, but no one needs to know this
+
+returns:
+	0 	on success
+	-1 	queue does not exist 
+*/
+int ip_node_read(ip_node_t ip_node, char* packet){
+	if(!ip_node->read_queue) return -1;
+
+	if(bqueue_enqueue(ip_node->read_queue, packet) < 0){
+		ip_node->read_queue = NULL;
+		return -1;
+	}
+
+	return 0;
+}
+
+/*
+ip_node_send
+	takes in an ip_node and a packet of data. The specific way this
+	will be implemented is to add it to the queue, but no one needs to know this
+
+returns:
+	0 	on success
+	-1 	queue does not exist 
+*/
+int ip_node_send(ip_node_t ip_node, tcp_packet_data_t data){
+	/* make sure the queue has been inited and not destroyed */
+	if(!ip_node->send_queue) return -2;	
+
+	if(bqueue_enqueue(ip_node->send_queue, data) < 0){
+		/* queue has been destroyed */
+		ip_node->send_queue = NULL;
+		return -1;
+	}
+	
+	return 0;
+}	
+
+/*
+ip_node_command
+	takes in an ip_node and a command (char*). The specific way this
+	will be implemented is to add it to the queue, but no one needs to know this
+
+returns:
+	0 	on success
+	-1 	queue does not exist 
+*/
+int ip_node_command(ip_node_t ip_node, const char* cmd){
+	if(!ip_node->stdin_queue) return -1;
+	
+	
+	char* cmd_copied = malloc(sizeof(char)*strlen(cmd));	
+	strcpy(cmd_copied, cmd);
+
+	if(bqueue_enqueue(ip_node->stdin_queue, (void*)cmd_copied) < 0){
+		/* queue has been destroyed */
+		ip_node->stdin_queue = NULL;
+		return -1;
+	}
+	
+	return 0;
+}
+
 ///// PRINTERS
 void ip_node_print_interfaces(ip_node_t ip_node){
 	int i;
@@ -237,11 +314,36 @@ void ip_node_print_interfaces(ip_node_t ip_node){
 void *ip_command_thread_run(void *ipdata){
 
 	ip_thread_data_t ip_data = (ip_thread_data_t)ipdata;
+
 	ip_node_t ip_node = ip_data->ip_node;
+
 	bqueue_t *stdin_commands = ip_data->stdin_commands;
-		
+	ip_node->stdin_queue = stdin_commands;	
+
 	free(ip_data);
-	
+		
+	struct timespec wait_cond;
+	struct timeval now;
+	void* cmd;
+	int ret;
+
+	while(ip_node->running){	
+		gettimeofday(&now, NULL);	
+		wait_cond.tv_sec = now.tv_sec+PTHREAD_COND_TIMEOUT_SEC;
+		wait_cond.tv_nsec = 1000*now.tv_usec+PTHREAD_COND_TIMEOUT_NSEC;
+		
+		/* try to get the next thing on queue */
+		ret = bqueue_timed_dequeue_abs(stdin_commands, &cmd, &wait_cond);
+		if (ret != 0) 
+			/* should probably check at this point WHY we failed (for instance perhaps the queue
+				was destroyed */
+			continue;
+			
+		/* otherwise there's a packet waiting for you! */
+		_handle_reading_stdin(ip_node, cmd);
+	}
+
+/*
 	// create timespec for timeout on pthread_cond_timedwait(&to_send);
 	struct timespec wait_cond = {PTHREAD_COND_TIMEOUT_SEC, PTHREAD_COND_TIMEOUT_NSEC}; //
 	int wait_cond_ret;
@@ -270,6 +372,7 @@ void *ip_command_thread_run(void *ipdata){
 			_handle_reading_stdin(ip_node, stdin_commands); 	
 		}
 	}	
+*/
 	pthread_exit(NULL);
 }
 
@@ -280,9 +383,33 @@ void *ip_send_thread_run(void *ipdata){
 	// only need to extract ip_node and to_send
 	ip_node_t ip_node = ip_data->ip_node;
 	bqueue_t *to_send = ip_data->to_send;
+	ip_node->send_queue = to_send;
 	
 	free(ip_data);
+
+	struct timespec wait_cond;
+	
+	struct timeval now;
+	void* packet;
+	int ret;
+
+	while(ip_node->running){	
+		gettimeofday(&now, NULL);	
+		wait_cond.tv_sec = now.tv_sec+PTHREAD_COND_TIMEOUT_SEC;
+		wait_cond.tv_nsec = 1000*now.tv_usec+PTHREAD_COND_TIMEOUT_NSEC;
 		
+		/* try to get the next thing on queue */
+		ret = bqueue_timed_dequeue_abs(to_send, &packet, &wait_cond);
+		if (ret != 0) 
+			/* should probably check at this point WHY we failed (for instance perhaps the queue
+				was destroyed */
+			continue;
+			
+		/* otherwise there's a packet waiting for you! */
+		_handle_to_send_queue(ip_node, packet);
+	}
+	
+	/*
 	// create timespec for timeout on pthread_cond_timedwait(&to_send);
 	struct timespec wait_cond = {PTHREAD_COND_TIMEOUT_SEC, PTHREAD_COND_TIMEOUT_NSEC}; //
 	int wait_cond_ret;
@@ -309,7 +436,7 @@ void *ip_send_thread_run(void *ipdata){
 			pthread_mutex_unlock(&(to_send->q_mtx));
 			_handle_to_send_queue(ip_node, to_send);				
 		}
-	}
+	} */
 	pthread_exit(NULL);
 }
 
@@ -322,6 +449,7 @@ void *ip_link_interface_thread_run(void *ipdata){
 	// only need to extract ip_node and to_read for this thread
 	ip_node_t ip_node = ip_data->ip_node;
 	bqueue_t *to_read = ip_data->to_read;	//--- tcp data that ip pushes on to queue for tcp to handle
+	ip_node->read_queue = to_read;
 	
 	free(ip_data);
 	
@@ -340,7 +468,6 @@ void *ip_link_interface_thread_run(void *ipdata){
 	time_t last_update,now;
 	time(&last_update);
 	while(ip_node->running){
-		puts("still running.");
 
 		//// first update the list (rebuild it)
 		_update_select_list(ip_node);
@@ -352,7 +479,7 @@ void *ip_link_interface_thread_run(void *ipdata){
 			{ error("select()"); } 
 		else if (retval){	  
 			_handle_query_interfaces(ip_node); // in case the user shut down a node
-			_handle_reading_sockets(ip_node, to_read);
+			_handle_reading_sockets(ip_node);
 		}	 
 		else{
 			_handle_query_interfaces(ip_node); 
@@ -364,7 +491,6 @@ void *ip_link_interface_thread_run(void *ipdata){
 			time(&last_update);
 		}
 	}
-	puts("interafce thread done");
 	//pthread_exit(NULL);
 	return NULL;
 }
@@ -372,19 +498,19 @@ void *ip_link_interface_thread_run(void *ipdata){
 
 /*************************** INTERNAL ******************************/
 /* just reads from off each command from stdin_commands queue and handles until queue empty */
-static void _handle_reading_stdin(ip_node_t ip_node, bqueue_t *stdin_commands){
-	_handle_user_command(ip_node, stdin_commands);
+static void _handle_reading_stdin(ip_node_t ip_node, char* command){//bqueue_t *stdin_commands){
+	_handle_user_command(ip_node, command);//stdin_commands);
 }
 
 /* _handle_reading_sockets is an internal function for dealing with the 
    effect of a select call. This will get called only if there is a fd to
    read from. First check STDIN, and handle that command. Then check all 
    of the interface sockets by iterating over the hashmap of sockets to interfaces. */
-static void _handle_reading_sockets(ip_node_t ip_node, bqueue_t *to_read){
+static void _handle_reading_sockets(ip_node_t ip_node){
 	struct interface_socket_keyed *socket_keyed, *tmp;
 	HASH_ITER(hh, ip_node->socketToInterface, socket_keyed, tmp){
 		if(FD_ISSET(socket_keyed->socket, &(ip_node->read_fds))){
-			_handle_selected(ip_node, socket_keyed->interface, to_read);	
+			_handle_selected(ip_node, socket_keyed->interface);	
 		}	
 	}
 }
@@ -545,15 +671,18 @@ static void _handle_user_command_up(ip_node_t ip_node, char* buffer){
 	}		
 }
 /* _handle_user_command_send iterates through to_send queue to handle each packet that has been wrapped by tcp_node */
-static void _handle_to_send_queue(ip_node_t ip_node, bqueue_t *to_send){
-	puts("in ip_node: _handle-to_send_queue");
-	tcp_packet_data_t *tcp_packet_data = (tcp_packet_data_t *) malloc(sizeof(struct tcp_packet_data));
-	char* packet = (char*) malloc(sizeof(char)*MTU);
+static void _handle_to_send_queue(ip_node_t ip_node, void* packet){//bqueue_t *to_send){
+	puts("ip_node pulling from send queue");
+
+	/*tcp_packet_data_t *tcp_packet_data = (tcp_packet_data_t *) malloc(sizeof(struct tcp_packet_data));*/
+	tcp_packet_data_t tcp_packet_data = (tcp_packet_data_t)packet;
+	
+	//char* packet = (char*) malloc(sizeof(char)*MTU);
 	struct in_addr send_to, send_from;
 	uint32_t send_to_vip;
 	int packet_size;
 	
-	while(!(bqueue_trydequeue(to_send, (void **)&tcp_packet_data))){
+//	while(!(bqueue_trydequeue(to_send, (void **)&tcp_packet_data))){
 		// extract packet data from tcp_packet_data
 		packet = tcp_packet_data->packet;
 		send_to_vip = tcp_packet_data->remote_virt_ip;
@@ -563,15 +692,17 @@ static void _handle_to_send_queue(ip_node_t ip_node, bqueue_t *to_send){
 	
 		// check if send_to_vip local -- if so must just print
 		if(_is_local_ip(ip_node, send_to_vip)){
-			printf("We send a message to ourselves?  Look into how we should handle packet: %s\n", packet);
-			continue;
+			printf("We send a message to ourselves?  Look into how we should handle packet: %s\n", (char*)packet);
+			return;
+			//continue;
 		}
 		
 		// get next hop for sending message to send_to_vip
 		uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
 		if(next_hop_addr == -1){
 			printf("Cannot reach address %d.\n", send_to_vip);
-			continue;
+			return;
+			//continue;
 		}
 		// get struct in_addr corresponding to next_hop_addr
 		send_from.s_addr = next_hop_addr;
@@ -580,14 +711,15 @@ static void _handle_to_send_queue(ip_node_t ip_node, bqueue_t *to_send){
 		HASH_FIND(hh, ip_node->addressToInterface, &next_hop_addr, sizeof(uint32_t), address_keyed);
 		if(!address_keyed){
 			printf("Cannot reach address %d  -- TODO: MAKE SURE FIXED -- see _handle_user_command_send\n", send_to_vip);
-			continue;
+			return;
+			//continue;
 		}
 		link_interface_t next_hop_interface = address_keyed->interface;
 				
 		// wrap and send IP packet
 		ip_wrap_send_packet(packet, packet_size, TCP_DATA, send_from, send_to, next_hop_interface);		
-	}	
-	free(packet);
+	//}	
+	//free(packet);
 	free(tcp_packet_data);
 }
 
@@ -598,21 +730,22 @@ static void _handle_to_send_queue(ip_node_t ip_node, bqueue_t *to_send){
 		- quit/q     : stop everything
 
 */
-static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands){
+static void _handle_user_command(ip_node_t ip_node, char* buffer){//bqueue_t *stdin_commands){
 
+/*
 	char *buffer;
 
-/* bqueue_trydequeue attempts to dequeue an item from the queue... if there are no items
+ * bqueue_trydequeue attempts to dequeue an item from the queue... if there are no items
  * in the queue, rather than blocking we simply return 1 and *data has
- * an undefined value */
+ * an undefined value *
 	while(!(bqueue_trydequeue(stdin_commands, (void **)&buffer))){
-	
+*/	
 		rtrim(buffer, "\n");
 		
 		//// handle the commands
-		if(!strcmp(buffer, "quit") || !strcmp(buffer, "q")){
+		if(!strcmp(buffer, "quit") || !strcmp(buffer, "q"))
 			ip_node_stop(ip_node);
-		}
+		
 		else if(!strcmp(buffer, "interfaces"))
 			ip_node_print_interfaces(ip_node);
 	
@@ -636,7 +769,7 @@ static void _handle_user_command(ip_node_t ip_node, bqueue_t *stdin_commands){
 	
 		else
 			printf("Received unrecognized input from user: %s\n", buffer); 	
-	}
+	
 	free(buffer); 
 }
 
@@ -707,8 +840,8 @@ static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, 
 /* _handle_selected is a dummy function for testing the functionality of the rest
    of the system (and not the implementation of the link_interface). This will be 
    done by linking to a dummy link_interface file that provides the same methods */
-static void _handle_selected(ip_node_t ip_node, link_interface_t interface, bqueue_t *to_read){
-	char* packet_buffer = (char*)malloc(sizeof(char)*IP_PACKET_MAX_SIZE + 1);
+static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
+	char* packet_buffer = (char*)malloc(sizeof(char)*(IP_PACKET_MAX_SIZE + 1));
 	int bytes_read = link_interface_read_packet(interface, packet_buffer, IP_PACKET_MAX_SIZE);
 
 	if(bytes_read < 0){
@@ -718,12 +851,15 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface, bque
 		free(packet_buffer);
 		return;
 	}
+
 	int packet_data_size = 	ip_check_valid_packet(packet_buffer, bytes_read);	
+	printf("bytes read: %d, packet_data_size: %d\n", bytes_read, packet_data_size);
  	if(packet_data_size < 0){
  		puts("Discarding packet");
  		free(packet_buffer);
 		return;
 	}
+
 	uint32_t dest_addr = ip_get_dest_addr(packet_buffer);
 	if(!(_is_local_ip(ip_node, dest_addr))){ 
 		// Must forward packet to destination -- first decrement TTL
@@ -735,7 +871,7 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface, bque
 		return;
 	}
 	// else either RIP data or TEST_DATA to print:	
-	char packet_unwrapped[packet_data_size+1];
+	char* packet_unwrapped = malloc(sizeof(packet_data_size+1));
 	int type = ip_unwrap_packet(packet_buffer, packet_unwrapped, packet_data_size);
 	
 	if(type == RIP_DATA){
@@ -745,7 +881,8 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface, bque
 		//HANDLE WITH TCP
 			/* enqueue an item into the queue. if the queue has been
 			 * destroyed, returns -EINVAL */
-		if(bqueue_enqueue(to_read, packet_unwrapped) == -EINVAL)
+		if(ip_node_read(ip_node, packet_unwrapped) == -EINVAL)
+		/*if(bqueue_enqueue(to_read, packet_unwrapped) == -EINVAL)*/
 			puts("Tried to enqueue item into to_read queue after queue destroyed: see ip_node: _handle_selected()");
 		
 		packet_unwrapped[packet_data_size] = '\0'; //null terminate string so that it prints nicely

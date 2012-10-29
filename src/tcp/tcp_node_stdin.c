@@ -26,7 +26,7 @@
 // TODO remove the below #defines, replace by linking with API implementation 
 #define v_connect(a,b,c)	-ENOTSUP
 #define v_accept(a,b,c)	-ENOTSUP
-#define v_write(a,b,c)	-ENOTSUP
+//#define v_write(a,b,c)	-ENOTSUP
 #define v_read(a,b,c)	-ENOTSUP
 #define v_shutdown(a,b)	-ENOTSUP
 #define v_close(a)	-ENOTSUP
@@ -42,8 +42,8 @@ int v_socket(tcp_node_t tcp_node){
 }
 
 void vv_socket(const char *line, tcp_node_t tcp_node){
-		int socket = v_socket(tcp_node);
-		printf("socket: %d\n", socket);	
+	int socket = v_socket(tcp_node);
+	printf("socket: %d\n", socket);	
 }
 
 /* binds a socket to a port
@@ -53,15 +53,15 @@ int v_bind(tcp_node_t tcp_node, int socket, char* addr, uint16_t port){
 
 	// check if port already in use
 	if(!tcp_node_port_unused(tcp_node, port))		
-		return EADDRINUSE;	//The given address is already in use.
+		return -EADDRINUSE;	//The given address is already in use.
 
 	// get corresponding tcp_connection
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(connection == NULL)
-		return EBADF; 	//socket is not a valid descriptor
+		return -EBADF; 	//socket is not a valid descriptor
 
 	if(tcp_connection_get_local_port(connection))
-		return EINVAL; 	// The socket is already bound to an address.
+		return -EINVAL; 	// The socket is already bound to an address.
 
 	tcp_node_assign_port(tcp_node, connection, port);
 
@@ -93,7 +93,7 @@ int v_listen(tcp_node_t tcp_node, int socket){
 	// get corresponding tcp_connection
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(connection == NULL)
-		return EBADF; 	//socket is not a valid descriptor
+		return -EBADF; 	//socket is not a valid descriptor
 
 	if(!tcp_connection_get_local_port(connection)){
 		// port not already set -- must bind to random port	
@@ -123,12 +123,84 @@ void vv_listen(const char *line, tcp_node_t tcp_node){
 }
 
 void vv_accept(const char *line, tcp_node_t tcp_node){
-
+	
 }
 
 void vv_connect(const char *line, tcp_node_t tcp_node){
 
 }
+
+int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint32_t num_bytes){
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(!connection)	
+		return -EBADF;
+
+	tcp_packet_data_t packet = malloc(sizeof(struct tcp_packet_data));
+	packet->local_virt_ip = tcp_connection_get_local_ip(connection);
+	packet->remote_virt_ip = tcp_connection_get_remote_ip(connection);
+
+	memcpy(packet->packet, to_write, num_bytes);
+//	memcpy(packet->packet, to_write, num_bytes);
+	packet->packet_size = num_bytes;
+
+	tcp_node_send(tcp_node, packet);
+
+	return 0; /* how are we gonna get the result of this if we're pushing to a queue?? ie, fuck */
+}
+
+
+void vv_write(const char* line, tcp_node_t tcp_node){
+	int socket;
+	unsigned char* to_write = malloc(sizeof(char)*BUFFER_SIZE);
+	uint32_t num_bytes;
+	
+	if(sscanf(line, "v_write %d %s %u", &socket, to_write, &num_bytes) != 3){
+		fprintf(stderr, "syntax error (usage: v_write [socket] [to_write] [bytes])\n");
+		return;
+	}
+
+	printf("to_write: %s\n", to_write);
+
+	int ret = v_write(tcp_node, socket, to_write, num_bytes);
+	printf("write result: %d\n", ret);
+
+	free(to_write);
+}
+
+void vv_set_address(const char* line, tcp_node_t tcp_node){
+	int socket;
+	uint16_t port;
+	int r_port;
+
+	int b1, b2, b3, b4;
+	
+	if(sscanf(line, "v_set %d %d.%d.%d.%d %d", &socket, &b1, &b2, &b3, &b4, &r_port) != 6){
+		fprintf(stderr, "syntax error (usage: v_set [socket] [address] [port])\n");
+		return;
+	}
+
+	port = (uint16_t)r_port;
+
+	if(b1<0 || b1>255 || b2<0 || b2>255 || b3<0 || b3>255 || b4<0 || b4>255){
+		fprintf(stderr, "syntax error (malformed IP)");
+		return;
+	}
+
+	uint32_t ip_addr = b1*256*256*256 + b2*256*256 + b3*256 + b4;
+
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(!connection){
+		printf("No connection with socket %d\n", socket);
+		return;
+	}
+
+	tcp_connection_set_remote(connection, ip_addr, port);
+	puts("Successful.");
+}
+	
+	
+	
+
 /*
 struct sendrecvfile_arg {
   int s;
@@ -181,6 +253,8 @@ int v_read_all(int s, void *buf, size_t bytes_requested){
   return bytes_read;
 }
 */
+
+
 void help_cmd(const char *line, tcp_node_t tcp_node){
   (void)line;
 
@@ -201,52 +275,40 @@ void help_cmd(const char *line, tcp_node_t tcp_node){
   return;
 }
 
-// puts command on to stdin_commands queue for ip_node to handle
-void ip_handle_cmd(const char *line, tcp_node_t tcp_node){
-	char* cmd_item = (char *)malloc(sizeof(char)*LINE_MAX);
-	strcpy(cmd_item, line);
-
-	tcp_node_queue_ip_cmd(tcp_node, cmd_item);
-	return;	
-}
-
 void quit_cmd(const char *line, tcp_node_t tcp_node){
 	tcp_node_stop(tcp_node);
-	//ip_handle_cmd(line, tcp_node);	
+	//tcp_node_command_ip(tcp_node, line);;	
 	return;
 }
+
 void fp_cmd(const char *line, tcp_node_t tcp_node){
-
-	ip_handle_cmd(line, tcp_node);	
+	tcp_node_command_ip(tcp_node, line);	
 	return;
 }
+
 void rp_cmd(const char *line, tcp_node_t tcp_node){
-
-	ip_handle_cmd(line, tcp_node);	
+	tcp_node_command_ip(tcp_node, line);	
 	return;
 }
-void interfaces_cmd(const char *line, tcp_node_t tcp_node){
 
-	ip_handle_cmd(line, tcp_node);	
+void interfaces_cmd(const char *line, tcp_node_t tcp_node){
+	tcp_node_command_ip(tcp_node, line);	
   	return;
 }
 
 void routes_cmd(const char *line, tcp_node_t tcp_node){
-
-	ip_handle_cmd(line, tcp_node);	
+	tcp_node_command_ip(tcp_node, line);	
   	return;
 }
 
 
 void down_cmd(const char *line, tcp_node_t tcp_node){
-
-	ip_handle_cmd(line, tcp_node);	
+	tcp_node_command_ip(tcp_node, line);	
   	return;
 }
 
 void up_cmd(const char *line, tcp_node_t tcp_node){
-
-	ip_handle_cmd(line, tcp_node);	
+	tcp_node_command_ip(tcp_node, line);	
   	return;
 }
 
@@ -717,8 +779,9 @@ struct {
   {"up", up_cmd},
   {"fp", fp_cmd},
   {"rp", rp_cmd},
-  {"sockets", sockets_cmd},/*
-  {"accept", accept_cmd},
+  {"sockets", sockets_cmd}, 
+	
+  /*{"accept", accept_cmd},
   {"connect", connect_cmd},
   {"recv", recv_cmd},
   {"sendfile", sendfile_cmd},
@@ -732,7 +795,10 @@ struct {
   {"v_bind", vv_bind}, // calls v_bind
   {"v_listen", vv_listen}, // calls v_listen
   {"v_connect", vv_connect}, // calls v_connect
-  {"v_accept", vv_accept} // calls v_accept
+  {"v_accept", vv_accept}, // calls v_accept
+  {"v_write", vv_write},  // calls v_write
+
+  {"v_set", vv_set_address}
 };
 
 
@@ -743,16 +809,14 @@ void* _handle_tcp_node_stdin(void* node){
 	
 	char line[LINE_MAX];
 	char cmd[LINE_MAX];
-	char *fgets_ret;
+
 	int ret;
 	unsigned i; 	
 	
 	while (tcp_node_running(tcp_node)&&tcp_node_ip_running(tcp_node)){
 		
-		fgets_ret = fgets(line, sizeof(line), stdin);
-		if (fgets_ret == NULL){
+		if( fgets(line, sizeof(line), stdin) == NULL)
 			break;
-		}
 		
 		ret = sscanf(line, "%s", cmd);
 		if (ret != 1){

@@ -18,8 +18,10 @@ int main(int argc, char *argv[]){
 	//initiate tcp_node which will initiate ip_node_t which will create factory and use linkedlist
 	tcp_node_t tcp_node = tcp_node_init(linkedlist);
 
-	if(!tcp_node)
+	if(!tcp_node){
+		puts("unable to init tcp_node");
 		return 1;
+	}
 
 	tcp_node_start(tcp_node);
 	tcp_node_destroy(tcp_node);

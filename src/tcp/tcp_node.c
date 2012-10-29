@@ -25,7 +25,7 @@
 
 // static functions
 static void _handle_packet(void* packet);
-static void _handle_read(tcp_node_t tcp_node);
+//static void _handle_read(tcp_node_t tcp_node);
 static int _start_ip_threads(tcp_node_t tcp_node, 
 			pthread_t* ip_link_interface_thread, pthread_t* ip_send_thread, pthread_t* ip_command_thread);
 static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t* tcp_stdin_thread);
@@ -169,15 +169,22 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	puts("destroying?");
 
 	// destroy ip_node
+/*	
+	THIS IS BLOCKING FOREVER 
+	
 	ip_node_t ip_node = tcp_node->ip_node;
 	ip_node_destroy(&ip_node);
+
 	// destroy bqueues
 	bqueue_destroy(tcp_node->to_send);
 	free(tcp_node->to_send);
+
 	bqueue_destroy(tcp_node->to_read);
 	free(tcp_node->to_read);
+
 	bqueue_destroy(tcp_node->stdin_commands);
 	free(tcp_node->stdin_commands);
+*/
 	
 	//// iterate through the hash maps and destroy all of the keys/values,
 	//// this will NOT destroy the interfaces
@@ -208,7 +215,7 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 	// init new tcp_connection
 	tcp_connection_t connection = tcp_connection_init(tcp_node_next_virt_socket(tcp_node));
-	
+
 	// place connection in array
 	_insert_connection_array(tcp_node, connection);
 	
@@ -218,6 +225,7 @@ tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 
 	return connection;
 }
+
 // returns tcp_connection corresponding to socket
 tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int socket){
 	
@@ -424,6 +432,8 @@ void tcp_node_start(tcp_node_t tcp_node){
 
 	puts("finished.");
 }
+
+/*
 // puts command on to stdin_commands queue
 // returns 1 on success, -1 on failure (failure when queue actually already destroyed)
 int tcp_node_queue_ip_cmd(tcp_node_t tcp_node, char* buffered_cmd){
@@ -446,6 +456,8 @@ int tcp_node_queue_ip_send(tcp_node_t tcp_node, char* buffered_cmd){
 	
 	return 1;
 }
+*/
+
 // returns tcp_node->running
 int tcp_node_running(tcp_node_t tcp_node){
 	return tcp_node->running;
@@ -453,6 +465,16 @@ int tcp_node_running(tcp_node_t tcp_node){
 // returns whether ip_node running still
 int tcp_node_ip_running(tcp_node_t tcp_node){
 	return ip_node_running(tcp_node->ip_node);
+}
+
+void tcp_node_command_ip(tcp_node_t tcp_node, const char* cmd){
+	ip_node_command(tcp_node->ip_node, cmd);
+}
+
+void tcp_node_send(tcp_node_t tcp_node, tcp_packet_data_t packet){
+	puts("pushing packet to ip");
+	int ret = ip_node_send(tcp_node->ip_node, packet);
+	printf("return from ip_node_send: %d\n", ret);
 }
 
 /************************** Internal Functions Below ********************************************/
@@ -486,9 +508,11 @@ static int _insert_connection_array(tcp_node_t tcp_node, tcp_connection_t connec
 }
 
 static void _handle_packet(void* packet){
-	///
+	tcp_packet_data_t tcp_packet = (tcp_packet_data_t)packet;
+	printf("packet received: %s\n", tcp_packet->packet);
 }
 
+/*
 static void _handle_read(tcp_node_t tcp_node){
 	// dequeue next packets to read  -- iterate through to make sure to handle each packet on queue
 	bqueue_t *to_read;
@@ -505,6 +529,7 @@ static void _handle_read(tcp_node_t tcp_node){
 	
 	free(next_packet);
 }
+*/
 
 /* helper function to tcp_node_start -- does the work of starting up _handle_tcp_node_stdin() in a thread */
 static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t* tcp_stdin_thread){		
