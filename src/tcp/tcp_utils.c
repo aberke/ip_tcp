@@ -4,14 +4,29 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <netinet/tcp.h>
 #include <inttypes.h>
 
 #include "tcp_utils.h"
 
+#define TCP_HEADER_SIZE sizeof(struct tcphdr);
 
-//
-//void* tcp_utils_wrap_packet
+
+// takes in data and wraps data in header with correct addresses.  
+// frees parameter data and mallocs new packet  -- sets data to point to new packet
+// returns size of new packet that data points to
+int tcp_utils_wrap_packet(void** data, int data_len, tcp_connection_t connection){
+	struct ip* ip_header = (struct ip*)malloc(IP_HEADER_SIZE);
+	memset(ip_header, 0, IP_HEADER_SIZE);
+		
+	struct tcphdr header;
+	char* packet = malloc(sizeof(struct tcphdr) + data_len);
+	
+	header->th_sport = htons(tcp_connection_get_local_port(connection));
+	header->th_dport = htons(tcp_connection_get_remote_port(connection)):
+	header->th_off = htons(5);
+	
+	
+}
 
 
 // a tcp_connection owns a local and remote tcp_socket_address.  This pair defines the connection

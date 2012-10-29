@@ -20,7 +20,12 @@
 #include "state_machine.h"
 #include "send_window.h"
 
-#define WINDOW_DEFAULT_TIMEOUT 3;
+#define WINDOW_DEFAULT_TIMEOUT 3
+#define WINDOW_DEFAULT_SEND_WINDOW_SIZE 100
+#define WINDOW_DEFAULT_SEND_SIZE 2000
+#define WINDOW_DEFAULT_ISN 0  // don't actually use this
+
+#define ACCEPT_QUEUE_DEFAULT_SIZE 10
 
 
 struct tcp_connection{
@@ -32,18 +37,22 @@ struct tcp_connection{
 
 	// owns window for sending and window for receiving
 	send_window_t send_window;
-	//receive_window_t receive_window;
+	receive_window_t receive_window;
 	
-	//
+	// owns accept queue to queue syns when listening
+	queue_t accept_queue;
 };
 
 tcp_connection_t tcp_connection_init(int socket){
 	// init state machine
 	state_machine_t state_machine = state_machine_init();
-	// init window
-	// Neil I need some default args please
-
-	send_window_t send_window = send_window_init(
+	// init windows
+	send_window_t send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DFAULT_SEND_WINDOW_SIZE, WINDOW_DEFAULT_SEND_SIZE, WINDOW_DEFAULT_ISN);
+	//TODO: init receive window
+	receive_window_t receive_window = NULL;
+	
+	queue_t accept_queue = queue_init();
+	queue_set_size(ACCEPT_QUEUE_DEFAULT_SIZE);
 	
 	tcp_connection_t connection = (tcp_connection_t)malloc(sizeof(struct tcp_connection));
 	
@@ -56,6 +65,8 @@ tcp_connection_t tcp_connection_init(int socket){
 	
 	connection->state_machine = state_machine;
 	connection->send_window = send_window;
+	connection->receive_window = receive_window;	
+	connection->accept_queue = accept_queue;
 	
 	return connection;
 }
