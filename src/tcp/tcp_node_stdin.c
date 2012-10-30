@@ -131,23 +131,9 @@ void vv_connect(const char *line, tcp_node_t tcp_node){
 }
 
 int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint32_t num_bytes){
-	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
-	if(!connection)	
-		return -EBADF;
-	
-	//TODO: FIRST WRAP IN TCP_HEADER
-	
-	tcp_packet_data_t packet = malloc(sizeof(struct tcp_packet_data));
-	packet->local_virt_ip = tcp_connection_get_local_ip(connection);
-	packet->remote_virt_ip = tcp_connection_get_remote_ip(connection);
 
-	memcpy(packet->packet, to_write, num_bytes);
-//	memcpy(packet->packet, to_write, num_bytes);
-	packet->packet_size = num_bytes;
-
-	tcp_node_send(tcp_node, packet);
-
-	return 0; /* how are we gonna get the result of this if we're pushing to a queue?? ie, fuck */  // <-- daha (Alex)
+	int ret = tcp_node_send(tcp_node, to_write, socket, num_bytes);
+	return ret; /* how are we gonna get the result of this if we're pushing to a queue?? ie, fuck */  // <-- daha (Alex)
 }
 
 

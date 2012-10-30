@@ -417,8 +417,25 @@ void tcp_node_command_ip(tcp_node_t tcp_node, const char* cmd){
 	ip_node_command(tcp_node->ip_node, cmd);
 }
 
-void tcp_node_send(tcp_node_t tcp_node, tcp_packet_data_t packet){
-	puts("pushing packet to ip");
+void tcp_node_send(tcp_node_t tcp_node, char* to_write, int socket, uint32_t num_bytes){
+
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(!connection)	
+		return -EBADF;
+	
+	//TODO: FIRST WRAP IN TCP_HEADER
+	
+	tcp_packet_data_t packet = malloc(sizeof(struct tcp_packet_data));
+	packet->local_virt_ip = tcp_connection_get_local_ip(connection);
+	packet->remote_virt_ip = tcp_connection_get_remote_ip(connection);
+
+	memcpy(packet->packet, to_write, num_bytes);
+	packet->packet_size = num_bytes;
+	
+	
+	
+	
+	
 	int ret = ip_node_send_tcp(tcp_node->ip_node, packet);
 	printf("return from ip_node_send: %d\n", ret);
 }

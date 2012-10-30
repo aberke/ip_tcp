@@ -24,11 +24,27 @@ memchunk_t tcp_unwrap_data(void* packet, int length);
 
 	NOTE: converting to host-byte-order is handled!
 */
+
+/****** For Unwrapping *****/
 #define tcp_window_size(header) ((header)->th_win)
 #define tcp_seqnum(header) ((header)->th_seq)
 #define tcp_dest_port(header) ntohs((header)->th_dport)
 #define tcp_source_port(header) ntohs((header)->th_dport)
+/******** For wrapping *****/
+#define tcp_set_window_size(header, size) (((struct* tcphdr)headr)->th_win) = (size))
+#define tcp_set_
 
+#define ADD(a,b) a+b
+
+
+
+
+int size = tcp_window_size(header);
+
+packet p;
+tcp_window_size(p);
+
+((p)->th_win);
 
 // takes in data and wraps data in header with correct addresses.  
 // frees parameter data and mallocs new packet  -- sets data to point to new packet
