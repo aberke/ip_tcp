@@ -8,17 +8,38 @@
 #include "ip_utils.h"
 #include "ipsum.h"
 
+/****** Structs/Functions for tcp_packet **************************/
 
-/*KEEP IN MIND:
-"We ask you to design and implement an interface that allows an upper layer to register a handler
-for a given protocol number. We’ll leave its speciﬁcs up to you."
-*/
+/* data type that to_send and to_read queues will store (ie queue and dequeue) -- need vip's associated with packet
+struct tcp_packet_data{
+	uint32_t local_virt_ip;
+	uint32_t remote_virt_ip;
+	char packet[MTU];
+	int packet_size;  //size of packet in bytes
+};*/
 
-/*"When IP packets arrive at their destination, if they aren’t RIP packets, you should
-simply print them out in a useful way."*/
+tcp_packet_data_t tcp_packet_data_init(char* packet_data, int packet_data_size, uint32_t local_virt_ip, uint32_t remote_virt_ip){
+
+	tcp_packet_data_t tcp_packet = (tcp_packet_data_t)malloc(sizeof(struct tcp_packet_data));
+	
+	tcp_packet->local_virt_ip = local_virt_ip;
+	tcp_packet->remote_virt_ip = remote_virt_ip;
+	tcp_packet->packet_size = packet_data_size;
+	memcpy(tcp_packet->packet, packet_data, MTU);
+	
+	return tcp_packet;
+}
+
+void tcp_packet_data_destroy(tcp_packet_data_t packet_data){
+	free(packet_data);
+}
 
 
-//write wrap_ip_packet 
+
+/****** End of Structs/Functions for tcp_packet **************************/
+
+
+
 //don't have to deal with fragmentation but make sure you don't send more than limit
 
 //Param: buffer read in, number of bytes read in
@@ -42,12 +63,10 @@ int ip_check_valid_packet(char* buffer, int bytes_read){
 	
 	if(checksum != ip_sum((char*)ip_header, IP_HEADER_SIZE)){  
 		puts("Packet ip_sum != actually checksum");
-		ip_header->ip_sum = checksum; // set it back
-		ip_header->ip_ttl = ttl;
-		return ntohs(ip_header->ip_len) - ip_header->ip_hl*4;//-1;
+		return -1;
 	}
 
-	ip_header->ip_sum = checksum; // set it back
+	ip_header->ip_sum = htons(checksum); // set it back
 	ip_header->ip_ttl = ttl;
 	u_short ip_len = ntohs(ip_header->ip_len);
 
@@ -74,6 +93,18 @@ int ip_decrement_TTL(char* packet){
 	}
 	ip_header->ip_ttl = ip_ttl - 1;
 	return 1;
+}
+// returns source address of packet
+uint32_t ip_get_src_addr(char* buffer){
+	char header[sizeof(struct ip)];
+	memcpy(header, buffer, IP_HEADER_SIZE);
+	struct ip *ip_header = (struct ip *)header;
+	
+	struct in_addr src_ip;
+	uint32_t src_addr;
+	src_ip = ip_header->ip_src;
+	src_addr = ntohl(src_ip.s_addr);
+	return src_addr;
 }
 // returns destination address of packet
 uint32_t ip_get_dest_addr(char* buffer){

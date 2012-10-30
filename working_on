@@ -3,8 +3,7 @@ state_machine -- done
 window        -- struct that implements a very abstract, high-level version of the sliding window protocol -- almost done
 					-- please make some default init args
 
-Change Alex made to IP: We have added a type: TCP_DATA=6  which is the protocol number in the IP packet for TCP
-					This is now defined where RIP_DATA and TEST_DATA defined
+NOTE: to_read and to_send queues only queue tcp_packet_data_t's  -- stick by this convention!
 
 			
 	We should think about what having only one ip_node means for the sliding window protocol (if only want one ip_node).
@@ -62,7 +61,7 @@ start():
 		struct ip_thread_data{
 			ip_node_t ip_node;
 			bqueue_t to_send;
-			bqueue_t to_read;
+			bqueue_t to_read;  
 			bqueue_t stdin_commands;
 		};
 			// data type that to_send and to_read queues will store (ie queue and dequeue) -- need vip's associated with packet

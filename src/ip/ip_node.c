@@ -230,19 +230,28 @@ void ip_node_stop(ip_node_t ip_node){
 ip_node_read
 	takes in an ip_node and a packet of data. The specific way this
 	will be implemented is to add it to the queue, but no one needs to know this
+	
+	Updated by Alex: Creates a tcp_packet_data_t which is what is queued, so that 
+	when popped off the queue, the tcp_node can have enough info
 
 returns:
 	0 	on success
 	-1 	queue does not exist 
 */
-int ip_node_read(ip_node_t ip_node, char* packet){
-	if(!ip_node->read_queue) return -1;
-
-	if(bqueue_enqueue(ip_node->read_queue, packet) < 0){
+int ip_node_read(ip_node_t ip_node, char* packet, int packet_size, uint32_t remote_virt_ip, uint32_t local_virt_ip){
+	if(!ip_node->read_queue) 
+		return -1;
+	
+	if(packet_size > MTU)
+		printf("Received tcp packet of size %d which is larger than the tcp MTU %ld.  Will only keep MTU bytes\n", packet_size, MTU);
+	
+	tcp_packet_data_t tcp_packet = tcp_packet_data_init(packet, packet_size, local_virt_ip, remote_virt_ip);
+		
+	if(bqueue_enqueue(ip_node->read_queue, tcp_packet) < 0){
 		ip_node->read_queue = NULL;
+		tcp_packet_data_destroy(tcp_packet);
 		return -1;
 	}
-
 	return 0;
 }
 
@@ -791,7 +800,6 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 	}
 
 	int packet_data_size = 	ip_check_valid_packet(packet_buffer, bytes_read);	
-	printf("bytes read: %d, packet_data_size: %d\n", bytes_read, packet_data_size);
  	if(packet_data_size < 0){
  		puts("Discarding packet");
  		free(packet_buffer);
@@ -809,33 +817,36 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 		return;
 	}
 	// else either RIP data or TEST_DATA to print:	
-	char* packet_unwrapped = malloc(sizeof(packet_data_size+1));
+	uint32_t src_addr = ip_get_src_addr(packet_buffer);
+	char* packet_unwrapped = malloc(sizeof(char)*(packet_data_size+1));
 	int type = ip_unwrap_packet(packet_buffer, packet_unwrapped, packet_data_size);
-	
-	if(type == RIP_DATA){
-		_handle_selected_RIP(ip_node, interface, packet_unwrapped);
-	}
-	else if(type == TCP_DATA){
-		//HANDLE WITH TCP
-			/* enqueue an item into the queue. if the queue has been
-			 * destroyed, returns -EINVAL */
-		if(ip_node_read(ip_node, packet_unwrapped) == -EINVAL)
-		/*if(bqueue_enqueue(to_read, packet_unwrapped) == -EINVAL)*/
-			puts("Tried to enqueue item into to_read queue after queue destroyed: see ip_node: _handle_selected()");
-		
-		packet_unwrapped[packet_data_size] = '\0'; //null terminate string so that it prints nicely
-		printf("TCP Message Received: %s\n", packet_unwrapped);		
-	}
-	else if (type == TEST_DATA){
-		packet_unwrapped[packet_data_size] = '\0'; //null terminate string so that it prints nicely
-		printf("Message Received: %s\n", packet_unwrapped);
-	}
-	else{
-		packet_unwrapped[packet_data_size] = '\0'; // null terminate string so that it prints nicely
-		printf("Received packet of type neither RIP nor TEST_DATA: %s\n", packet_unwrapped);
-	}
-	//// clean up
 	free(packet_buffer);
+	
+	switch(type){
+		case RIP_DATA:
+			_handle_selected_RIP(ip_node, interface, packet_unwrapped);
+			break;
+	
+		case TCP_DATA:
+			//HANDLE WITH TCP
+				/* enqueue an item into the queue. if the queue has been
+			 	* destroyed, returns -EINVAL */
+			if(ip_node_read(ip_node, packet_unwrapped, packet_data_size, dest_addr, src_addr) == -EINVAL)
+				puts("Tried to enqueue item into to_read queue after queue destroyed: see ip_node: _handle_selected()");
+		
+			packet_unwrapped[packet_data_size] = '\0'; //null terminate string so that it prints nicely
+			break;	
+				
+		case TEST_DATA:
+			packet_unwrapped[packet_data_size] = '\0'; //null terminate string so that it prints nicely
+			printf("Message Received: %s\n", packet_unwrapped);
+			break;
+	
+		default: 
+			packet_unwrapped[packet_data_size] = '\0'; // null terminate string so that it prints nicely
+			printf("Received packet of type neither RIP nor TEST_DATA: %s\n", packet_unwrapped);
+	}
+	free(packet_unwrapped);
 }
 
 void ip_node_print(ip_node_t ip_node){

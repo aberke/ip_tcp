@@ -6,6 +6,7 @@
 #include "tcp_connection.h"
 
 #include "utils.h"
+#include "ip_utils.h" // tcp_packet_data_t and its associated functions defined there
 
 typedef struct tcp_socket_address{
 	uint32_t virt_ip;

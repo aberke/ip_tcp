@@ -79,13 +79,11 @@ routing_table_t routing_table_init(){
 		
 void routing_table_destroy(routing_table_t* rt){
 	routing_entry_t info, tmp;
-
 	HASH_ITER(hh, (*rt)->route_hash, info, tmp){
 		
 		HASH_DEL((*rt)->route_hash, info);
 		routing_entry_destroy(&info);
 	}
-
 	free(*rt);
 	*rt = NULL;
 } 

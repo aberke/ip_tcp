@@ -332,7 +332,7 @@ void tcp_node_start(tcp_node_t tcp_node){
 	struct timeval now;
 	void* packet;
 	int ret;
-	while((tcp_node->running)&&(ip_node_running(tcp_node->ip_node))){	
+	while((tcp_node->running)&&(tcp_node_ip_running(tcp_node))){	
 
 		/* get the time of the day so that we are passing in to bqueue_timed_dequeue_abs
 			the absolute time when we want the timeout to occur (the docs in bqueue.c say
@@ -352,6 +352,7 @@ void tcp_node_start(tcp_node_t tcp_node){
 		/* otherwise there's a packet waiting for you! */
 		_handle_packet(packet);
 	}
+	
 	ip_node_stop(tcp_node->ip_node);
 
 	int rc;

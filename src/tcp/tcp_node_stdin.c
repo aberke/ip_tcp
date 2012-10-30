@@ -815,8 +815,10 @@ void* _handle_tcp_node_stdin(void* node){
 	
 	while (tcp_node_running(tcp_node)&&tcp_node_ip_running(tcp_node)){
 		
-		if( fgets(line, sizeof(line), stdin) == NULL)
-			break;
+		if( fgets(line, sizeof(line), stdin) == NULL){
+			quit_cmd(line, tcp_node);
+			break;	
+		}
 		
 		ret = sscanf(line, "%s", cmd);
 		if (ret != 1){

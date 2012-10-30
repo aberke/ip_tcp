@@ -27,23 +27,14 @@ struct ip_thread_data{
 };
 typedef struct ip_thread_data* ip_thread_data_t;
 
-// data type that to_send and to_read queues will store (ie queue and dequeue) -- need vip's associated with packet
-struct tcp_packet_data{
-	uint32_t local_virt_ip;
-	uint32_t remote_virt_ip;
-	char packet[MTU];
-	int packet_size;  //size of packet in bytes
-};
-
-typedef struct tcp_packet_data* tcp_packet_data_t;
-
 
 ip_node_t ip_node_init(iplist_t* links);
 void ip_node_destroy(ip_node_t* ip_node);
 
 int ip_node_send(ip_node_t ip_node, tcp_packet_data_t packet);
 int ip_node_command(ip_node_t ip_node, const char* command);
-int ip_node_read(ip_node_t ip_node, char* packet);
+// NEIL NOTE THIS CHANGE: NEED TO MOVE PACKET INTO A tcp_packet_data by mallocing tcp_packet_data and appropriately filling it
+int ip_node_read(ip_node_t ip_node, char* packet, int packet_size, uint32_t remote_virt_ip, uint32_t local_virt_ip);
 void ip_node_stop(ip_node_t ip_node);
 
 void ip_node_print(ip_node_t ip_node);
