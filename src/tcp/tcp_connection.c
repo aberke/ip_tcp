@@ -107,6 +107,14 @@ tcp_connection_handle_packet
 */
 void tcp_connection_handle_packet(tcp_connection_t connection, tcp_packet_data_t packet){
 	
+	state_e state = state_machine_get_state(connection->state_machine);
+
+	switch(state){
+		case CLOSED: 
+			puts("CLOSED packet received a message. Discarding...\n");
+			return;
+
+	
 	/* pull out the ack and pass it to the send window */
 	uint16_t ack = tcp_ack(packet->packet);
 	send_window_ack(connection->send_window, ack);
