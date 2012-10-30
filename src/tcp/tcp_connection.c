@@ -167,4 +167,5 @@ void tcp_connection_set_remote(tcp_connection_t connection, uint32_t remote, uin
 	connection->remote_addr.virt_ip = remote;
 	connection->remote_addr.virt_port = port;
 }
+
 	

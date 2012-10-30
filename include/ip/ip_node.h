@@ -46,5 +46,10 @@ void *ip_command_thread_run(void *ip_data);
 // returns 1 if true, 0 if false
 int ip_node_running(ip_node_t ip_node);
 
+/****** FOR TESTING *******/
+
+uint32_t ip_node_get_interface_remote_ip(ip_node_t ip_node, int interface_num);
+
+
 
 #endif // __IP_NODE_H__

@@ -134,7 +134,9 @@ int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(!connection)	
 		return -EBADF;
-
+	
+	//TODO: FIRST WRAP IN TCP_HEADER
+	
 	tcp_packet_data_t packet = malloc(sizeof(struct tcp_packet_data));
 	packet->local_virt_ip = tcp_connection_get_local_ip(connection);
 	packet->remote_virt_ip = tcp_connection_get_remote_ip(connection);
@@ -145,7 +147,7 @@ int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint
 
 	tcp_node_send(tcp_node, packet);
 
-	return 0; /* how are we gonna get the result of this if we're pushing to a queue?? ie, fuck */
+	return 0; /* how are we gonna get the result of this if we're pushing to a queue?? ie, fuck */  // <-- daha (Alex)
 }
 
 
@@ -165,6 +167,29 @@ void vv_write(const char* line, tcp_node_t tcp_node){
 	printf("write result: %d\n", ret);
 
 	free(to_write);
+}
+// takes given interfaces number and sets socket's remote ip to be that interface's remote ip
+void vv_set_addrByInterface(const char* line, tcp_node_t tcp_node){
+
+	int socket;
+	uint32_t ip_addr;
+	int interface_num;
+	
+	if(sscanf(line, "v_set_addrByInterface %d %d", &socket, &interface_num) != 2){
+		fprintf(stderr, "syntax error (usage: v_set_addrByInterface [socket] [interface number])\n");
+		return;
+	}
+	
+	ip_addr = tcp_node_get_interface_remote_ip(tcp_node, interface_num);
+	
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(!connection){
+		printf("No connection with socket %d\n", socket);
+		return;
+	}
+
+	tcp_connection_set_remote(connection, ip_addr, 1);
+	puts("Successful.");	
 }
 
 void vv_set_address(const char* line, tcp_node_t tcp_node){
@@ -797,7 +822,7 @@ struct {
   {"v_connect", vv_connect}, // calls v_connect
   {"v_accept", vv_accept}, // calls v_accept
   {"v_write", vv_write},  // calls v_write
-
+  {"v_set_addrByInterface", vv_set_addrByInterface},
   {"v_set", vv_set_address}
 };
 

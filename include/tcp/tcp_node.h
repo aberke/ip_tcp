@@ -85,4 +85,7 @@ int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int p
 // returns tcp_connection corresponding to socket
 tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int socket);
 
+/**** FOR TESTING *****/
+uint32_t tcp_node_get_interface_remote_ip(tcp_node_t tcp_node, int interface_num);
+
 #endif //__TCP_NODE_H__

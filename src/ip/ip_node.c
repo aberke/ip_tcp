@@ -629,8 +629,6 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){//bqueue_t *t
 	uint32_t send_to_vip;
 	int packet_size;
 	
-//	while(!(bqueue_trydequeue(to_send, (void **)&tcp_packet_data))){
-		// extract packet data from tcp_packet_data
 		packet = tcp_packet_data->packet;
 		send_to_vip = tcp_packet_data->remote_virt_ip;
 		packet_size = tcp_packet_data->packet_size;
@@ -864,4 +862,19 @@ int ip_node_running(ip_node_t ip_node){
 	return ip_node->running;
 }
 
+/****** FOR TESTING *******/
+
+uint32_t ip_node_get_interface_remote_ip(ip_node_t ip_node, int interface_id){
+	
+	uint32_t ip_addr = 0;
+	
+	if((interface_id<0)||(interface_id >= ip_node->num_interfaces)){
+		puts("Proper command: where integer corresponds to interface id printed from command 'interfaces'");
+	}
+	else{
+		link_interface_t interface = ip_node->interfaces[interface_id];
+		ip_addr = link_interface_get_remote_virt_ip(interface);
+	}
+	return ip_addr;
+}
 

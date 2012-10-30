@@ -544,8 +544,13 @@ static int _start_ip_threads(tcp_node_t tcp_node,
     pthread_attr_destroy(&attr);
 	return 1;
 }
+/***************** FOR TESTING *********************/
 
-
+uint32_t tcp_node_get_interface_remote_ip(tcp_node_t tcp_node, int interface_num){
+	uint32_t ip_addr;
+	ip_addr = ip_node_get_interface_remote_ip(tcp_node->ip_node, interface_num);
+	return ip_addr;
+}
 
 
 
