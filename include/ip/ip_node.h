@@ -31,7 +31,7 @@ typedef struct ip_thread_data* ip_thread_data_t;
 ip_node_t ip_node_init(iplist_t* links);
 void ip_node_destroy(ip_node_t* ip_node);
 
-int ip_node_send(ip_node_t ip_node, tcp_packet_data_t packet);
+int ip_node_send_tcp(ip_node_t ip_node, tcp_packet_data_t packet);
 int ip_node_command(ip_node_t ip_node, const char* command);
 // NEIL NOTE THIS CHANGE: NEED TO MOVE PACKET INTO A tcp_packet_data by mallocing tcp_packet_data and appropriately filling it
 int ip_node_read(ip_node_t ip_node, char* packet, int packet_size, uint32_t remote_virt_ip, uint32_t local_virt_ip);

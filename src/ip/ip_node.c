@@ -264,7 +264,7 @@ returns:
 	0 	on success
 	-1 	queue does not exist 
 */
-int ip_node_send(ip_node_t ip_node, tcp_packet_data_t data){
+int ip_node_send_tcp(ip_node_t ip_node, tcp_packet_data_t data){
 	/* make sure the queue has been inited and not destroyed */
 	if(!ip_node->send_queue) return -2;	
 
@@ -618,10 +618,8 @@ static void _handle_user_command_up(ip_node_t ip_node, char* buffer){
 	}		
 }
 /* _handle_user_command_send iterates through to_send queue to handle each packet that has been wrapped by tcp_node */
-static void _handle_to_send_queue(ip_node_t ip_node, void* packet){//bqueue_t *to_send){
-	puts("ip_node pulling from send queue");
+static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 
-	/*tcp_packet_data_t *tcp_packet_data = (tcp_packet_data_t *) malloc(sizeof(struct tcp_packet_data));*/
 	tcp_packet_data_t tcp_packet_data = (tcp_packet_data_t)packet;
 	
 	//char* packet = (char*) malloc(sizeof(char)*MTU);
@@ -629,42 +627,41 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){//bqueue_t *t
 	uint32_t send_to_vip;
 	int packet_size;
 	
-		packet = tcp_packet_data->packet;
-		send_to_vip = tcp_packet_data->remote_virt_ip;
-		packet_size = tcp_packet_data->packet_size;
-		
-		send_to.s_addr = send_to_vip;
+	packet = tcp_packet_data->packet;
+	send_to_vip = tcp_packet_data->remote_virt_ip;
+	packet_size = tcp_packet_data->packet_size;
 	
-		// check if send_to_vip local -- if so must just print
-		if(_is_local_ip(ip_node, send_to_vip)){
-			printf("We send a message to ourselves?  Look into how we should handle packet: %s\n", (char*)packet);
-			return;
-			//continue;
-		}
-		
-		// get next hop for sending message to send_to_vip
-		uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
-		if(next_hop_addr == -1){
-			printf("Cannot reach address %d.\n", send_to_vip);
-			return;
-			//continue;
-		}
-		// get struct in_addr corresponding to next_hop_addr
-		send_from.s_addr = next_hop_addr;
-		// get interface to send out packet on -- interface corresponding to next_hop_addr
-		interface_ip_keyed_t address_keyed;
-		HASH_FIND(hh, ip_node->addressToInterface, &next_hop_addr, sizeof(uint32_t), address_keyed);
-		if(!address_keyed){
-			printf("Cannot reach address %d  -- TODO: MAKE SURE FIXED -- see _handle_user_command_send\n", send_to_vip);
-			return;
-			//continue;
-		}
-		link_interface_t next_hop_interface = address_keyed->interface;
-				
-		// wrap and send IP packet
-		ip_wrap_send_packet(packet, packet_size, TCP_DATA, send_from, send_to, next_hop_interface);		
-	//}	
-	//free(packet);
+	send_to.s_addr = send_to_vip;
+
+	// check if send_to_vip local -- if so must just print
+	if(_is_local_ip(ip_node, send_to_vip)){
+		printf("We send a message to ourselves?  Look into how we should handle packet: %s\n", (char*)packet);
+		return;
+		//continue;
+	}
+	
+	// get next hop for sending message to send_to_vip
+	uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
+	if(next_hop_addr == -1){
+		printf("Cannot reach address %d.\n", send_to_vip);
+		return;
+		//continue;
+	}
+	// get struct in_addr corresponding to next_hop_addr
+	send_from.s_addr = next_hop_addr;
+	// get interface to send out packet on -- interface corresponding to next_hop_addr
+	interface_ip_keyed_t address_keyed;
+	HASH_FIND(hh, ip_node->addressToInterface, &next_hop_addr, sizeof(uint32_t), address_keyed);
+	if(!address_keyed){
+		printf("Cannot reach address %d  -- TODO: MAKE SURE FIXED -- see _handle_user_command_send\n", send_to_vip);
+		return;
+		//continue;
+	}
+	link_interface_t next_hop_interface = address_keyed->interface;
+			
+	// wrap and send IP packet
+	ip_wrap_send_packet(packet, packet_size, TCP_DATA, send_from, send_to, next_hop_interface);		
+
 	free(tcp_packet_data);
 }
 
@@ -842,7 +839,7 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 	
 		default: 
 			packet_unwrapped[packet_data_size] = '\0'; // null terminate string so that it prints nicely
-			printf("Received packet of type neither RIP nor TEST_DATA: %s\n", packet_unwrapped);
+			printf("Received packet of type:%d, neither RIP nor TEST_DATA: %s\n", type, packet_unwrapped);
 	}
 	free(packet_unwrapped);
 }

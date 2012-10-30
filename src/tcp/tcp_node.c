@@ -419,7 +419,7 @@ void tcp_node_command_ip(tcp_node_t tcp_node, const char* cmd){
 
 void tcp_node_send(tcp_node_t tcp_node, tcp_packet_data_t packet){
 	puts("pushing packet to ip");
-	int ret = ip_node_send(tcp_node->ip_node, packet);
+	int ret = ip_node_send_tcp(tcp_node->ip_node, packet);
 	printf("return from ip_node_send: %d\n", ret);
 }
 

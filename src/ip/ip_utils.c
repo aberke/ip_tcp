@@ -131,12 +131,15 @@ int ip_unwrap_packet(char* buffer, char* packet_unwrapped, int packet_data_size)
 	header_len = ip_header->ip_hl*4; //// from wikipedia: header length in bytes = value set in ip_hl x 4
 	ip_p = ip_header->ip_p;
 	memcpy(packet_unwrapped, buffer+header_len, packet_data_size);
-
+	
 	if(ip_p == RIP_DATA){
 		return RIP_DATA;
 	}
 	if(ip_p == TEST_DATA){
 		return TEST_DATA;
+	}
+	if(ip_p == TCP_DATA){
+		return TCP_DATA;
 	}
 	puts("Received packet of unknown protocol");
 	return -1;
