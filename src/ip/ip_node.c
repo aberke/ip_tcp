@@ -817,9 +817,9 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 	}
 	// else either RIP data or TEST_DATA to print:	
 	uint32_t src_addr = ip_get_src_addr(packet_buffer);
-	char* packet_unwrapped = malloc(sizeof(char)*(packet_data_size+1));
-	int type = ip_unwrap_packet(packet_buffer, packet_unwrapped, packet_data_size);
-	free(packet_buffer);
+	
+	char* packet_unwrapped;// = malloc(sizeof(char)*(packet_data_size+1));
+	int type = ip_unwrap_packet(packet_buffer, &packet_unwrapped, packet_data_size);
 	
 	switch(type){
 		case RIP_DATA:
@@ -843,7 +843,8 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 			packet_unwrapped[packet_data_size] = '\0'; // null terminate string so that it prints nicely
 			printf("Received packet of type:%d, neither RIP nor TEST_DATA: %s\n", type, packet_unwrapped);
 	}
-	free(packet_unwrapped);
+	//free(packet_unwrapped);
+	free(packet_buffer);
 }
 
 void ip_node_print(ip_node_t ip_node){

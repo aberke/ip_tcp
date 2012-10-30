@@ -94,6 +94,33 @@ void tcp_connection_destroy(tcp_connection_t connection){
 	connection = NULL;
 }
 
+/*
+tcp_connection_handle_packet
+	will get called from tcp_node's _handle_packet function with the 
+	connection as well as the tcp_packet_data_t. It is this connections
+	job to handle the packet, as well as send back response information
+	as needed. All meta-information (SYN, FIN, etc.) will probably be 
+	passed in to the state-machine, which will take appropriate action
+	with state changes. Therefore, the logic of this function should 
+	mostly be concerned with passing off the data to the window/validating
+	the correctness of the received packet (that it makes sense) 
+*/
+void tcp_connection_handle_packet(tcp_connection_t connection, tcp_packet_data_t packet){
+	
+	/* pull out the ack and pass it to the send window */
+	uint16_t ack = tcp_ack(packet->packet);
+	send_window_ack(connection->send_window, ack);
+
+	/* get the data */
+	memchunk_t data = tcp_unwrap_data(packet->packet, packet->packet_size);
+	if(data){
+//		recv_window_push(connection->recv_window, 
+	}
+
+	printf("connection on port %d handling packet\n", (connection->local_addr).virt_port);
+	tcp_packet_data_destroy(&packet);
+}
+
 /********** State Changing Functions *************/
 
 int tcp_connection_passive_open(tcp_connection_t connection){

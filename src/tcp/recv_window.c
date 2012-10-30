@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <inttypes.h>
 
 #include "recv_window.h"
 #include "queue.h"
@@ -9,7 +10,7 @@ recv_window_chunk_init
 	constructs and passes back a recv_window_chunk which wraps around the
 	passed in data, and sets its length, while also setting offset to 0
 */
-recv_window_chunk_t recv_window_chunk_init(void* data, int length){
+recv_window_chunk_t recv_window_chunk_init(void* data, uint32_t length){
 	recv_window_chunk_t rwc = malloc(sizeof(struct recv_window_chunk));
 	rwc->data = malloc(length);
 	memcpy(rwc->data,data,length);
@@ -72,12 +73,12 @@ void recv_window_chunk_decrement(recv_window_chunk_t* rwc){
 
 struct recv_window {
 	queue_t to_read;
-	int size;
-	int left;
+	uint32_t size;
+	uint32_t left;
 	recv_window_chunk_t* slider;
 };
 
-recv_window_t recv_window_init(int window_size, int ISN){
+recv_window_t recv_window_init(uint32_t window_size, uint32_t ISN){
 	recv_window_t recv_window = (struct recv_window*)malloc(sizeof(struct recv_window));
 	recv_window->size = window_size;
 	recv_window->left = ISN;
@@ -96,8 +97,8 @@ returns
 	0  successful (valid seqnum)
 	-1 otherwise
 */
-static int _validate_seqnum(recv_window_t recv_window, int seqnum, int length){
-	int window_min = recv_window->left,
+static int _validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t length){
+	uint32_t window_min = recv_window->left,
 		window_max = (recv_window->left+recv_window->size) % MAX_SEQNUM;
 		
 	/*  A segment is judged to occupy a portion of valid receive sequence
@@ -148,18 +149,18 @@ recv_window_receive
 	the ACK number to send back. If there is no such number (ie the window didn't slide at all, 
 	it will return -1.
 */
-int recv_window_receive(recv_window_t recv_window, void* data, int length, int seqnum){
+uint32_t recv_window_receive(recv_window_t recv_window, void* data, uint32_t length, uint32_t seqnum){
 	if(_validate_seqnum(recv_window, seqnum, length) < 0){
 		LOG(("seqnum %d not accepted. left: %d\n", seqnum, recv_window->left)); 
 		return -1;
 	}
 
-	int window_max = recv_window->left + recv_window->size;	
+	uint32_t window_max = recv_window->left + recv_window->size;	
 
 	/* this will be what we store in the receiving buffer */
 	recv_window_chunk_t to_store = recv_window_chunk_init(data, length);
 
-	int i, index;
+	uint32_t i, index;
 	recv_window_chunk_t stored;
 	for(i=0;i<length;i++){
 
@@ -196,7 +197,7 @@ int recv_window_receive(recv_window_t recv_window, void* data, int length, int s
 		queue_push(recv_window->to_read, to_store);
 		recv_window_chunk_t just_pushed = to_store;
 
-		int j;
+		uint32_t j;
 		for(j=0;j<recv_window->size;j++){
 			index = (seqnum+j) % (recv_window->size+1);
 			if((seqnum+j % MAX_SEQNUM)==window_max)
@@ -254,7 +255,7 @@ recv_window_destroy
 void recv_window_destroy(recv_window_t* recv_window){
 	queue_destroy_total(&((*recv_window)->to_read),(destructor_f)recv_window_chunk_destroy_free);
 
-	int i; 
+	uint32_t i; 
 	for(i=0;i<(*recv_window)->size+1;i++){
 		if((*recv_window)->slider[i])
 			recv_window_chunk_destroy_total(&((*recv_window)->slider[i]), util_free);

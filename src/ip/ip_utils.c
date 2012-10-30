@@ -25,6 +25,7 @@ tcp_packet_data_t tcp_packet_data_init(char* packet_data, int packet_data_size, 
 	tcp_packet->local_virt_ip = local_virt_ip;
 	tcp_packet->remote_virt_ip = remote_virt_ip;
 	tcp_packet->packet_size = packet_data_size;
+
 	memcpy(tcp_packet->packet, packet_data, MTU);
 	
 	return tcp_packet;
@@ -121,7 +122,7 @@ uint32_t ip_get_dest_addr(char* buffer){
 
 // int is type: RIP vs other  --return -1 if bad packet
 // fills packet_unwrapped with data within packet
-int ip_unwrap_packet(char* buffer, char* packet_unwrapped, int packet_data_size){
+int ip_unwrap_packet(char* buffer, char** packet_unwrapped, int packet_data_size){
 
 	u_int header_len;
 	u_char ip_p;           /* protocol */
@@ -130,7 +131,9 @@ int ip_unwrap_packet(char* buffer, char* packet_unwrapped, int packet_data_size)
 	struct ip *ip_header = (struct ip *)header;
 	header_len = ip_header->ip_hl*4; //// from wikipedia: header length in bytes = value set in ip_hl x 4
 	ip_p = ip_header->ip_p;
-	memcpy(packet_unwrapped, buffer+header_len, packet_data_size);
+
+	*packet_unwrapped = buffer+header_len;
+//	memcpy(packet_unwrapped, buffer+header_len, packet_data_size);
 	
 	if(ip_p == RIP_DATA){
 		return RIP_DATA;

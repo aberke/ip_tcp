@@ -45,7 +45,7 @@ uint32_t ip_get_src_addr(char* buffer);
 int ip_decrement_TTL(char* packet);
 // Returns type: RIP vs other  --return -1 if bad packet
 // fills packet_unwrapped with data within packet
-int ip_unwrap_packet(char* buffer, char* packet_unwrapped, int packet_data_size);
+int ip_unwrap_packet(char* buffer, char** packet_unwrapped, int packet_data_size);
 
 // wraps ip header around data and sends through link_interface li to destination
 int ip_wrap_send_packet(void* data, int data_len, int protocol, struct in_addr ip_src, struct in_addr ip_dst, link_interface_t li);
