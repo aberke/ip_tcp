@@ -78,11 +78,13 @@ void state_machine_set_argument(state_machine_t state_machine, void* arg){
 /* state_machine_transition takes the state of the current state_machine to the
 	next state as dictated by the state transition matrix. It sets the current
 	state to this new state. */
-void state_machine_transition(state_machine_t machine, transition_e t){
+int state_machine_transition(state_machine_t machine, transition_e t){
 	transitioning_t transitioning = ARRAY_GET(machine->transition_matrix, machine->current_state, t);	
 	machine->current_state = transitioning->next_state;
 	if(transitioning->action)
-		transitioning->action(machine->argument);
+		return transitioning->action(machine->argument);
+	
+	return NO_TRANSITION;
 }
 
 /* new state just returns the current state */
