@@ -455,27 +455,10 @@ static int _insert_connection_array(tcp_node_t tcp_node, tcp_connection_t connec
 
 static void _handle_packet(void* packet){
 	tcp_packet_data_t tcp_packet = (tcp_packet_data_t)packet;
-	printf("packet received: %s\n", tcp_packet->packet);
+	printf("In tcp_node: _handle_packet: TCP packet received: %s\n", tcp_packet->packet);
 }
 
-/*
-static void _handle_read(tcp_node_t tcp_node){
-	// dequeue next packets to read  -- iterate through to make sure to handle each packet on queue
-	bqueue_t *to_read;
-	to_read = tcp_node->to_read;
-	
-	tcp_packet_data_t *next_packet = (tcp_packet_data_t *)malloc(sizeof(tcp_packet_data_t));
-	
-	while(!(bqueue_empty(to_read))){
-		// dequeue next packet in to_read queue
-		bqueue_dequeue(to_read, (void **)&next_packet);
-		// for now just print packet:
-		printf("Packet received: %s\n", next_packet->packet);
-	}	
-	
-	free(next_packet);
-}
-*/
+
 
 /* helper function to tcp_node_start -- does the work of starting up _handle_tcp_node_stdin() in a thread */
 static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t* tcp_stdin_thread){		

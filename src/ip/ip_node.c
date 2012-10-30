@@ -239,6 +239,10 @@ returns:
 	-1 	queue does not exist 
 */
 int ip_node_read(ip_node_t ip_node, char* packet, int packet_size, uint32_t remote_virt_ip, uint32_t local_virt_ip){
+
+	packet[packet_size] = '\0';
+	printf("In ip_node_read.  TCP_DATA packet_size: %d, packet: \n%s\n", packet_size, packet);
+
 	if(!ip_node->read_queue) 
 		return -1;
 	
@@ -828,13 +832,11 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 			 	* destroyed, returns -EINVAL */
 			if(ip_node_read(ip_node, packet_unwrapped, packet_data_size, dest_addr, src_addr) == -EINVAL)
 				puts("Tried to enqueue item into to_read queue after queue destroyed: see ip_node: _handle_selected()");
-		
-			packet_unwrapped[packet_data_size] = '\0'; //null terminate string so that it prints nicely
 			break;	
 				
 		case TEST_DATA:
 			packet_unwrapped[packet_data_size] = '\0'; //null terminate string so that it prints nicely
-			printf("Message Received: %s\n", packet_unwrapped);
+			printf("TEST_DATA message Received: %s\n", packet_unwrapped);
 			break;
 	
 		default: 
