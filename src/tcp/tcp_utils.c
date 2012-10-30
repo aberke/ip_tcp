@@ -50,9 +50,9 @@ struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_por
 	memset(ip_header, 0, TCP_HEADER_SIZE);
 	header->th_sport = htons(host_port);
 	header->th_dport = htons(dest_port);
-	header->th_seq = htonl(seq);
-	header->th_ack = htonl(ack);
-	header->th_off = NO_OPTIONS_HEADER_LENGTH;
+	tcp_set_seq(header, seq);
+	tcp_set_ack(header, ack);
+	tcp_set_offset(header);
 	return header;
 }
 

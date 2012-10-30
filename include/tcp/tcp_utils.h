@@ -26,25 +26,16 @@ memchunk_t tcp_unwrap_data(void* packet, int length);
 */
 
 /****** For Unwrapping *****/
-#define tcp_window_size(header) ((header)->th_win)
-#define tcp_seqnum(header) ((header)->th_seq)
+#define tcp_window_size(header) ntohl((header)->th_win)
+#define tcp_seqnum(header) htohl((header)->th_seq)
 #define tcp_dest_port(header) ntohs((header)->th_dport)
 #define tcp_source_port(header) ntohs((header)->th_dport)
 /******** For wrapping *****/
-#define tcp_set_window_size(header, size) (((struct* tcphdr)headr)->th_win) = (size))
-#define tcp_set_
+#define tcp_set_window_size(header, size) ((((struct* tcphdr)header)->th_win) = htonl(size))
+#define tcp_set_ack(header, ack) ((((struct* tcphdr)header)->th_ack) = htonl(ack))
+#define tcp_set_seq(header, seq) ((((struct* tcphdr)header)->th_seq) = htonl(seq))
+#define tcp_set_offset(header) ((((struct* tcphdr)header)->th_off) = NO_OPTIONS_HEADER_LENGTH)
 
-#define ADD(a,b) a+b
-
-
-
-
-int size = tcp_window_size(header);
-
-packet p;
-tcp_window_size(p);
-
-((p)->th_win);
 
 // takes in data and wraps data in header with correct addresses.  
 // frees parameter data and mallocs new packet  -- sets data to point to new packet
