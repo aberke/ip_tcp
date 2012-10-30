@@ -8,6 +8,8 @@
 #include "utils.h"
 #include "ip_utils.h" // tcp_packet_data_t and its associated functions defined there
 
+#define TCP_HEADER_MIN_SIZE 20
+
 typedef struct tcp_socket_address{
 	uint32_t virt_ip;
 	uint16_t virt_port;
@@ -24,10 +26,11 @@ memchunk_t tcp_unwrap_data(void* packet, int length);
 
 	NOTE: converting to host-byte-order is handled!
 */
-#define tcp_window_size(header) ((header)->th_win)
-#define tcp_seqnum(header) ((header)->th_seq)
-#define tcp_dest_port(header) ntohs((header)->th_dport)
-#define tcp_source_port(header) ntohs((header)->th_dport)
+#define tcp_window_size(header) (((struct tcphdr*)header)->th_win)
+#define tcp_ack(header) (((struct tcphdr*)header)->th_ack)
+#define tcp_seqnum(header) (((struct tcphdr*)header)->th_seq)
+#define tcp_dest_port(header) ntohs(((struct tcphdr*)header)->th_dport)
+#define tcp_source_port(header) ntohs(((struct tcphdr*)header)->th_dport)
 
 
 // takes in data and wraps data in header with correct addresses.  

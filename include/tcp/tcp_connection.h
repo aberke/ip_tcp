@@ -2,6 +2,9 @@
 #define __TCP_CONNECTION_H__
 
 #include <inttypes.h>
+
+/* for tcp_packet_data_t HA! */
+#include "ip_utils.h"
  
 typedef struct tcp_connection* tcp_connection_t;  
 
@@ -20,6 +23,8 @@ int tcp_connection_get_socket(tcp_connection_t connection);
 
 void tcp_connection_print_state(tcp_connection_t connection);
 
+
+void tcp_connection_handle_packet(tcp_connection_t connection, tcp_packet_data_t packet);
 
 /********** State Changing Functions *************/
 

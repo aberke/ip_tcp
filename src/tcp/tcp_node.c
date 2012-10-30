@@ -24,7 +24,7 @@
 
 
 // static functions
-static void _handle_packet(void* packet);
+static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet);
 //static void _handle_read(tcp_node_t tcp_node);
 static int _start_ip_threads(tcp_node_t tcp_node, 
 			pthread_t* ip_link_interface_thread, pthread_t* ip_send_thread, pthread_t* ip_command_thread);
@@ -235,6 +235,16 @@ tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int sock
 		return socket_keyed->connection;
 }
 
+// returns tcp_connection corresponding to port
+tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t port){
+	connection_port_keyed_t port_keyed;
+	HASH_FIND_INT(tcp_node->portToConnection, &port, port_keyed);
+	if(!port_keyed)
+		return NULL;
+	else
+		return port_keyed->connection;
+}
+
 // assigns port to tcp_connection and puts entry in hash table that hashes ports to tcp_connections
 // returns 1 if port successfully assigned, 0 otherwise
 int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int port){
@@ -249,6 +259,7 @@ int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int p
 	
 	return 1;
 }
+
 // returns 1 if the port is available for use, 0 if already in use
 int tcp_node_port_unused(tcp_node_t tcp_node, int port){	
 	
@@ -350,7 +361,7 @@ void tcp_node_start(tcp_node_t tcp_node){
 			continue;
 			
 		/* otherwise there's a packet waiting for you! */
-		_handle_packet(packet);
+		_handle_packet(tcp_node, (tcp_packet_data_t)packet);
 	}
 	
 	ip_node_stop(tcp_node->ip_node);
@@ -423,6 +434,16 @@ void tcp_node_send(tcp_node_t tcp_node, tcp_packet_data_t packet){
 	printf("return from ip_node_send: %d\n", ret);
 }
 
+/*
+tcp_node_invalid_port
+	handles the case where a packet is received to which there is no open 
+	port. Should inform the sender?
+*/
+void tcp_node_invalid_port(tcp_node_t tcp_node, tcp_packet_data_t packet){
+	// let's just not do anything. That'll show em
+}
+	
+
 /************************** Internal Functions Below ********************************************/
 
 // inserts connection in array of connections -- grows the array if necessary
@@ -453,9 +474,22 @@ static int _insert_connection_array(tcp_node_t tcp_node, tcp_connection_t connec
 	return tcp_node->num_connections;
 }
 
-static void _handle_packet(void* packet){
-	tcp_packet_data_t tcp_packet = (tcp_packet_data_t)packet;
-	printf("In tcp_node: _handle_packet: TCP packet received: %s\n", tcp_packet->packet);
+static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
+	int packet_size = tcp_packet->packet_size;
+	if( packet_size < TCP_HEADER_MIN_SIZE ){
+		puts("packet received is less than header size, discarding...");
+		return;
+	}
+		
+	uint16_t dest_port   = tcp_dest_port(tcp_packet->packet);
+
+	tcp_connection_t connection = tcp_node_get_connection_by_port(tcp_node, dest_port);
+	if(!connection){
+		tcp_node_invalid_port(tcp_node, tcp_packet);
+		return;
+	}
+
+	tcp_connection_handle_packet(connection, tcp_packet);
 }
 
 

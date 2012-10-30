@@ -67,10 +67,15 @@ int tcp_node_ip_running(tcp_node_t tcp_node);
 	
 /* ADDED BY NEIL: tells the tcp_node to pass the command on to the ip_node */
 void tcp_node_command_ip(tcp_node_t tcp_node, const char* command);
+
 /* ADDED BY NEIL: stops everything */
 void tcp_node_stop(tcp_node_t tcp_node);
+
 /* ADDED BY NEIL: sends packet to ip */
 void tcp_node_send(tcp_node_t tcp_node, tcp_packet_data_t packet);
+
+/* ADDED BY NEIL : informs a remote connection of invalid port */
+void tcp_node_invalid_port(tcp_node_t tcp_node, tcp_packet_data_t packet);
 
 // creates a new tcp_connection and properly places it in kernal table -- ports and ips initialized to 0
 tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node);
