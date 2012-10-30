@@ -27,7 +27,11 @@ struct tcphdr* tcp_unwrap_header(void* packet, int length){
 	struct tcphdr* header = (struct tcphdr*)packet;
 	return header;
 }
-
+/*
+struct memchunk{  --- define in utils.h
+	void* data;
+	int length;
+};*/ 
 /* returns a memchunk with the data in the packet, or NULL if there is no data 
 
 	PARAMETERS:
@@ -48,13 +52,16 @@ memchunk_t tcp_unwrap_data(void* packet, int length){
 
 struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_port, uint32_t seq, uint32_t ack){
 	struct tcphdr* header = malloc(sizeof(struct tcphdr));
+	memset(ip_header, 0, TCP_HEADER_SIZE);
 	header->th_sport = htons(host_port);
 	header->th_dport = htons(dest_port);
-	header->th_seq = seq;
-	header->th_ack = ack;
-	header->th_off = NO_OPTIONS_HEADER_LENGTH;
+	tcp_set_seq(header, seq);
+	tcp_set_ack(header, ack);
+	tcp_set_offset(header);
 	return header;
 }
+
+
 
 // a tcp_connection owns a local and remote tcp_socket_address.  This pair defines the connection
 // struct tcp_socket_address{
