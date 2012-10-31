@@ -117,7 +117,7 @@ void tcp_connection_handle_packet(tcp_connection_t connection, tcp_packet_data_t
 	if(tcp_syn_bit(tcp_packet_itself) && tcp_ack_bit(tcp_packet_itself)){
 		state_machine_transition(connection->state_machine, receiveSYN_ACK);
 	}
-		
+	/*	
 	else if(tcp_syn_bit(tcp_packet_itself)){
 		
 
@@ -128,7 +128,7 @@ void tcp_connection_handle_packet(tcp_connection_t connection, tcp_packet_data_t
 	
 		case 
 	}
-	
+	*/
 	/* pull out the ack and pass it to the send window */
 	uint16_t ack = tcp_ack(packet->packet);
 	send_window_ack(connection->send_window, ack);
@@ -146,6 +146,7 @@ void tcp_connection_handle_packet(tcp_connection_t connection, tcp_packet_data_t
 /********** State Changing Functions *************/
 
 // TODO: RETURN TO ALL THESE FUNCTIONS TO DEAL WITH RETURNING CURRENT ERRORS AFTER WE BETTER UNDERSTAND OUR OWN STATEMACHINE
+
 
 int tcp_connection_passive_open(tcp_connection_t connection){
 	return state_machine_transition(connection->state_machine, passiveOPEN);	
@@ -175,19 +176,111 @@ void tcp_connection_close(tcp_connection_t connection){
 
 /********** End of State Changing Functions *******/
 
-int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* to_write, int num_bytes){
+/********************* Sending Packets ********************/
 
+// puts tcp_packet_data_t on to to_send queue
+// returns 1 on success, -1 on failure (failure when queue actually already destroyed)
+int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t packet_data){
 	
-	return 0;
+	bqueue_t *to_send = connection->to_send;
+	
+	if(bqueue_enqueue(to_send, (void*)packet_data))
+		return -1;
+	
+	return 1;
 }
-/*
+
+// pushes data to send_window for window to break into chunks which we can call get next on
+// meant to be used before tcp_connection_send_next
+void tcp_connection_push_data(tcp_connection_t connection, void* data, int num_bytes){
+
+	send_window_t send_window = connection->send_window;
+	// push data to send_window
+	send_window_push(send_window, data, num_bytes);
+}
+
+// Combines the header and data into one piece of data and creates the tcp_packet_data and queues it
+// returns 1 on success, -1 on failure
+int tcp_connection_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len){
+	
+	//TODO: LAST STEP WITH READYING HEADER IS SETTING CHECKSUM -- SET CHECKSUM!
+	
+	// concatenate tcp_packet	-- TODO FOR NEIL: YOU HAVE FANCY THEORIES ABOUT EFFICIENT MEMORY ALLOCATION AND COPYING - IDEAS?
+	char* packet = (char*)malloc(sizeof(char)*(TCP_HEADER_MIN_SIZE+data_len));
+	memcpy(packet, header, TCP_HEADER_MIN_SIZE);
+	memcpy(packet+TCP_HEADER_MIN_SIZE, packet, data_len);
+	
+	// get addresses
+	uint32_t local_virt_ip, remote_virt_ip;
+	local_virt_ip = tcp_connection_get_local_ip(connection);
+	remote_virt_ip = tcp_connection_get_remote_ip(connection);
+	
+	// send off to ip_node as a tcp_packet_data_t
+	tcp_packet_data_t packet_data= tcp_packet_data_init(packet, data_len+TCP_HEADER_MIN_SIZE, local_virt_ip, remote_virt_ip);
+	if(tcp_connection_queue_ip_send(connection, packet_data) < 0){
+		//TODO: HANDLE!
+		puts("Something wrong with sending tcp_packet to_send queue--How do we want to handle this??");	
+		return -1;
+	}
+	return 1;
+}
+
+// helper to tcp_connection_send_next: handles sending the individual chunks returned from send_window
+void tcp_connection_send_next_chunk(tcp_connection_t connection, send_window_chunk_t next_chunk){
+
+	uint32_t host_port, dest_port;
+	host_port = tcp_connection_get_local_port(connection);
+	dest_port = tcp_connection_get_remote_port(connection);
+	
+	uint32_t seqnum = (uint32_t)next_chunk->seqnum; 
+	void* data = next_chunk->data;
+	int data_len = next_chunk->length;
+
+	struct tcphdr* header = tcp_header_init(host_port, dest_port, seqnum, 0);
+	
+	// Todo: set anything else we need in header
+	//TODO : SET WINDOW SIZE???
+	
+	// send off the packet -- it's ready!
+	tcp_connection_wrap_packet_send(connection, header, data, data_len);
+}
+// queues chunks off from send_window and handles sending them for as long as send_window wants to send more chunks
+int tcp_connection_send_next(tcp_connection_t connection){
+/*struct send_window_chunk{
+	void* data;
+	int length;
+	int seqnum;
+};*/	
+	int bytes_sent = 0;
+	send_window_chunk_t next_chunk;
+	send_window_t send_window = connection->send_window;
+	// get our chunk from the window
+	next_chunk = send_window_get_next(send_window);
+	
+	// keep sending as many chunks as window has available to give us
+	while(next_chunk != NULL){
+	
+		tcp_connection_send_next_chunk(connection, next_chunk);
+		// increment bytes_sent
+		bytes_sent = bytes_sent + next_chunk->length;
+		
+		// get next chunk if there is one
+		next_chunk = send_window_get_next(send_window);
+	}	
+	return bytes_sent;
+}
+
+int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* to_write, int num_bytes){
+	
+	// push data to window and then send as much as we can
+	tcp_connection_push_data(connection, (void*)to_write, num_bytes);	
+	// send as much data right now as send_window allows
+	int ret = tcp_connection_send_next(connection);
+	return ret;
+}
 
 
-tcp_connection_push
-
-tcp_connection_send_next
-*/
-
+/********************* End of Sending Packets ********************/
 
 uint16_t tcp_connection_get_local_port(tcp_connection_t connection){
 	tcp_socket_address_t addr;

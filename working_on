@@ -3,6 +3,9 @@ state_machine -- done
 window        -- struct that implements a very abstract, high-level version of the sliding window protocol -- almost done
 					-- please make some default init args
 
+##HAS TODO ITEM INSIDE## -- Trying to use as flag inside header files to indicate that a function still has TODO items inside
+								-- WE NEED TO DO THEM!
+
 NOTE: to_read and to_send queues only queue tcp_packet_data_t's  -- stick by this convention!
 
 			

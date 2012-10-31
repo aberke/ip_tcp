@@ -94,6 +94,7 @@ x |= 1 << 4
 
 
 
+struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_port, uint32_t seq, uint32_t ack);
 
 // takes in data and wraps data in header with correct addresses.  
 // frees parameter data and mallocs new packet  -- sets data to point to new packet

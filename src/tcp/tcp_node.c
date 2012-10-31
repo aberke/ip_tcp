@@ -402,17 +402,7 @@ int tcp_node_queue_ip_cmd(tcp_node_t tcp_node, char* buffered_cmd){
 	
 	return 1;
 }
-// puts command on to to_send queue
-// returns 1 on success, -1 on failure (failure when queue actually already destroyed)
-int tcp_node_queue_ip_send(tcp_node_t tcp_node, char* buffered_cmd){
-	
-	bqueue_t *to_send = tcp_node->to_send;
-	
-	if(bqueue_enqueue(to_send, (void*)buffered_cmd))
-		return -1;
-	
-	return 1;
-}
+
 
 
 // returns tcp_node->running

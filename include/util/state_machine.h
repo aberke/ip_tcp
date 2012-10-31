@@ -9,7 +9,7 @@
 #include "tcp_states.h"
 #endif
 
-#define NO_TRANSITON -1000
+#define NO_TRANSITION -1000
 
 // each tcp_connection has a statemachine keeping track of its state
 
