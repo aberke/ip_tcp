@@ -82,8 +82,8 @@ int state_machine_transition(state_machine_t machine, transition_e t){
 	transitioning_t transitioning = ARRAY_GET(machine->transition_matrix, machine->current_state, t);	
 	machine->current_state = transitioning->next_state;
 	if(transitioning->action)
-		return transitioning->action(machine->argument);
-	return -1;	//TODO: COME BACK TO THIS AND DEAL WITH BETTER ERROR HANDLING
+		return transitioning->action(machine->argument);	
+	return NO_TRANSITION;
 }
 
 /* new state just returns the current state */

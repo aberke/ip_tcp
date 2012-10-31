@@ -9,6 +9,8 @@
 #include "tcp_states.h"
 #endif
 
+#define NO_TRANSITON -1000
+
 // each tcp_connection has a statemachine keeping track of its state
 
 typedef struct state_machine* state_machine_t;

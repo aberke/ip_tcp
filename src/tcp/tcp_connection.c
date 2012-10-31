@@ -110,6 +110,24 @@ tcp_connection_handle_packet
 	the correctness of the received packet (that it makes sense) 
 */
 void tcp_connection_handle_packet(tcp_connection_t connection, tcp_packet_data_t packet){
+	state_e state = state_machine_get_state(connection->state_machine);
+
+	void* tcp_packet_itself = packet->packet;
+
+	if(tcp_syn_bit(tcp_packet_itself) && tcp_ack_bit(tcp_packet_itself)){
+		state_machine_transition(connection->state_machine, receiveSYN_ACK);
+	}
+		
+	else if(tcp_syn_bit(tcp_packet_itself)){
+		
+
+	if(state){
+		case CLOSED: 
+			puts("CLOSED packet received a message. Discarding...\n");
+			return;
+	
+		case 
+	}
 	
 	/* pull out the ack and pass it to the send window */
 	uint16_t ack = tcp_ack(packet->packet);
