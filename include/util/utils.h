@@ -28,7 +28,7 @@ typedef int boolean;
 /* SOME COMMON FUNCTION POINTERS */
 typedef void (*destructor_f)(void**);
 typedef void (*printer_f)(void*);
-typedef void (*action_f)(void*);
+typedef void (*action_f)(int*);
 
 /* USEFUL STRUCTS */
 struct memchunk{

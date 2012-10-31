@@ -49,9 +49,12 @@ struct tcp_connection{
 	
 	// owns accept queue to queue syns when listening
 	queue_t accept_queue;
+	
+	// needs reference to the to_send queue in order to queue its packets
+	bqueue_t *to_send;	//--- tcp data for ip to send
 };
 
-tcp_connection_t tcp_connection_init(int socket){
+tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	// init state machine
 	state_machine_t state_machine = state_machine_init();
 
@@ -75,6 +78,7 @@ tcp_connection_t tcp_connection_init(int socket){
 	connection->send_window = send_window;
 	connection->receive_window = receive_window;	
 	connection->accept_queue = accept_queue;
+	connection->to_send = tosend;
 	
 	state_machine_set_argument(state_machine, connection);		
 
@@ -118,22 +122,15 @@ void tcp_connection_handle_packet(tcp_connection_t connection, tcp_packet_data_t
 	}
 
 	printf("connection on port %d handling packet\n", (connection->local_addr).virt_port);
-	tcp_packet_data_destroy(&packet);
+	tcp_packet_data_destroy(packet);
 }
 
 /********** State Changing Functions *************/
 
+// TODO: RETURN TO ALL THESE FUNCTIONS TO DEAL WITH RETURNING CURRENT ERRORS AFTER WE BETTER UNDERSTAND OUR OWN STATEMACHINE
+
 int tcp_connection_passive_open(tcp_connection_t connection){
-
-	state_e e = state_machine_get_state(connection->state_machine);
-	if(e != CLOSED){
-		// not in a valid state to call passive_open
-		printf("Calling passiveOPEN on a connection not in the CLOSED state\n");
-		return -1;
-	}
-
-	state_machine_transition(connection->state_machine, passiveOPEN);
-	return 1;
+	return state_machine_transition(connection->state_machine, passiveOPEN);	
 }
 
 /* in the same vein, these are the functions that will be called
@@ -144,12 +141,34 @@ tcp_connection_transition_passive_open
 	will be called when the connection is transitioning from CLOSED with a passiveOPEN
 	transition
 */
-void tcp_connection_transition_passive_open(tcp_connection_t connection){
-	
+int tcp_connection_CLOSED_to_LISTEN(tcp_connection_t connection){
+	puts("int tcp_connection_CLOSED_to_LISTEN");
+	return 1;	
+}
+
+int tcp_connection_active_open(tcp_connection_t connection){
+
+	return 1;
+}
+void tcp_connection_close(tcp_connection_t connection){
+
 }
 	
 
 /********** End of State Changing Functions *******/
+
+int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* to_write, int num_bytes){
+
+	
+	return 0;
+}
+/*
+
+
+tcp_connection_push
+
+tcp_connection_send_next
+*/
 
 
 uint16_t tcp_connection_get_local_port(tcp_connection_t connection){

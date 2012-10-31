@@ -16,7 +16,7 @@ typedef struct state_machine* state_machine_t;
 state_machine_t state_machine_init();
 void state_machine_destroy(state_machine_t* state_machine);
 
-void state_machine_transition(state_machine_t machine, transition_e transition);
+int state_machine_transition(state_machine_t machine, transition_e transition);
 state_e state_machine_get_state(state_machine_t machine);
 void state_machine_set_argument(state_machine_t machine, void* argument);
 

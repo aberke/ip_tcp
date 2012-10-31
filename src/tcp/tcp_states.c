@@ -5,17 +5,19 @@
 #include "tcp_states.h"
 #include "tcp_connection.h"
 
+// TODO: HANDLE TODO'S FOR ERROR HANDLING
+
 transitioning_t closed_next_state(transition_e t){
 	switch(t){
 		case passiveOPEN:
 			/* create TCB */
-			return transitioning_init(LISTEN, (action_f)tcp_connection_print);
+			return transitioning_init(LISTEN, (action_f)tcp_connection_CLOSED_to_LISTEN);
 		case activeOPEN:
 			/* create TCB and send SYN */
 			return transitioning_init(SYN_SENT, (action_f)tcp_connection_print);
 			
 		default:
-			return transitioning_init(CLOSED, NULL);
+			return transitioning_init(CLOSED, NULL); //TODO: SUPPLY ACTION FOR BAD CALL
 	}
 }
 

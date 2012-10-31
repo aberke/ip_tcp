@@ -212,7 +212,7 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 // creates a new tcp_connection and properly places it in kernal table -- ports and ips initialized to 0
 tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 	// init new tcp_connection
-	tcp_connection_t connection = tcp_connection_init(tcp_node_next_virt_socket(tcp_node));
+	tcp_connection_t connection = tcp_connection_init(tcp_node_next_virt_socket(tcp_node), tcp_node->to_send);
 
 	// place connection in array
 	_insert_connection_array(tcp_node, connection);
@@ -428,36 +428,27 @@ void tcp_node_command_ip(tcp_node_t tcp_node, const char* cmd){
 	ip_node_command(tcp_node->ip_node, cmd);
 }
 
-void tcp_node_send(tcp_node_t tcp_node, char* to_write, int socket, uint32_t num_bytes){
+
+/*
+send data:
+	
+	chunk = window push(data)
+	int window_send_size = 
+	
+
+*/
+
+/* num_butes>0 indicates there is data and therefore to_write must be pushed to window 
+int tcp_node_send(tcp_node_t tcp_node, char* to_write, int socket, uint32_t num_bytes){
 
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(!connection)	
 		return -EBADF;
 	
-	//TODO: FIRST WRAP IN TCP_HEADER
-	
-	uint16_t host_port, dest_port;
-	host_port = tcp_connection_get_local_port(connection);
-	dest_port = tcp_connection_get_remote_port(connection);
-	
-	struct tcphdr* tcpheader = tcp_header_init(unsigned short host_port, unsigned short dest_port, uint32_t seq, uint32_t ack)
-	
-	
-	
-	tcp_packet_data_t packet = malloc(sizeof(struct tcp_packet_data));
-	packet->local_virt_ip = tcp_connection_get_local_ip(connection);
-	packet->remote_virt_ip = tcp_connection_get_remote_ip(connection);
-
-	memcpy(packet->packet, to_write, num_bytes);
-	packet->packet_size = num_bytes;
-	
-	
-	
-	
-	
-	int ret = ip_node_send_tcp(tcp_node->ip_node, packet);
-	printf("return from ip_node_send: %d\n", ret);
-}
+	int ret;
+	ret = tcp_connection_send(connection, to_write, num_bytes);
+	return ret;
+}*/
 
 /*
 tcp_node_invalid_port
