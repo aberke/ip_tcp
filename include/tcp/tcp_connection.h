@@ -35,10 +35,6 @@ void tcp_connection_handle_packet(tcp_connection_t connection, tcp_packet_data_t
 // returns 1 on success, -1 on failure (failure when queue actually already destroyed)
 int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t packet);
 
-//		##HAS TODO ITEM INSIDE##
-// Combines the header and data into one piece of data and creates the tcp_packet_data and queues it
-// returns 1 on success, -1 on failure
-int tcp_connection_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len);
 
 // pushes data to send_window for window to break into chunks which we can call get next on
 // meant to be used before tcp_connection_send_next

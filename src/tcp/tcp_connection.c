@@ -199,31 +199,6 @@ void tcp_connection_push_data(tcp_connection_t connection, void* data, int num_b
 	send_window_push(send_window, data, num_bytes);
 }
 
-// Combines the header and data into one piece of data and creates the tcp_packet_data and queues it
-// returns 1 on success, -1 on failure
-int tcp_connection_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len){
-	
-	//TODO: LAST STEP WITH READYING HEADER IS SETTING CHECKSUM -- SET CHECKSUM!
-	
-	// concatenate tcp_packet	-- TODO FOR NEIL: YOU HAVE FANCY THEORIES ABOUT EFFICIENT MEMORY ALLOCATION AND COPYING - IDEAS?
-	char* packet = (char*)malloc(sizeof(char)*(TCP_HEADER_MIN_SIZE+data_len));
-	memcpy(packet, header, TCP_HEADER_MIN_SIZE);
-	memcpy(packet+TCP_HEADER_MIN_SIZE, packet, data_len);
-	
-	// get addresses
-	uint32_t local_virt_ip, remote_virt_ip;
-	local_virt_ip = tcp_connection_get_local_ip(connection);
-	remote_virt_ip = tcp_connection_get_remote_ip(connection);
-	
-	// send off to ip_node as a tcp_packet_data_t
-	tcp_packet_data_t packet_data= tcp_packet_data_init(packet, data_len+TCP_HEADER_MIN_SIZE, local_virt_ip, remote_virt_ip);
-	if(tcp_connection_queue_ip_send(connection, packet_data) < 0){
-		//TODO: HANDLE!
-		puts("Something wrong with sending tcp_packet to_send queue--How do we want to handle this??");	
-		return -1;
-	}
-	return 1;
-}
 
 // helper to tcp_connection_send_next: handles sending the individual chunks returned from send_window
 void tcp_connection_send_next_chunk(tcp_connection_t connection, send_window_chunk_t next_chunk){
@@ -242,7 +217,7 @@ void tcp_connection_send_next_chunk(tcp_connection_t connection, send_window_chu
 	//TODO : SET WINDOW SIZE???
 	
 	// send off the packet -- it's ready!
-	tcp_connection_wrap_packet_send(connection, header, data, data_len);
+	tcp_wrap_packet_send(connection, header, data, data_len);
 }
 // queues chunks off from send_window and handles sending them for as long as send_window wants to send more chunks
 int tcp_connection_send_next(tcp_connection_t connection){

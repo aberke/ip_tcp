@@ -101,9 +101,12 @@ struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_por
 // returns size of new packet that data points to
 int tcp_utils_wrap_packet(void** data, int data_len, tcp_connection_t connection);
 
+//##TODO##
+int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len);
 
-//TODO:
-void* tcp_utils_add_checksum(void* packet);
+
+//TODO:  ####TODO###
+void tcp_utils_add_checksum(void* packet);
 int tcp_utils_validate_checksum(void* packet);
 
 #endif
