@@ -10,6 +10,7 @@ transitioning_t closed_next_state(transition_e t){
 		case passiveOPEN:
 			/* create TCB */
 			return transitioning_init(LISTEN, (action_f)tcp_connection_print);
+
 		case activeOPEN:
 			/* create TCB and send SYN */
 			return transitioning_init(SYN_SENT, (action_f)tcp_connection_connect);

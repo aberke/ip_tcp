@@ -2,6 +2,7 @@
 #ifndef __TCP_NODE_H__ 
 #define __TCP_NODE_H__
 
+#include <inttypes.h>
 #include "tcp_connection.h"
 #include "ip_node.h"
 #include "list.h"
@@ -72,7 +73,7 @@ void tcp_node_command_ip(tcp_node_t tcp_node, const char* command);
 void tcp_node_stop(tcp_node_t tcp_node);
 
 /* ADDED BY NEIL: sends packet to ip */
-void tcp_node_send(tcp_node_t tcp_node, tcp_packet_data_t packet);
+void tcp_node_send(tcp_node_t tcp_node, char* to_write, int socket, uint32_t num_bytes);
 
 /* ADDED BY NEIL : informs a remote connection of invalid port */
 void tcp_node_invalid_port(tcp_node_t tcp_node, tcp_packet_data_t packet);
