@@ -446,7 +446,9 @@ tcp_node_invalid_port
 	port. Should inform the sender?
 */
 void tcp_node_invalid_port(tcp_node_t tcp_node, tcp_packet_data_t packet){
-	// let's just not do anything. That'll show em
+	// let's just not do anything. That'll show em -- that's ridiculous
+	puts("tcp_node_invalid_port -- are we going to handle this?? TODO");
+	// this might be appropriate: ECONNREFUSED = No-one listening on the remote address.
 }
 	
 
@@ -484,6 +486,12 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 	int packet_size = tcp_packet->packet_size;
 	if( packet_size < TCP_HEADER_MIN_SIZE ){
 		puts("packet received is less than header size, discarding...");
+		free(tcp_packet);
+		return;
+	}
+	if(tcp_utils_validate_checksum(tcp_packet->packet) < 0){
+		puts("Bad checksum -- discarding packet");
+		free(tcp_packet);
 		return;
 	}
 		
@@ -492,10 +500,11 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 	tcp_connection_t connection = tcp_node_get_connection_by_port(tcp_node, dest_port);
 	if(!connection){
 		tcp_node_invalid_port(tcp_node, tcp_packet);
+		free(tcp_packet);
 		return;
 	}
 
-	tcp_connection_handle_packet(connection, tcp_packet);
+	tcp_connection_handle_receive_packet(connection, tcp_packet);
 }
 
 

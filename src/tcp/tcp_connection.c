@@ -100,8 +100,44 @@ void tcp_connection_destroy(tcp_connection_t connection){
 	connection = NULL;
 }
 
+
+/********** State Changing Functions *************/
+
+// TODO: RETURN TO ALL THESE FUNCTIONS TO DEAL WITH RETURNING CURRENT ERRORS AFTER WE BETTER UNDERSTAND OUR OWN STATEMACHINE
+
+
+int tcp_connection_passive_open(tcp_connection_t connection){
+	return state_machine_transition(connection->state_machine, passiveOPEN);	
+}
+
+/* in the same vein, these are the functions that will be called
+	during transitions between states, handled by the state machine */
+
+/* 
+tcp_connection_transition_passive_open
+	will be called when the connection is transitioning from CLOSED with a passiveOPEN
+	transition
+*/
+int tcp_connection_CLOSED_to_LISTEN(tcp_connection_t connection){
+	puts("int tcp_connection_CLOSED_to_LISTEN");
+	return 1;	
+}
+
+int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, uint16_t port){
+	puts("in tcp_connection_active_open");
+	return 1;
+}
+void tcp_connection_close(tcp_connection_t connection){
+
+}
+	
+
+/********** End of State Changing Functions *******/
+///////////////////////////////////////////////////////////////////////////
+/**************** Receiving Packets ****************/
+
 /*
-tcp_connection_handle_packet
+tcp_connection_handle_receive_packet
 	will get called from tcp_node's _handle_packet function with the 
 	connection as well as the tcp_packet_data_t. It is this connections
 	job to handle the packet, as well as send back response information
@@ -111,7 +147,7 @@ tcp_connection_handle_packet
 	mostly be concerned with passing off the data to the window/validating
 	the correctness of the received packet (that it makes sense) 
 */
-void tcp_connection_handle_packet(tcp_connection_t connection, tcp_packet_data_t packet){
+void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
 
 	/* RFC 793: 
 		Although these examples do not show connection synchronization using data
@@ -122,7 +158,7 @@ void tcp_connection_handle_packet(tcp_connection_t connection, tcp_packet_data_t
 		so no matter what, we need to be pushing the data to the receiving window, 
 		and we simply shouldn't call get_next until we're in the established state */
 
-	void* tcp_packet_itself = packet->packet;
+	void* tcp_packet = tcp_packet_data->packet;
 
 	/* check if there's any data, and if there is push it to the window,
 		but what does the seqnum even mean if the ACKs haven't been synchronized? */
@@ -172,60 +208,28 @@ void tcp_connection_handle_packet(tcp_connection_t connection, tcp_packet_data_t
 	*/
 
 	/* pull out the ack and pass it to the send window */
-	uint16_t ack = tcp_ack(packet->packet);
+	uint16_t ack = tcp_ack(tcp_packet_data->packet);
 	send_window_ack(connection->send_window, ack);
 
 	/* get the data */
-	memchunk_t data = tcp_unwrap_data(packet->packet, packet->packet_size);
+	memchunk_t data = tcp_unwrap_data(tcp_packet_data->packet, tcp_packet_data->packet_size);
 	if(data){
 //		recv_window_push(connection->recv_window, 
 	}
 
 	printf("connection on port %d handling packet\n", (connection->local_addr).virt_port);
-	tcp_packet_data_destroy(packet);
+	tcp_packet_data_destroy(tcp_packet_data);
 }
 
-/********** State Changing Functions *************/
-
-// TODO: RETURN TO ALL THESE FUNCTIONS TO DEAL WITH RETURNING CURRENT ERRORS AFTER WE BETTER UNDERSTAND OUR OWN STATEMACHINE
-
-
-int tcp_connection_passive_open(tcp_connection_t connection){
-	return state_machine_transition(connection->state_machine, passiveOPEN);	
-}
-
-/* in the same vein, these are the functions that will be called
-	during transitions between states, handled by the state machine */
-
-/* 
-tcp_connection_transition_passive_open
-	will be called when the connection is transitioning from CLOSED with a passiveOPEN
-	transition
-*/
-int tcp_connection_CLOSED_to_LISTEN(tcp_connection_t connection){
-	puts("int tcp_connection_CLOSED_to_LISTEN");
-	return 1;	
-}
-
-int tcp_connection_active_open(tcp_connection_t connection){
-
-	return 1;
-}
-void tcp_connection_close(tcp_connection_t connection){
-
-}
-	
-
-/********** End of State Changing Functions *******/
-
+/**************** End of Receiving Packets ****************/
+////////////////////////////////////////////////////////////////////////////////
 /********************* Sending Packets ********************/
 
 // puts tcp_packet_data_t on to to_send queue
 // returns 1 on success, -1 on failure (failure when queue actually already destroyed)
 int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t packet_data){
 	
-	bqueue_t *to_send = connection->to_send;
-	
+	bqueue_t *to_send = connection->to_send;	
 	if(bqueue_enqueue(to_send, (void*)packet_data))
 		return -1;
 	
