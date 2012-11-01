@@ -132,8 +132,14 @@ void vv_connect(const char *line, tcp_node_t tcp_node){
 
 int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint32_t num_bytes){
 
-	int ret = tcp_node_send(tcp_node, to_write, socket, num_bytes);
-	return ret; /* how are we gonna get the result of this if we're pushing to a queue?? ie, fuck */  // <-- daha (Alex)
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(!connection)	
+		return -EBADF;
+	
+	int ret;
+	ret = tcp_connection_send_data(connection, to_write, num_bytes);
+	return ret;
+	//return ret; /* how are we gonna get the result of this if we're pushing to a queue?? ie, fuck */  // <-- daha (Alex)
 }
 
 

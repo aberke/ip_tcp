@@ -55,6 +55,7 @@ x |= 1 << 4
 	NOTE: converting to host-byte-order is handled!
 */
 
+
 /****** For Unwrapping *****/
 
 // defined in terms of SIGNIFICANCE!!
@@ -79,10 +80,10 @@ x |= 1 << 4
 #define tcp_urg_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << URG_BIT)) > 0) // is urg set?
 
 /******** For wrapping *****/
-#define tcp_set_window_size(header, size) ((((struct* tcphdr)header)->th_win) = htonl(size))
-#define tcp_set_ack(header, ack) ((((struct* tcphdr)header)->th_ack) = htonl(ack))
-#define tcp_set_seq(header, seq) ((((struct* tcphdr)header)->th_seq) = htonl(seq))
-#define tcp_set_offset(header) ((((struct* tcphdr)header)->th_off) = NO_OPTIONS_HEADER_LENGTH)
+#define tcp_set_window_size(header, size) ((((struct tcphdr*)header)->th_win) = htonl(size))
+#define tcp_set_ack(header, ack) ((((struct tcphdr*)header)->th_ack) = htonl(ack))
+#define tcp_set_seq(header, seq) ((((struct tcphdr*)header)->th_seq) = htonl(seq))
+#define tcp_set_offset(header) ((((struct tcphdr*)header)->th_off) = NO_OPTIONS_HEADER_LENGTH)
 
 #define tcp_set_fin_bit(header) ((((struct* tcphdr)header)->th_flags) |= (1 << FIN_BIT)) // set the fin bit to 1
 #define tcp_set_syn_bit(header) ((((struct* tcphdr)header)->th_flags) |= (1 << SYN_BIT)) // set the syn bit to 1
