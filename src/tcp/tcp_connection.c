@@ -48,7 +48,9 @@ struct tcp_connection{
 	recv_window_t receive_window;
 	
 	// owns accept queue to queue syns when listening
-	queue_t accept_queue;
+	// if user already in accept state, connections handled right away
+	///queues connections when user in listen state and not yet accept state
+	queue_t accept_queue;  
 	
 	// needs reference to the to_send queue in order to queue its packets
 	bqueue_t *to_send;	//--- tcp data for ip to send
@@ -199,7 +201,7 @@ void tcp_connection_push_data(tcp_connection_t connection, void* data, int num_b
 	send_window_push(send_window, data, num_bytes);
 }
 
-
+//##TODO##
 // helper to tcp_connection_send_next: handles sending the individual chunks returned from send_window
 void tcp_connection_send_next_chunk(tcp_connection_t connection, send_window_chunk_t next_chunk){
 

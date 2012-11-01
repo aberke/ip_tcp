@@ -23,8 +23,7 @@
 #define SHUTDOWN_WRITE	1
 #define SHUTDOWN_BOTH	2
 
-// TODO remove the below #defines, replace by linking with API implementation 
-#define v_connect(a,b,c)	-ENOTSUP
+// TODO remove the below #defines, replace by linking with API implementation 	
 #define v_accept(a,b,c)	-ENOTSUP
 //#define v_write(a,b,c)	-ENOTSUP
 #define v_read(a,b,c)	-ENOTSUP
@@ -125,9 +124,21 @@ void vv_listen(const char *line, tcp_node_t tcp_node){
 void vv_accept(const char *line, tcp_node_t tcp_node){
 	
 }
+/* connects a socket to an address (active OPEN in the RFC)
+returns 0 on success or a negative number on failure */
+int v_connect(int socket, struct in_addr addr, uint16_t port){
 
+
+	//	-ENOTSUP
+	return 0;
+}
+/*	connect/c ip port Attempt to connect to the given ip address, in dot notation, on the given port.
+	Example: c 10.13.15.24 1056.
+*/
 void vv_connect(const char *line, tcp_node_t tcp_node){
-
+	/*
+	int ret = sscanf(line, "v_listen %d", &socket);
+	*/
 }
 
 int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint32_t num_bytes){
