@@ -61,6 +61,48 @@ struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_por
 	return header;
 }
 
+// Combines the header and data into one piece of data and creates the tcp_packet_data and queues it -- frees data
+// return -1 on failure, 1 on success
+int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len){	
+	//TODO: LAST STEP WITH READYING HEADER IS SETTING CHECKSUM -- SET CHECKSUM!
+	
+	// concatenate tcp_packet	-- TODO FOR NEIL: YOU HAVE FANCY THEORIES ABOUT EFFICIENT MEMORY ALLOCATION AND COPYING - IDEAS?
+	char* packet = (char*)malloc(sizeof(char)*(TCP_HEADER_MIN_SIZE+data_len));
+	memcpy(packet, header, TCP_HEADER_MIN_SIZE);
+	memcpy(packet+TCP_HEADER_MIN_SIZE, packet, data_len);
+	// no longer need data
+	free(data);
+	
+	// add checksum here?
+	tcp_utils_add_checksum(packet);
+	
+	// get addresses
+	uint32_t local_virt_ip, remote_virt_ip;
+	local_virt_ip = tcp_connection_get_local_ip(connection);
+	remote_virt_ip = tcp_connection_get_remote_ip(connection);
+	
+	// send off to ip_node as a tcp_packet_data_t
+	tcp_packet_data_t packet_data= tcp_packet_data_init(packet, data_len+TCP_HEADER_MIN_SIZE, local_virt_ip, remote_virt_ip);
+	// no longer need packet
+	free(packet);
+	
+	if(tcp_connection_queue_ip_send(connection, packet_data) < 0){
+		//TODO: HANDLE!
+		puts("Something wrong with sending tcp_packet to_send queue--How do we want to handle this??");	
+		free(packet_data);
+		return -1;
+	}
+	return 1;
+}
+//##TODO##
+void tcp_utils_add_checksum(void* packet){
+	puts("TODO: HANDLE CHECK SUM IN TCP");
+}
+//	##TODO HANDLE##
+int tcp_utils_validate_checksum(void* packet){
+	puts("TODO: HANDLE CHECKSUM IN TCP");
+	return 1;
+}
 
 
 // a tcp_connection owns a local and remote tcp_socket_address.  This pair defines the connection

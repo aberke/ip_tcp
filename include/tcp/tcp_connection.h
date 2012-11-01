@@ -2,6 +2,7 @@
 #define __TCP_CONNECTION_H__
 
 #include <inttypes.h>
+#include <netinet/tcp.h>
 #include "bqueue.h"
 
 /* for tcp_packet_data_t HA! */
@@ -27,15 +28,33 @@ void tcp_connection_print_state(tcp_connection_t connection);
 /****** Receiving packets **********/
 void tcp_connection_handle_packet(tcp_connection_t connection, tcp_packet_data_t packet);
 /****** End of Receiving Packets **********/
-
+//////////////////////////////////////////////////////////////////////////////////////
 /******* Sending Packets **************/
+
+// puts tcp_packet_data_t on to to_send queue
+// returns 1 on success, -1 on failure (failure when queue actually already destroyed)
+int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t packet);
+
+
+// pushes data to send_window for window to break into chunks which we can call get next on
+// meant to be used before tcp_connection_send_next
+void tcp_connection_push_data(tcp_connection_t connection, void* to_write, int num_bytes);
+//##TODO##
+// queues chunks off from send_window and handles sending them for as long as send_window wants to send more chunks
+int tcp_connection_send_next(tcp_connection_t connection);
+
+
+
+// called by v_write
 int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* to_write, int num_bytes);
 /******* End of Sending Packets **************/
+//////////////////////////////////////////////////////////////////////////////////////
 
 /********** State Changing Functions *************/
 
 	/****** Functions called to invoke statemachine ******/
 	int tcp_connection_passive_open(tcp_connection_t connection);
+	int tcp_connection_active_open(tcp_connection_t connection);
 	/****** End of Functions called to invoke statemachine ******/
 	
 	/****** Functions called as actions by statemachine ******/
