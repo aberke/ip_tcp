@@ -155,18 +155,20 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
 		state_machine_transition(connection->state_machine, receiveSYN_ACK);
 	}
-	/*	
-	else if(tcp_syn_bit(tcp_packet_itself)){
 		
-
+	else if(tcp_syn_bit(tcp_packet_itself)){}
+	/*	
 	if(state){
+	
 		case CLOSED: 
 			puts("CLOSED packet received a message. Discarding...\n");
 			return;
-	
-		case 
+		
+		default:
+			return;
 	}
 	*/
+
 	/* pull out the ack and pass it to the send window */
 	uint16_t ack = tcp_ack(tcp_packet_data->packet);
 	send_window_ack(connection->send_window, ack);

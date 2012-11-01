@@ -418,9 +418,9 @@ void tcp_node_command_ip(tcp_node_t tcp_node, const char* cmd){
 	ip_node_command(tcp_node->ip_node, cmd);
 }
 
-
 /*
 send data:
+>>>>>>> 530c89f3eb189185b64498c67b0f28bb48f451c9
 	
 	chunk = window push(data)
 	int window_send_size = 
