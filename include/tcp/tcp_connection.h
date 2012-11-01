@@ -26,7 +26,7 @@ int tcp_connection_get_socket(tcp_connection_t connection);
 void tcp_connection_print_state(tcp_connection_t connection);
 
 /****** Receiving packets **********/
-void tcp_connection_handle_packet(tcp_connection_t connection, tcp_packet_data_t packet);
+void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t packet);
 /****** End of Receiving Packets **********/
 //////////////////////////////////////////////////////////////////////////////////////
 /******* Sending Packets **************/
@@ -54,7 +54,7 @@ int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* t
 
 	/****** Functions called to invoke statemachine ******/
 	int tcp_connection_passive_open(tcp_connection_t connection);
-	int tcp_connection_active_open(tcp_connection_t connection);
+	int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, uint16_t port);
 	/****** End of Functions called to invoke statemachine ******/
 	
 	/****** Functions called as actions by statemachine ******/

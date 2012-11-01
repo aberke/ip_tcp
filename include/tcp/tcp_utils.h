@@ -20,7 +20,7 @@ struct tcphdr* tcp_unwrap_header(void* packet, int length);
 memchunk_t tcp_unwrap_data(void* packet, int length);
 
 /*
-bit shifting fun
+bit shifting fun  <-- loser
 
 x = 0010
 x << 1
@@ -75,9 +75,9 @@ x |= 1 << 4
 #define tcp_fin_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << FIN_BIT)) > 0) // is fin set? 
 #define tcp_syn_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << SYN_BIT)) > 0) // is syn set?
 #define tcp_rst_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << RST_BIT)) > 0) // is rst set?
-#define tcp_psh_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << PSH_BIT)) > 0) // is psh set?
+#define tcp_psh_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << PSH_BIT)) > 0) // is psh set?  <-- don't need to handle
 #define tcp_ack_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << ACK_BIT)) > 0) // is ack set?
-#define tcp_urg_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << URG_BIT)) > 0) // is urg set?
+#define tcp_urg_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << URG_BIT)) > 0) // is urg set?  <-- don't need to handle
 
 /******** For wrapping *****/
 #define tcp_set_window_size(header, size) ((((struct tcphdr*)header)->th_win) = htonl(size))

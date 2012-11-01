@@ -100,50 +100,6 @@ void tcp_connection_destroy(tcp_connection_t connection){
 	connection = NULL;
 }
 
-/*
-tcp_connection_handle_packet
-	will get called from tcp_node's _handle_packet function with the 
-	connection as well as the tcp_packet_data_t. It is this connections
-	job to handle the packet, as well as send back response information
-	as needed. All meta-information (SYN, FIN, etc.) will probably be 
-	passed in to the state-machine, which will take appropriate action
-	with state changes. Therefore, the logic of this function should 
-	mostly be concerned with passing off the data to the window/validating
-	the correctness of the received packet (that it makes sense) 
-*/
-void tcp_connection_handle_packet(tcp_connection_t connection, tcp_packet_data_t packet){
-	state_e state = state_machine_get_state(connection->state_machine);
-
-	void* tcp_packet_itself = packet->packet;
-
-	if(tcp_syn_bit(tcp_packet_itself) && tcp_ack_bit(tcp_packet_itself)){
-		state_machine_transition(connection->state_machine, receiveSYN_ACK);
-	}
-	/*	
-	else if(tcp_syn_bit(tcp_packet_itself)){
-		
-
-	if(state){
-		case CLOSED: 
-			puts("CLOSED packet received a message. Discarding...\n");
-			return;
-	
-		case 
-	}
-	*/
-	/* pull out the ack and pass it to the send window */
-	uint16_t ack = tcp_ack(packet->packet);
-	send_window_ack(connection->send_window, ack);
-
-	/* get the data */
-	memchunk_t data = tcp_unwrap_data(packet->packet, packet->packet_size);
-	if(data){
-//		recv_window_push(connection->recv_window, 
-	}
-
-	printf("connection on port %d handling packet\n", (connection->local_addr).virt_port);
-	tcp_packet_data_destroy(packet);
-}
 
 /********** State Changing Functions *************/
 
@@ -167,8 +123,8 @@ int tcp_connection_CLOSED_to_LISTEN(tcp_connection_t connection){
 	return 1;	
 }
 
-int tcp_connection_active_open(tcp_connection_t connection){
-
+int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, uint16_t port){
+	puts("in tcp_connection_active_open");
 	return 1;
 }
 void tcp_connection_close(tcp_connection_t connection){
@@ -177,15 +133,63 @@ void tcp_connection_close(tcp_connection_t connection){
 	
 
 /********** End of State Changing Functions *******/
+///////////////////////////////////////////////////////////////////////////
+/**************** Receiving Packets ****************/
 
+/*
+tcp_connection_handle_receive_packet
+	will get called from tcp_node's _handle_packet function with the 
+	connection as well as the tcp_packet_data_t. It is this connections
+	job to handle the packet, as well as send back response information
+	as needed. All meta-information (SYN, FIN, etc.) will probably be 
+	passed in to the state-machine, which will take appropriate action
+	with state changes. Therefore, the logic of this function should 
+	mostly be concerned with passing off the data to the window/validating
+	the correctness of the received packet (that it makes sense) 
+*/
+void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
+	state_e state = state_machine_get_state(connection->state_machine);
+
+	void* tcp_packet = tcp_packet_data->packet;
+
+	if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
+		state_machine_transition(connection->state_machine, receiveSYN_ACK);
+	}
+	/*	
+	else if(tcp_syn_bit(tcp_packet_itself)){
+		
+
+	if(state){
+		case CLOSED: 
+			puts("CLOSED packet received a message. Discarding...\n");
+			return;
+	
+		case 
+	}
+	*/
+	/* pull out the ack and pass it to the send window */
+	uint16_t ack = tcp_ack(tcp_packet_data->packet);
+	send_window_ack(connection->send_window, ack);
+
+	/* get the data */
+	memchunk_t data = tcp_unwrap_data(tcp_packet_data->packet, tcp_packet_data->packet_size);
+	if(data){
+//		recv_window_push(connection->recv_window, 
+	}
+
+	printf("connection on port %d handling packet\n", (connection->local_addr).virt_port);
+	tcp_packet_data_destroy(tcp_packet_data);
+}
+
+/**************** End of Receiving Packets ****************/
+////////////////////////////////////////////////////////////////////////////////
 /********************* Sending Packets ********************/
 
 // puts tcp_packet_data_t on to to_send queue
 // returns 1 on success, -1 on failure (failure when queue actually already destroyed)
 int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t packet_data){
 	
-	bqueue_t *to_send = connection->to_send;
-	
+	bqueue_t *to_send = connection->to_send;	
 	if(bqueue_enqueue(to_send, (void*)packet_data))
 		return -1;
 	

@@ -126,19 +126,42 @@ void vv_accept(const char *line, tcp_node_t tcp_node){
 }
 /* connects a socket to an address (active OPEN in the RFC)
 returns 0 on success or a negative number on failure */
-int v_connect(int socket, struct in_addr addr, uint16_t port){
+int v_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t port){
 
-
-	//	-ENOTSUP
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(connection == NULL)	
+		return -EBADF; 	 // = The file descriptor is not a valid index in the descriptor table.
+	
+	int ret = tcp_connection_active_open(connection, addr.s_addr, port);
+	if(ret < 0)
+		return ret;	
+		
 	return 0;
 }
 /*	connect/c ip port Attempt to connect to the given ip address, in dot notation, on the given port.
 	Example: c 10.13.15.24 1056.
+	// CONFUSED: Why doesn't this take in a socket??? Should it print out the socket it connects with??
+	// For now I'm saying you need to include a socket.  Just deal with it for now.  It's the first argument for now.
 */
 void vv_connect(const char *line, tcp_node_t tcp_node){
-	/*
-	int ret = sscanf(line, "v_listen %d", &socket);
-	*/
+	
+	struct sockaddr_in sa;
+	char addr_buffer[INET_ADDRSTRLEN];
+	int socket, port, ret;
+	
+	ret = sscanf(line, "v_connect %d %s %d", &socket, addr_buffer, &port);
+	if(ret !=3){
+		fprintf(stderr, "syntax error (usage: v_conect [socket] [ip address] [port])\n");
+		return;
+	}	
+	//convert string ip address to real ip address
+	if(inet_pton(AF_INET, addr_buffer, &(sa.sin_addr)) <= 0){ // IPv4
+		printf("Bad ip address format -- cannot connect");
+		return;
+	}
+	
+	ret = v_connect(tcp_node, socket, sa.sin_addr, (uint16_t)port);
+	printf("v_connect call returned value: %d\n", ret);
 }
 
 int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint32_t num_bytes){
@@ -195,36 +218,7 @@ void vv_set_addrByInterface(const char* line, tcp_node_t tcp_node){
 	puts("Successful.");	
 }
 
-void vv_set_address(const char* line, tcp_node_t tcp_node){
-	int socket;
-	uint16_t port;
-	int r_port;
 
-	int b1, b2, b3, b4;
-	
-	if(sscanf(line, "v_set %d %d.%d.%d.%d %d", &socket, &b1, &b2, &b3, &b4, &r_port) != 6){
-		fprintf(stderr, "syntax error (usage: v_set [socket] [address] [port])\n");
-		return;
-	}
-
-	port = (uint16_t)r_port;
-
-	if(b1<0 || b1>255 || b2<0 || b2>255 || b3<0 || b3>255 || b4<0 || b4>255){
-		fprintf(stderr, "syntax error (malformed IP)");
-		return;
-	}
-
-	uint32_t ip_addr = b1*256*256*256 + b2*256*256 + b3*256 + b4;
-
-	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
-	if(!connection){
-		printf("No connection with socket %d\n", socket);
-		return;
-	}
-
-	tcp_connection_set_remote(connection, ip_addr, port);
-	puts("Successful.");
-}
 	
 	
 	
@@ -825,8 +819,7 @@ struct {
   {"v_connect", vv_connect}, // calls v_connect
   {"v_accept", vv_accept}, // calls v_accept
   {"v_write", vv_write},  // calls v_write
-  {"v_set_addrByInterface", vv_set_addrByInterface},
-  {"v_set", vv_set_address}
+  {"v_set_addrByInterface", vv_set_addrByInterface}
 };
 
 
