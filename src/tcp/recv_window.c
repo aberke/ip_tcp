@@ -140,6 +140,11 @@ static int _validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t
 	}
 }
 
+/* we've received data up until the left of the window */
+uint32_t recv_window_get_ack(recv_window_t recv_window){
+	return recv_window->left;
+}
+
 
 /* 
 recv_window_receive
@@ -149,7 +154,7 @@ recv_window_receive
 	the ACK number to send back. If there is no such number (ie the window didn't slide at all, 
 	it will return -1.
 */
-uint32_t recv_window_receive(recv_window_t recv_window, void* data, uint32_t length, uint32_t seqnum){
+void recv_window_receive(recv_window_t recv_window, void* data, uint32_t length, uint32_t seqnum){
 	if(_validate_seqnum(recv_window, seqnum, length) < 0){
 		LOG(("seqnum %d not accepted. left: %d\n", seqnum, recv_window->left)); 
 		return -1;
@@ -224,9 +229,7 @@ uint32_t recv_window_receive(recv_window_t recv_window, void* data, uint32_t len
 			recv_window->slider[index] = NULL;
 		}
 		recv_window->left = (recv_window->left + j) % MAX_SEQNUM;
-		return recv_window->left;
 	}
-	return -1;
 }
 
 /*

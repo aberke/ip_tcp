@@ -112,15 +112,53 @@ tcp_connection_handle_packet
 	the correctness of the received packet (that it makes sense) 
 */
 void tcp_connection_handle_packet(tcp_connection_t connection, tcp_packet_data_t packet){
-	state_e state = state_machine_get_state(connection->state_machine);
+
+	/* RFC 793: 
+		Although these examples do not show connection synchronization using data
+		-carrying segments, this is perfectly legitimate, so long as the receiving TCP
+  		doesn't deliver the data to the user until it is clear the data is valid
+		
+
+		so no matter what, we need to be pushing the data to the receiving window, 
+		and we simply shouldn't call get_next until we're in the established state */
 
 	void* tcp_packet_itself = packet->packet;
 
+	/* check if there's any data, and if there is push it to the window,
+		but what does the seqnum even mean if the ACKs haven't been synchronized? */
+	memchunk_t data = tcp_unwrap_data(tcp_packet_itself);
+	if(data){ 
+		uint32_t seqnum = tcp_seqnum(tcp_packet_itself);	
+		recv_window_receive(connection->receive_window, data->data, data->length, seqnum);
+	}	
+
+	/* now check the bits */
 	if(tcp_syn_bit(tcp_packet_itself) && tcp_ack_bit(tcp_packet_itself)){
+		if(_validate_ack(tcp_connection, tcp_ack(tcp_packet_itself)) < 0){
+			/* then you sent a syn with a seqnum that wasn't faithfully returned. 
+				what should we do? for now, let's discard */
+			puts("Received invalid ack with SYN/ACK. Discarding.");
+			return;
+		}
+
+		/* inform you're window of the starting sequence number that your peer has chosen */
+		recv_window_set_ISN(tcp_connection->receive_window, tcp_seqnum(tcp_packet_itself));
+
+		/* then transition with the state machine */
 		state_machine_transition(connection->state_machine, receiveSYN_ACK);
+
+		/* should we just return? should we check if other bits are set? */
+		return;
 	}
 		
-	else if(tcp_syn_bit(tcp_packet_itself)){}
+	else if(tcp_syn_bit(tcp_packet_itself)){
+		state_machine_transition(connection->state_machine, receiveSYN);
+	}
+	
+	else if(tcp_syn_bit(tcp_packet_itself)){
+		state_machine_transition(connection->state_machine, receiveACK);
+	}
+
 	/*	
 	if(state){
 	

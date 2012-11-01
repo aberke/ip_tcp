@@ -92,8 +92,6 @@ x |= 1 << 4
 #define tcp_set_ack_bit(header) ((((struct* tcphdr)header)->th_flags) |= (1 << ACK_BIT)) // set the ack bit to 1
 #define tcp_set_urg_bit(header) ((((struct* tcphdr)header)->th_flags) |= (1 << URG_BIT)) // set the urg bit to 1
 
-
-
 struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_port, uint32_t seq, uint32_t ack);
 
 // takes in data and wraps data in header with correct addresses.  
