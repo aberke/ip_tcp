@@ -156,7 +156,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		state_machine_transition(connection->state_machine, receiveSYN_ACK);
 	}
 		
-	else if(tcp_syn_bit(tcp_packet_itself)){}
+	else if(tcp_syn_bit(tcp_packet)){}
 	/*	
 	if(state){
 	
