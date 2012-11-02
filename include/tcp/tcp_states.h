@@ -5,7 +5,7 @@
 #include "states.h"
 
 enum state{
-	CLOSED,
+	CLOSED=0,
 	LISTEN,
 	SYN_SENT,
 	SYN_RECEIVED,
@@ -23,7 +23,7 @@ enum state{
 #define START_STATE CLOSED
 
 enum transition{
-	passiveOPEN,
+	passiveOPEN=0,
 	activeOPEN,
 	receiveSYN,
 	receiveSYN_ACK,  //receive SYN+ACK at same time

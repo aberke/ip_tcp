@@ -7,6 +7,7 @@
 #include <assert.h>
 
 #include "utils.h"
+#include "array2d.h"
 #include "tcp_states.h"
 #include "tcp_connection.h"
 #include "routing_table.h"
@@ -166,12 +167,40 @@ void debug_update_routing_table(routing_table_t rt, forwarding_table_t ft, struc
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 
+
+void test_array(){
+	ARRAY_DEF(int);
+
+	struct arrayWrapper{
+		ARRAY_TYPE(int) array;
+	};
+
+	struct arrayWrapper* ar = malloc(sizeof(struct arrayWrapper));
+	ARRAY_INIT(ar->array, int, 10, 10, -1);
+
+	ARRAY_PUT(ar->array, 0, 0, 100);
+	ARRAY_PUT(ar->array, 0, 1, 101);
+	ARRAY_PUT(ar->array, 1, 0, 102);
+	ARRAY_PUT(ar->array, 2, 0, 103);
+	ARRAY_PUT(ar->array, 4, 8, 556);
+		
+	printf("(0,0): %d, (0,1): %d, (1,0): %d\n", ARRAY_GET(ar->array, 0, 0), ARRAY_GET(ar->array, 0, 1), ARRAY_GET(ar->array, 1, 0));
+
+	printf("(4,8): %d\n", ARRAY_GET(ar->array, 4, 8));
+
+	ARRAY_DESTROY(&(ar->array));
+}
+
 void test_tcp_states(){
 	state_machine_t machine = state_machine_init();
 	tcp_connection_t connection = tcp_connection_init(1, NULL);
 	
 	state_machine_print_state(machine);
-		
+	
+	state_machine_transition(machine, passiveOPEN);	
+
+	state_machine_print_state(machine);
+	
 	state_machine_transition(machine, activeOPEN);
 		
 	state_machine_print_state(machine);
@@ -742,6 +771,8 @@ int main(int argc, char** argv){
 	//TEST(test_recv_window);
 
 	TEST(test_tcp_states);	
+
+	//TEST(test_array);
 
 	/* RETURN */
 	return(0);
