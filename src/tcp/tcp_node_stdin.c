@@ -14,6 +14,7 @@
 #include "util/parselinks.h"
 #include "tcp_node.h"
 #include "tcp_connection.h"
+#include "tcp_connection_state_machine_handle.h"
 
 #include "ip_node.h" 
 
@@ -127,7 +128,7 @@ void vv_accept(const char *line, tcp_node_t tcp_node){
 /* connects a socket to an address (active OPEN in the RFC)
 returns 0 on success or a negative number on failure */
 int v_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t port){
-
+	printf("call to v_connect with socket %d\n", socket);
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(connection == NULL)	
 		return -EBADF; 	 // = The file descriptor is not a valid index in the descriptor table.

@@ -3,7 +3,7 @@
 #include "utils.h"
 #include "states.h"
 #include "tcp_states.h"
-#include "tcp_connection.h"
+#include "tcp_connection_state_machine_handle.h"
 
 // TODO: HANDLE TODO'S FOR ERROR HANDLING
 
@@ -73,10 +73,10 @@ transitioning_t established_next_state(transition_e t){
 	switch(t){
 		case receiveFIN:
 			/* send ACK */
-			return transitioning_init(CLOSE_WAIT, NULL);
+			return transitioning_init(CLOSE_WAIT, (action_f)tcp_connection_ESTABLISHED_to_CLOSE_WAIT);
 		case CLOSE:
 			/* send FIN */
-			return transitioning_init(FIN_WAIT_1, NULL);
+			return transitioning_init(FIN_WAIT_1, (action_f)tcp_connection_ESTABLISHED_to_FIN_WAIT_1);
 
 		default:
 			return transitioning_init(ESTABLISHED, NULL);
@@ -91,7 +91,7 @@ transitioning_t fin_wait_1_next_state(transition_e t){
 			return transitioning_init(FIN_WAIT_2, NULL);
 		case receiveFIN:
 			/* ACTION: send ACK */
-			return transitioning_init(CLOSING, NULL);
+			return transitioning_init(CLOSING, (action_f)tcp_connection_FIN_WAIT_1_to_CLOSING);
 		
 		default:
 			return transitioning_init(FIN_WAIT_1, NULL);
@@ -113,7 +113,7 @@ transitioning_t close_wait_next_state(transition_e t){
 	switch(t){
 		case CLOSE:
 			/* send FIN */
-			return transitioning_init(LAST_ACK, NULL);
+			return transitioning_init(LAST_ACK, (action_f)tcp_connection_CLOSE_WAIT_to_LAST_ACK);
 
 		default:
 			return transitioning_init(CLOSE_WAIT, NULL);
@@ -124,7 +124,7 @@ transitioning_t last_ack_next_state(transition_e t){
 	switch(t){
 		case receiveACK:
 			/* must be ACK of your FIN */
-			return transitioning_init(CLOSED, NULL);
+			return transitioning_init(CLOSED, (action_f)tcp_connection_LAST_ACK_to_CLOSED);
 		
 		default:
 			return transitioning_init(LAST_ACK, NULL);

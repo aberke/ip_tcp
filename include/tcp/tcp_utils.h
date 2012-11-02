@@ -10,6 +10,18 @@
 
 #define TCP_HEADER_MIN_SIZE 20
 
+#define WINDOW_DEFAULT_TIMEOUT 3.0
+#define WINDOW_DEFAULT_SEND_WINDOW_SIZE 100
+#define WINDOW_DEFAULT_SEND_SIZE 2000
+#define WINDOW_DEFAULT_ISN 0  // don't actually use this
+
+#define ACCEPT_QUEUE_DEFAULT_SIZE 10
+
+#define DEFAULT_TIMEOUT 12.0
+#define DEFAULT_WINDOW_SIZE ((uint16_t)100)
+#define DEFAULT_CHUNK_SIZE 100
+#define RAND_ISN() rand()
+
 typedef struct tcp_socket_address{
 	uint32_t virt_ip;
 	uint16_t virt_port;
