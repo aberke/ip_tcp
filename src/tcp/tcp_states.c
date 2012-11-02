@@ -187,6 +187,7 @@ void print_transition(transition_e t){
 }
 
 void print_state(state_e s){
+	printf("%d=", (int)s);
 	switch(s){
 		case CLOSED:
 			printf("CLOSED");

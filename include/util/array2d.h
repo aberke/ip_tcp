@@ -54,7 +54,7 @@ while(0);
 /* ARRAY_GET and ARRAY_PUT are used like normal getters/setters */
 #define ARRAY_GET(ar, i, j)															\
 (( i < 0 || i >= (ar)->height || 													\
-   j < 0 || j >= (ar)->width ) ? (ar)->empty_value : (ar)->elems[j*(ar)->width + i])
+   j < 0 || j >= (ar)->width ) ? (ar)->empty_value : (ar)->elems[i*((ar)->width) + j])
 
 #define ARRAY_PUT(ar, i, j, elem)								\
 do{																\
@@ -63,7 +63,7 @@ do{																\
 		ARRAY_ERROR("Out of bounds");							\
 	}															\
 	else{														\
-		(ar)->elems[j*(ar)->width + i] = elem;					\
+		(ar)->elems[i*((ar)->width) + j] = elem;					\
 	}															\
 }																\
 while(0)

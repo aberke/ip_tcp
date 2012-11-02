@@ -193,16 +193,22 @@ void test_array(){
 
 void test_tcp_states(){
 	state_machine_t machine = state_machine_init();
-	tcp_connection_t connection = tcp_connection_init(1, NULL);
-	
-	state_machine_print_state(machine);
-	
-	state_machine_transition(machine, passiveOPEN);	
 
+	tcp_connection_t connection = tcp_connection_init(1, NULL);
+	state_machine_set_argument(machine, connection);
+	
 	state_machine_print_state(machine);
 	
+	// should swith to listen
+	state_machine_transition(machine, passiveOPEN);	
+	state_machine_print_state(machine);
+	
+	// should stay in listen
 	state_machine_transition(machine, activeOPEN);
-		
+	state_machine_print_state(machine);
+	
+	// should switch to SYN_RECVD
+	state_machine_transition(machine, receiveSYN); 
 	state_machine_print_state(machine);
 	
 	state_machine_destroy(&machine);

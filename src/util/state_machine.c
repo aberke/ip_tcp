@@ -14,6 +14,8 @@
 // debugging
 #include "tcp_states.h"
 
+static void _print(state_machine_t machine);
+
 /* 
 transitioning
 	joins an action with a next state 
@@ -106,10 +108,10 @@ state_e state_machine_get_state(state_machine_t machine){
 }
 
 //// INTERNAL FUNCTIONS ////
-void _print(state_machine_t machine){
+static void _print(state_machine_t machine){
 	int i,j;
 	transitioning_t transition;
-	for(i=0;i<NUM_STATES;i++){
+	for(i=0;i<1;i++){//NUM_STATES;i++){
 		for(j=0;j<NUM_TRANSITIONS;j++){
 			transition = ARRAY_GET(machine->transition_matrix, (state_e)i, (transition_e)j);
 			print_transition((transition_e)j);
@@ -117,8 +119,9 @@ void _print(state_machine_t machine){
 			print_state((state_e)i);
 			printf("-->");
 			print_state(transition->next_state);
-			printf("\n");
+			printf("    ");
 		}
+		printf("\n");
 	}
 }
 /* set state iterates through the states/transitions and for each
@@ -138,32 +141,40 @@ void _init(state_machine_t machine){
 			_set_transitioning(machine, (state_e)i, (transition_e)j, transition);
 
 		}
+
+		printf("Finished state %d\n\n", i);
+		_print(machine);
+		printf("\n\n");
 	}
 }
 			
 /* wraps around the ARRAY functionality that we're using here */
 void _set_transitioning(state_machine_t machine, state_e state, transition_e transition, transitioning_t t){
-	
-	printf("INITIALIZING: From ");
-	print_transition(transition);
-	printf(",");
-	print_state(state);
-	printf(" to ");
-	print_state(t->next_state);
-	printf("\n");
-	
 
 	ARRAY_PUT(machine->transition_matrix, state, transition, t);
 	
+	transitioning_t t1 = ARRAY_GET(machine->transition_matrix, (state_e)0, (transition_e)1);
+	if(!t1){
+		puts("0,1 not set");
+		return;
+	}
+	
+	print_transition(transition);
+	printf(",");
+	print_state(state);
+	printf("    ");
+	printf("(0,1) == ");
+	print_state(t1->next_state);
+	printf("\n");
 	 
 	printf("GETTING: ");
 	print_transition(transition);
 	printf(",");
 	print_state(state);
 	printf("-->");
-	transitioning_t t1 = ARRAY_GET(machine->transition_matrix, state, transition);
+	t1 = ARRAY_GET(machine->transition_matrix, state, transition);
 	print_state(t1->next_state);
-	printf("\n"); 
+	printf("\n");
 }	
 
 void state_machine_print_state(state_machine_t state_machine){
