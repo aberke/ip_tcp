@@ -31,9 +31,9 @@
 #define ACCEPT_QUEUE_DEFAULT_SIZE 10
 
 #define DEFAULT_TIMEOUT 12.0
-#define DEFAULT_WINDOW_SIZE 1000
+#define DEFAULT_WINDOW_SIZE ((uint16_t)100)
 #define DEFAULT_CHUNK_SIZE 100
-#define RAND_ISN rand()
+#define RAND_ISN() rand()
 
 
 struct tcp_connection{
@@ -52,6 +52,12 @@ struct tcp_connection{
 	///queues connections when user in listen state and not yet accept state
 	queue_t accept_queue;  
 	
+	/* these really only need to be set when we send
+	   off the first seq, just to make sure that the 
+	   ack that we get back is valid */
+	uint32_t last_seq_received;
+	uint32_t last_seq_sent;	
+
 	// needs reference to the to_send queue in order to queue its packets
 	bqueue_t *to_send;	//--- tcp data for ip to send
 };
@@ -61,14 +67,21 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	state_machine_t state_machine = state_machine_init();
 
 	// init windows
-	send_window_t send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, RAND_ISN);
-	recv_window_t receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, RAND_ISN);
+	
 	
 	queue_t accept_queue = queue_init();
 	queue_set_size(accept_queue, ACCEPT_QUEUE_DEFAULT_SIZE);
 	
 	tcp_connection_t connection = (tcp_connection_t)malloc(sizeof(struct tcp_connection));
-	
+
+	// let's do this the first time we send the SYN, just so if we try to send before that
+	// we'll crash and burn because it's null
+
+	//send_window_t send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, RAND_ISN);
+	connection->send_window = NULL;
+	//connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, RAND_ISN);
+	connection->receive_window = NULL;
+
 	connection->socket_id = socket;
 	//zero out virtual addresses to start
 	connection->local_addr.virt_ip = 0;
@@ -77,11 +90,16 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	connection->remote_addr.virt_port = 0;
 	
 	connection->state_machine = state_machine;
-	connection->send_window = send_window;
-	connection->receive_window = receive_window;	
 	connection->accept_queue = accept_queue;
 	connection->to_send = tosend;
 	
+	/* 	I know that this will set it to a huge number and not
+		actually -1, I learned my lesson. These variables
+		are used to hold on to the seq/acks we've received
+		before we hand the logic off to the state machine */	
+	connection->last_seq_received = -1;
+	connection->last_seq_sent 	  = -1;
+
 	state_machine_set_argument(state_machine, connection);		
 
 	return connection;
@@ -90,8 +108,8 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 void tcp_connection_destroy(tcp_connection_t connection){
 
 	// destroy windows
-	send_window_destroy(&(connection->send_window));
-	recv_window_destroy(&(connection->receive_window));
+	if( connection->send_window ) send_window_destroy(&(connection->send_window));
+	if( connection->receive_window ) recv_window_destroy(&(connection->receive_window));
 	
 	// destroy state machine
 	state_machine_destroy(&(connection->state_machine));
@@ -119,182 +137,349 @@ tcp_connection_transition_passive_open
 	transition
 */
 int tcp_connection_CLOSED_to_LISTEN(tcp_connection_t connection){
-	puts("int tcp_connection_CLOSED_to_LISTEN");
+	puts("CLOSED --> LISTEN");
 	return 1;	
 }
 
-int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, uint16_t port){
-	puts("in tcp_connection_active_open");
+/*
+tcp_connection_CLOSED_to_SYN_SENT 
+	should handle sending the SYN when a connection is actively opened, ie trying
+	to actively connect to someone. 
+*/
+int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection){
+	puts("CLOSED --> SYN_SENT");
+
+	/* first pick a syn to send */
+	uint32_t ISN = rand(); // only up to RAND_MAX, don't know what that is, but probably < SEQNUM_MAX
+
+	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
+
+	/* now init the packet */
+	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0);
+	
+	/* fill the syn, and set the seqnum */
+	tcp_set_syn_bit(header);
+	tcp_set_seq(header, ISN);
+
+	/*  that should be good? send it off. Note: NULL because I'm assuming there's
+		to send when initializing a connection, but that's not necessarily true */
+	tcp_wrap_packet_send(connection, header, NULL, 0);
+
 	return 1;
 }
-void tcp_connection_close(tcp_connection_t connection){
 
-}
+/* 0o0o0oo0o0o0o0o0o0o0o0o0o0o0o0o0o0o LISTEN 0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o */
 	
+/*
+tcp_connection_LISTEN_to_SYN_RECEIVED
+	this function just needs to handle generating the ISN, setting the receive window,
+	and sending the SYN/ACK. It will generate an ISN for it's sending window and
+	send that off. The sending window should have been NULL before this point, if it
+	wasn't then it was init()ed somewhere else, which is probably a mistake */
+int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){	
+	puts("LISTEN --> SYN_RECEIVED");
+
+	/*  1. ack their SEQ number 
+	    2. send your own SEQ number */
+
+	if(connection->send_window != NULL){
+		puts("sending window is not null when we're trying to send a SYN/ACK in tcp_connection_LISTEN_to_SYN_RECEIVED. why?");
+		exit(1); // CRASH AND BURN
+	}
+
+	uint32_t ISN = RAND_ISN();	
+	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
+	
+	/*  just to reiterate, last_seq_received should have JUST been received by the SYN
+		packet that made the state transition call this function */
+	connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, connection->last_seq_received);
+
+	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0);
+
+	tcp_set_syn_bit(header);
+	tcp_set_ack_bit(header);
+
+	tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
+	tcp_set_seq(header, ISN);
+
+	tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
+
+	tcp_wrap_packet_send(connection, header, NULL, 0);
+
+	return 1;
+}
+
+int tcp_connection_LISTEN_to_CLOSED(tcp_connection_t connection){	
+	puts("LISTEN --> CLOSED");
+
+	/*  there's not much to do here, except for get rid of the 
+	   	data you were buffering (from the other side?) and getting
+	   	rid of the queued connections. For now, just return */
+	return 1;
+}
+
+int tcp_connection_LISTEN_to_SYN_SENT(tcp_connection_t connection){
+	puts("LISTEN --> SYN_SENT");
+
+	/* I don't really understand this transition. Why were you in the 
+		listen state, and then all of a sudden ACTIVELY send a syn? */
+	uint32_t ISN = RAND_ISN();
+	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
+	
+	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0);
+
+	tcp_set_syn_bit(header);
+	tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
+	tcp_set_seq(header, ISN);
+
+	tcp_wrap_packet_send(connection, header, NULL, 0);
+	
+	return 1;
+}	
+
+/* o00o0o0oo0o0o0o0o0o0o0o0o0o0o0o0o00o SYN SENT o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0ooo0o0o0o */
+
+int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection){
+	puts("SYN_SENT --> SYN_RECEIVED");
+
+	/* I may be wrong, but if you sent a SYN and you received a SYN (and not
+		a SYN/ACK, then this is a simultaneous connection. Send back a SYN/ACK */
+
+	if(connection->receive_window != NULL){
+		puts("Something went wrong, your receive window already exists and we just received a SYN. In tcp_connection_SYN_SENT_to_SYN_RECEIVED");
+		exit(1); // CRASH AND BURN 
+	}
+
+	// again, last_seq_received will have been set by the packet that triggered this transition 
+	connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, connection->last_seq_received);
+
+	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0); 
+											
+	// should have been set by the last person who sent the
+	// the first syn
+	tcp_set_seq(header, connection->last_seq_sent);
+	tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
+	tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
+	
+	tcp_set_syn_bit(header);
+	tcp_set_ack_bit(header);
+	
+	tcp_wrap_packet_send(connection, header, NULL, 0);
+
+	return 1;
+}
+										
+int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
+	puts("SYN_SENT --> ESTABLISHED");
+
+	/* just got a SYN/ACK, so send back a ACK, and that's it */
+
+	if(connection->receive_window != NULL){
+		puts("Something went wrong, your receive window already exists and we just received a SYN/ACK, in SYN_SENT-->ESTABLISHED");
+		exit(1); // CRASH AND BURN
+	}
+
+	connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, connection->last_seq_received);
+	
+	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0);
+
+	// load it up!
+	tcp_set_ack_bit(header);
+	tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
+
+	// window size?
+	tcp_set_window_size(header, recv_window_get_size(connection->receive_window));
+	
+	
+	// send it off 
+	tcp_wrap_packet_send(connection, header, NULL, 0);
+	
+	return 1;
+}
+
+int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection){
+	puts("SYN_SENT --> CLOSED");
+
+	/* you're just closing up, there's nothing to do */
+	return 1;
+}
+
+/* this function should actually be called ONLY by tcp_node, because 
+	don't we need to first verify that this is a valid IP? */
+int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, uint16_t port){
+	tcp_connection_set_remote(connection, ip_addr, port);
+	state_machine_transition(connection->state_machine, activeOPEN);
+	return 1;
+}
 
 /********** End of State Changing Functions *******/
-///////////////////////////////////////////////////////////////////////////
-/**************** Receiving Packets ****************/
+/* ////////////////////////////////////////////// */
+/**************** Receiving Packets ***************/
+
+/* 
+validates an ACK when it's being received during 
+establishing the connection 
+*/
+int _validate_ack(tcp_connection_t connection, uint32_t ack){
+	/* the ACK is valid if it is equal to one more than the 
+		last sequence number sent */
+	if (ack != (connection->last_seq_sent + 1) % MAX_SEQNUM)
+		return -1;
+
+	return 0;
+}
 
 /*
 tcp_connection_handle_receive_packet
-	will get called from tcp_node's _handle_packet function with the 
-	connection as well as the tcp_packet_data_t. It is this connections
-	job to handle the packet, as well as send back response information
 	as needed. All meta-information (SYN, FIN, etc.) will probably be 
 	passed in to the state-machine, which will take appropriate action
 	with state changes. Therefore, the logic of this function should 
 	mostly be concerned with passing off the data to the window/validating
 	the correctness of the received packet (that it makes sense) 
 */
-void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
-
-	/* RFC 793: 
-		Although these examples do not show connection synchronization using data
-		-carrying segments, this is perfectly legitimate, so long as the receiving TCP
-  		doesn't deliver the data to the user until it is clear the data is valid
-		
-
-		so no matter what, we need to be pushing the data to the receiving window, 
-		and we simply shouldn't call get_next until we're in the established state */
-
-	void* tcp_packet = tcp_packet_data->packet;
-
-	/* check if there's any data, and if there is push it to the window,
-		but what does the seqnum even mean if the ACKs haven't been synchronized? */
-	memchunk_t data = tcp_unwrap_data(tcp_packet_itself);
-	if(data){ 
-		uint32_t seqnum = tcp_seqnum(tcp_packet_itself);	
-		recv_window_receive(connection->receive_window, data->data, data->length, seqnum);
-	}	
-
-	/* now check the bits */
-	if(tcp_syn_bit(tcp_packet_itself) && tcp_ack_bit(tcp_packet_itself)){
-		if(_validate_ack(tcp_connection, tcp_ack(tcp_packet_itself)) < 0){
-			/* then you sent a syn with a seqnum that wasn't faithfully returned. 
-				what should we do? for now, let's discard */
-			puts("Received invalid ack with SYN/ACK. Discarding.");
+void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t packet){
+	struct tcphdr* header = (struct tcphdr*)packet->packet;
+	
+	if(tcp_syn_bit(header) && tcp_ack_bit(header)){	
+		if(_validate_ack(connection, tcp_ack(header)) < 0){
+			puts("Got invalid ACK! Discarding...");
 			return;
 		}
 
-		/* inform you're window of the starting sequence number that your peer has chosen */
-		recv_window_set_ISN(tcp_connection->receive_window, tcp_seqnum(tcp_packet_itself));
-
-		/* then transition with the state machine */
-		state_machine_transition(connection->state_machine, receiveSYN_ACK);
-
-		/* should we just return? should we check if other bits are set? */
-		return;
-	}
+		/* received a SYN/ACK, record the seq you got, and validate
+			that the ACK you received is correct */
+		connection->last_seq_received = tcp_seqnum(header);
 		
-	else if(tcp_syn_bit(tcp_packet_itself)){
+		state_machine_transition(connection->state_machine, receiveSYN_ACK);
+	}
+
+	else if(tcp_syn_bit(header)){
+		/* got a SYN, set the last_seq_received, then pass off to state machine */
+		connection->last_seq_received = tcp_seqnum(header);
+	
 		state_machine_transition(connection->state_machine, receiveSYN);
 	}
+
+	/* this will almost universally be true. */
+	if(tcp_ack_bit(header)){
 	
-	else if(tcp_syn_bit(tcp_packet_itself)){
-		state_machine_transition(connection->state_machine, receiveACK);
+		/* careful, this might be NULL */
+		send_window_ack(connection->send_window, tcp_ack(header));
 	}
-
-	/*	
-	if(state){
-	
-		case CLOSED: 
-			puts("CLOSED packet received a message. Discarding...\n");
-			return;
-		
-		default:
-			return;
-	}
-	*/
-
-	/* pull out the ack and pass it to the send window */
-	uint16_t ack = tcp_ack(tcp_packet_data->packet);
-	send_window_ack(connection->send_window, ack);
-
-	/* get the data */
-	memchunk_t data = tcp_unwrap_data(tcp_packet_data->packet, tcp_packet_data->packet_size);
-	if(data){
-//		recv_window_push(connection->recv_window, 
-	}
-
-	printf("connection on port %d handling packet\n", (connection->local_addr).virt_port);
-	tcp_packet_data_destroy(tcp_packet_data);
+			
+	/* Umm, anything else ? */	
 }
 
-/**************** End of Receiving Packets ****************/
-////////////////////////////////////////////////////////////////////////////////
-/********************* Sending Packets ********************/
+/* 0o0o0oo0o0o0o0o0o0o0o SENDING o0o0o0ooo0o0o0o0o0o0o0o0o0oo0o */
 
-// puts tcp_packet_data_t on to to_send queue
-// returns 1 on success, -1 on failure (failure when queue actually already destroyed)
-int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t packet_data){
+/* 
+tcp_connection_queue_ip_send
+	this is the reason that tcp_wrap_packet_send needs to be defined 
+	in tcp_connection.c, because otherwise tcp_utils would need to 
+	#include or somehow know about the queue which tcp_connection
+	is using. 
+*/
+int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t packet){
+	return bqueue_enqueue(connection->to_send, packet);
+}
 	
-	bqueue_t *to_send = connection->to_send;	
-	if(bqueue_enqueue(to_send, (void*)packet_data))
+
+/*
+   NOTE should probably be here just because it's really would be a method 
+   if we had classes, it takes in and relies upon the tcp_connection_t implementation 
+	 
+   I also left the original version intact in src/tcp/tcp_utils.s
+*/
+int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len){	
+	//TODO: LAST STEP WITH READYING HEADER IS SETTING CHECKSUM -- SET CHECKSUM!
+
+	/* data_len had better be the same size as when you called 
+		tcp_header_init()!! */
+	memcpy(header+tcp_offset_in_bytes(header), data, data_len);
+	uint32_t total_length = tcp_offset_in_bytes(header) + data_len;
+
+	// no longer need data
+	free(data);
+	
+	// add checksum here?
+	//tcp_utils_add_checksum(packet);
+	tcp_utils_add_checksum(header);
+	
+	// send off to ip_node as a tcp_packet_data_t
+	//tcp_packet_data_t packet_data = tcp_packet_data_init(packet, data_len+TCP_HEADER_MIN_SIZE, local_virt_ip, remote_virt_ip);
+	tcp_packet_data_t packet_data = tcp_packet_data_init(
+										(char*)header, 
+										total_length,
+										connection->local_addr.virt_ip,
+										connection->remote_addr.virt_ip);
+										
+	// no longer need packet
+	free(header);
+	
+	if(tcp_connection_queue_ip_send(connection, packet_data) < 0){
+		//TODO: HANDLE!
+		puts("Something wrong with sending tcp_packet to_send queue--How do we want to handle this??");	
+		free(packet_data);
 		return -1;
-	
+	}
+
 	return 1;
 }
 
-// pushes data to send_window for window to break into chunks which we can call get next on
-// meant to be used before tcp_connection_send_next
-void tcp_connection_push_data(tcp_connection_t connection, void* data, int num_bytes){
-
-	send_window_t send_window = connection->send_window;
-	// push data to send_window
-	send_window_push(send_window, data, num_bytes);
-}
-
-//##TODO##
-// helper to tcp_connection_send_next: handles sending the individual chunks returned from send_window
 void tcp_connection_send_next_chunk(tcp_connection_t connection, send_window_chunk_t next_chunk){
-
-	uint32_t host_port, dest_port;
-	host_port = tcp_connection_get_local_port(connection);
-	dest_port = tcp_connection_get_remote_port(connection);
+	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, next_chunk->length);
 	
-	uint32_t seqnum = (uint32_t)next_chunk->seqnum; 
-	void* data = next_chunk->data;
-	int data_len = next_chunk->length;
-
-	struct tcphdr* header = tcp_header_init(host_port, dest_port, seqnum, 0);
+	/* set the ack bit, and get the ack to send from 
+		the window. ACK's should ALWAYS be sent (if established) */
+	tcp_set_ack_bit(header);
+	tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
 	
-	// Todo: set anything else we need in header
-	//TODO : SET WINDOW SIZE???
+	/* the seqnum should be the seqnum in the next_chunk */
+	tcp_set_seq(header, next_chunk->seqnum);
 	
-	// send off the packet -- it's ready!
-	tcp_wrap_packet_send(connection, header, data, data_len);
+	/* send it off!  */
+	tcp_wrap_packet_send(connection, header, next_chunk->data, next_chunk->length);
 }
+
+/* 
+tcp_connection_push_data
+	just pushes the given data into the sending window. Likely followed by a get_next loop 
+*/
+void tcp_connection_push_data(tcp_connection_t connection, void* data, int data_len){
+	/* if the window doesn't exist, you can't write because you haven't 
+		passed through the right states */
+	if(connection->send_window == NULL) 
+		return;
+
+	send_window_push(connection->send_window, data, data_len);
+}
+
+
 // queues chunks off from send_window and handles sending them for as long as send_window wants to send more chunks
+// NOTE: this presents the danger of one greedy connection that blocks all the other ones from sending
 int tcp_connection_send_next(tcp_connection_t connection){
-/*struct send_window_chunk{
-	void* data;
-	int length;
-	int seqnum;
-};*/	
+
 	int bytes_sent = 0;
 	send_window_chunk_t next_chunk;
 	send_window_t send_window = connection->send_window;
-	// get our chunk from the window
-	next_chunk = send_window_get_next(send_window);
-	
+
 	// keep sending as many chunks as window has available to give us
-	while(next_chunk != NULL){
+	while((next_chunk = send_window_get_next(send_window))){
 	
+		// send it off
 		tcp_connection_send_next_chunk(connection, next_chunk);
+
 		// increment bytes_sent
-		bytes_sent = bytes_sent + next_chunk->length;
-		
-		// get next chunk if there is one
-		next_chunk = send_window_get_next(send_window);
+		bytes_sent += next_chunk->length;
 	}	
+
 	return bytes_sent;
 }
 
 int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* to_write, int num_bytes){
-	
 	// push data to window and then send as much as we can
 	tcp_connection_push_data(connection, (void*)to_write, num_bytes);	
+
 	// send as much data right now as send_window allows
 	int ret = tcp_connection_send_next(connection);
 	return ret;
@@ -304,16 +489,26 @@ int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* t
 /********************* End of Sending Packets ********************/
 
 uint16_t tcp_connection_get_local_port(tcp_connection_t connection){
-	tcp_socket_address_t addr;
+	/*  given the frequency of this call (whenever we send a chunk), 
+		we should make it as efficient as possible, which includes
+		pushing as little onto the stack as necessary */
+	return connection->local_addr.virt_port;
+/*	tcp_socket_address_t addr;
 	addr = connection->local_addr;	
 	uint16_t virt_port = addr.virt_port;
 	return virt_port;
+*/
 }
 uint16_t tcp_connection_get_remote_port(tcp_connection_t connection){
+	/* see note above */
+	return connection->remote_addr.virt_port;
+/*	
 	tcp_socket_address_t addr = connection->remote_addr;	
 	uint16_t virt_port = addr.virt_port;
 	return virt_port;
+*/
 }
+
 void tcp_connection_set_local_port(tcp_connection_t connection, uint16_t port){
 	connection->local_addr.virt_port = port;
 }

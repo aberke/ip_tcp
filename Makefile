@@ -54,8 +54,8 @@ TEST_BUILD_DIR=$(TEST_DIR)/build
 TEST_DEFAULT_ARGS=
 PYTEST=pyLink.py
 
-_TEST_OBJS=test.o tcp/test_states.o
-_TEST_DEP_OBJS=ip/routing_table.o ip/forwarding_table.o util/utils.o util/state_machine.o util/queue.o tcp/send_window.o util/ext_array.o tcp/recv_window.o
+_TEST_OBJS=test.o 
+_TEST_DEP_OBJS=ip/routing_table.o ip/forwarding_table.o util/utils.o util/state_machine.o util/queue.o tcp/send_window.o util/ext_array.o tcp/recv_window.o tcp/tcp_connection.o tcp/tcp_states.o util/bqueue.o tcp/tcp_utils.o ip/ip_utils.o
 TEST_OBJS=$(patsubst %.o, $(TEST_BUILD_DIR)/%.o, $(_TEST_OBJS)) $(patsubst %.o, $(BUILD_DIR)/%.o, $(_TEST_DEP_OBJS))
 
 _TEST_INCLUDE=$(TEST_DIR)/include

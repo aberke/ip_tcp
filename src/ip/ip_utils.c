@@ -26,6 +26,9 @@ tcp_packet_data_t tcp_packet_data_init(char* packet_data, int packet_data_size, 
 	tcp_packet->remote_virt_ip = remote_virt_ip;
 	tcp_packet->packet_size = packet_data_size;
 
+	/* did we talk about this ? how is this not seg-faulting, because it's trying
+		to copy MTU bytes from packet_data which is definitely NOT guaranteed to 
+		be that long?? */
 	memcpy(tcp_packet->packet, packet_data, MTU);
 	
 	return tcp_packet;

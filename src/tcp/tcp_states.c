@@ -25,13 +25,13 @@ transitioning_t listen_next_state(transition_e t){
 	switch(t){	
 		case receiveSYN:
 			/* send SYN+ACK */
-			return transitioning_init(SYN_RECEIVED, NULL);
+			return transitioning_init(SYN_RECEIVED, (action_f)tcp_connection_LISTEN_to_SYN_RECEIVED);
 		case CLOSE:
 			/* delete TCB */
-			return transitioning_init(CLOSED, NULL);
+			return transitioning_init(CLOSED, (action_f)tcp_connection_LISTEN_to_CLOSED);
 		case SEND:
 			/* send SYN */
-			return transitioning_init(SYN_SENT, NULL);
+			return transitioning_init(SYN_SENT, (action_f)tcp_connection_LISTEN_to_SYN_SENT);
 			
 		default:
 			return transitioning_init(LISTEN, NULL);
@@ -42,13 +42,13 @@ transitioning_t syn_sent_next_state(transition_e t){
 	switch(t){	
 		case receiveSYN:
 			/* send ACK */
-			return transitioning_init(SYN_RECEIVED, NULL);
+			return transitioning_init(SYN_RECEIVED, (action_f)tcp_connection_SYN_SENT_to_SYN_RECEIVED);
 		case receiveSYN_ACK:
 			/* send ACK */
-			return transitioning_init(ESTABLISHED, NULL);
+			return transitioning_init(ESTABLISHED, (action_f)tcp_connection_SYN_SENT_to_ESTABLISHED);
 		case CLOSE:
 			/* delete TCB */
-			return transitioning_init(CLOSED, NULL);
+			return transitioning_init(CLOSED, (action_f)tcp_connection_SYN_SENT_to_CLOSED);
 			
 		default:
 			return transitioning_init(SYN_SENT, NULL);
@@ -199,8 +199,24 @@ void print_state(state_e s){
 		case ESTABLISHED:
 			printf("ESTABLISHED");
 			return;	
-		default:
-			printf("No Such State");
-	}
+		case FIN_WAIT_1:
+			printf("FIN_WAIT_1");
+			return;
+		case FIN_WAIT_2:
+			printf("FIN_WAIT_2");
+			return;
+		case CLOSE_WAIT:
+			printf("CLOSE_WAIT");	
+			return;
+		case TIME_WAIT:
+			printf("TIME_WAIT");
+			return;
+		case LAST_ACK:
+			printf("LAST_ACK");
+			return;
+		case CLOSING:
+			printf("CLOSING");	
+			return;
+		}
 }
 
