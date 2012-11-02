@@ -27,8 +27,8 @@ enum transition{
 	activeOPEN,
 	receiveSYN,
 	receiveSYN_ACK,  //receive SYN+ACK at same time
-
 	receiveACK,
+
 	CLOSE,
 	TIME_ELAPSED,
 	receiveFIN,

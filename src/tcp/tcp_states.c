@@ -25,7 +25,12 @@ transitioning_t listen_next_state(transition_e t){
 	switch(t){	
 		case receiveSYN:
 			/* send SYN+ACK */
-			return transitioning_init(SYN_RECEIVED, (action_f)tcp_connection_LISTEN_to_SYN_RECEIVED);
+			/* Instead of transitioning this connection to SYN_RECEIVED, stay in LISTEN and
+				create and queue (on accept_queue) a new tcp_connection that will sit in SYN_RECEIVED 
+				and handle establishing the rest of the connection.  
+				This is implemented in tcp_connection_LISTEN_to_SYN_RECEIVED
+			*/	
+			return transitioning_init(LISTEN, (action_f)tcp_connection_LISTEN_to_SYN_RECEIVED);
 		case CLOSE:
 			/* delete TCB */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_LISTEN_to_CLOSED);
@@ -59,10 +64,10 @@ transitioning_t syn_received_next_state(transition_e t){
 	switch(t){
 		case receiveACK:
 			/* must be the ACK of your SYN */
-			return transitioning_init(ESTABLISHED, NULL);
+			return transitioning_init(ESTABLISHED, (action_f)tcp_connection_SYN_RECEIVED_to_ESTABLISHED);
 		case CLOSE:
 			/* send FIN */
-			return transitioning_init(FIN_WAIT_1, NULL);
+			return transitioning_init(FIN_WAIT_1, (action_f)tcp_connection_SYN_RECEIVED_to_FIN_WAIT_1);
 
 		default:
 			return transitioning_init(SYN_RECEIVED, NULL);
@@ -185,37 +190,37 @@ transitioning_t get_next_state(state_e s, transition_e t){
 void print_state(state_e s){
 	switch(s){
 		case CLOSED:
-			printf("CLOSED");
+			printf("CLOSED\n");
 			return;
 		case LISTEN:
-			printf("LISTEN");
+			printf("LISTEN\n");
 			return;
 		case SYN_SENT:
-			printf("SYN_SENT");
+			printf("SYN_SENT\n");
 			return;
 		case SYN_RECEIVED:
-			printf("SYN_RECEIVED");
+			printf("SYN_RECEIVED\n");
 			return;
 		case ESTABLISHED:
-			printf("ESTABLISHED");
+			printf("ESTABLISHED\n");
 			return;	
 		case FIN_WAIT_1:
-			printf("FIN_WAIT_1");
+			printf("FIN_WAIT_1\n");
 			return;
 		case FIN_WAIT_2:
-			printf("FIN_WAIT_2");
+			printf("FIN_WAIT_2\n");
 			return;
 		case CLOSE_WAIT:
-			printf("CLOSE_WAIT");	
+			printf("CLOSE_WAIT\n");	
 			return;
 		case TIME_WAIT:
-			printf("TIME_WAIT");
+			printf("TIME_WAIT\n");
 			return;
 		case LAST_ACK:
-			printf("LAST_ACK");
+			printf("LAST_ACK\n");
 			return;
 		case CLOSING:
-			printf("CLOSING");	
+			printf("CLOSING\n");	
 			return;
 		}
 }

@@ -90,7 +90,10 @@ int state_machine_transition(state_machine_t machine, transition_e t){
 state_e state_machine_get_state(state_machine_t machine){
 	return machine->current_state;
 }
-
+/* Added by Alex. */
+void state_machine_set_state(state_machine_t machine, state_e state){
+	machine->current_state = state;
+}
 //// INTERNAL FUNCTIONS ////
 
 /* set state iterates through the states/transitions and for each

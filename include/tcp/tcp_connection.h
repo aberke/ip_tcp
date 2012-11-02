@@ -39,6 +39,17 @@ void tcp_connection_recv_window_destroy(tcp_connection_t connection);
 
 /******* End of Window getting and setting and destroying functions *********/
 
+/************* Functions regarding the accept queue ************************/
+	/* The accept queue is initialized when the server goes into the listen state.  
+		Destroyed when leaves LISTEN state 
+		Each time a syn is received, a new tcp_connection is created in the SYN_RECEIVED state and queued */
+
+void tcp_connection_accept_queue_init(tcp_connection_t connection);
+void tcp_connection_accept_queue_destroy(tcp_connection_t connection);
+
+
+/************* End of Functions regarding the accept queue ************************/
+
 uint32_t tcp_connection_get_last_seq_received(tcp_connection_t connection);
 uint32_t tcp_connection_get_last_seq_sent(tcp_connection_t connection);
 

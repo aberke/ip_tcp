@@ -58,9 +58,6 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	// init windows
 	
 	
-	queue_t accept_queue = queue_init();
-	queue_set_size(accept_queue, ACCEPT_QUEUE_DEFAULT_SIZE);
-	
 	tcp_connection_t connection = (tcp_connection_t)malloc(sizeof(struct tcp_connection));
 
 	// let's do this the first time we send the SYN, just so if we try to send before that
@@ -77,7 +74,7 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	connection->remote_addr.virt_port = 0;
 	
 	connection->state_machine = state_machine;
-	connection->accept_queue = accept_queue;
+	connection->accept_queue = NULL;  //initialized when connection goes to LISTEN state
 	connection->to_send = tosend;
 	
 	/* 	I know that this will set it to a huge number and not
@@ -100,6 +97,7 @@ void tcp_connection_destroy(tcp_connection_t connection){
 	
 	// destroy state machine
 	state_machine_destroy(&(connection->state_machine));
+	tcp_connection_accept_queue_destroy(connection);
 
 	free(connection);
 	connection = NULL;
@@ -131,7 +129,7 @@ tcp_connection_handle_receive_packet
 */
 
 void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
-
+	puts("tcp_connection_receive_packet: received packet");
 	/* RFC 793: 
 		Although these examples do not show connection synchronization using data
 		-carrying segments, this is perfectly legitimate, so long as the receiving TCP
@@ -153,6 +151,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 
 	/* now check the bits */
 	if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
+		puts("received packet with syn_bit and ack_bit set");
 		if(_validate_ack(connection, tcp_ack(tcp_packet)) < 0){
 			/* then you sent a syn with a seqnum that wasn't faithfully returned. 
 				what should we do? for now, let's discard */
@@ -171,6 +170,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	}
 
 	else if(tcp_syn_bit(tcp_packet)){
+		puts("received packet with syn_bit set");
 		/* got a SYN, set the last_seq_received, then pass off to state machine */
 		connection->last_seq_received = tcp_seqnum(tcp_packet);
 	
@@ -381,6 +381,38 @@ void tcp_connection_recv_window_destroy(tcp_connection_t connection){
 
 /******************* End of Window getting and setting functions *****************************************/
 /******************* End of Window getting and setting functions *****************************************/
+
+/************* Functions regarding the accept queue ************************/
+	/* The accept queue is initialized when the server goes into the listen state.  
+		Destroyed when leaves LISTEN state 
+		Each time a syn is received, a new tcp_connection is created in the SYN_RECEIVED state and queued */
+
+void tcp_connection_accept_queue_init(tcp_connection_t connection){
+	queue_t accept_queue = queue_init();
+	queue_set_size(accept_queue, ACCEPT_QUEUE_DEFAULT_SIZE);
+	connection->accept_queue = accept_queue;
+}
+
+void tcp_connection_accept_queue_destroy(tcp_connection_t connection){
+
+	queue_t q = connection->accept_queue;
+	if(!q)
+		return;
+		
+	// need to destroy each connection on the accept queue before destroying queue
+	tcp_connection_t next_connection = NULL;
+	next_connection = (tcp_connection_t)queue_pop(q);
+	while(next_connection != NULL){
+		tcp_connection_destroy(next_connection);
+		next_connection = (tcp_connection_t)queue_pop(q);
+	}
+	queue_destroy(&q);
+	connection->accept_queue = NULL;
+}
+
+
+/************* End of Functions regarding the accept queue ************************/
+
 
 uint32_t tcp_connection_get_last_seq_received(tcp_connection_t connection){
 	return connection->last_seq_received;
