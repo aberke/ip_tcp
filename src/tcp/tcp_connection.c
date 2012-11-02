@@ -105,7 +105,7 @@ void tcp_connection_destroy(tcp_connection_t connection){
 
 // TODO: RETURN TO ALL THESE FUNCTIONS TO DEAL WITH RETURNING CURRENT ERRORS AFTER WE BETTER UNDERSTAND OUR OWN STATEMACHINE
 
-
+	/***** Establishing Connection **********/
 int tcp_connection_passive_open(tcp_connection_t connection){
 	return state_machine_transition(connection->state_machine, passiveOPEN);	
 }
@@ -125,12 +125,62 @@ int tcp_connection_CLOSED_to_LISTEN(tcp_connection_t connection){
 
 int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, uint16_t port){
 	puts("in tcp_connection_active_open");
+	return state_machine_transition(connection->state_machine, activeOPEN);
+}
+
+int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection){
+	puts("in tcp_connection_CLOSED_to_SYN_SENT: need to create a timeout and send syn
+	");
 	return 1;
 }
-void tcp_connection_close(tcp_connection_t connection){
 
+	/***** End of Establishing Connection **********/
+	/////////////////////////////////////////////////
+	/************ Closing Connection ****************/
+
+		/************** Passive Close *****************/	
+// called when receives FIN
+void tcp_connection_receive_FIN(tcp_connection_t connection){
+	return state_machine_transition(connection->state_machine, receiveFIN);
 }
+int tcp_connection_ESTABLISHED_to_CLOSE_WAIT(tcp_connection_t connection){
+	//TODO: SEND ACK
+	puts("Inform user that remote connection closed so that user can command CLOSE -- waiting for that CLOSE");
+	// waits until user commands CLOSE to send FIN.  Is there a timeout??
+	return 1;	
+}
+// transition occurs when in CLOSE_WAIT and user commands CLOSE	
+int tcp_connection_CLOSE_WAIT_to_LAST_ACK(tcp_connection_t connection){
+	//TODO: SEND FIN
+	puts("HANDLE tcp_connection_CLOSE_WAIT_to_LAST_ACK -- need to send FIN and then wait for last ack before transitioning to CLOSED");
+	return 1;	
+}
+
+int tcp_connection_LAST_ACK_to_CLOSED(tcp_connection_t connection){
+	puts("HANDLE tcp_connection_LAST_ACK_to_CLOSED -- simple transition right?  All completed?");
+	return 1;	
+}
+		/************** End of Passive Close *****************/
+		///////////////////////////////////////////////////////
+		/************** Active Close *************************/
+// called when user commands CLOSE
+void tcp_connection_close(tcp_connection_t connection){
+	return state_machine_transition(connection->state_machine, CLOSE);
+}	
+// transition occurs when in established state user commands to CLOSE
+int tcp_connection_ESTABLISHED_to_FIN_WAIT_1(tcp_connection_t connection){
+	puts("HANDLE tcp_connection_ESTABLISHED_to_FIN_WAIT_1");
+	return 1;	
+}
+int tcp_connection_FIN_WAIT_1_to_CLOSING(tcp_connection_t connection){
+	//TODO: SEND ACK
+	puts("HANDLE tcp_connection_FIN_WAIT_1_to_CLOSING: TODO: SEND ACK");
+	return 1;	
+}
+
+		/************** End of Active Close *************************/
 	
+	/************ End of Closing Connection ****************/
 
 /********** End of State Changing Functions *******/
 ///////////////////////////////////////////////////////////////////////////
@@ -162,23 +212,23 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 
 	/* check if there's any data, and if there is push it to the window,
 		but what does the seqnum even mean if the ACKs haven't been synchronized? */
-	memchunk_t data = tcp_unwrap_data(tcp_packet_itself);
+	memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
 	if(data){ 
-		uint32_t seqnum = tcp_seqnum(tcp_packet_itself);	
+		uint32_t seqnum = tcp_seqnum(tcp_packet);	
 		recv_window_receive(connection->receive_window, data->data, data->length, seqnum);
 	}	
 
 	/* now check the bits */
-	if(tcp_syn_bit(tcp_packet_itself) && tcp_ack_bit(tcp_packet_itself)){
-		if(_validate_ack(tcp_connection, tcp_ack(tcp_packet_itself)) < 0){
+	if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
+		//if(_validate_ack(tcp_connection, tcp_ack(tcp_packet)) < 0){
 			/* then you sent a syn with a seqnum that wasn't faithfully returned. 
 				what should we do? for now, let's discard */
-			puts("Received invalid ack with SYN/ACK. Discarding.");
+			/*puts("Received invalid ack with SYN/ACK. Discarding.");
 			return;
-		}
+		}*/	//Neil where is this located?? My compiler can't find _validate_ack
 
 		/* inform you're window of the starting sequence number that your peer has chosen */
-		recv_window_set_ISN(tcp_connection->receive_window, tcp_seqnum(tcp_packet_itself));
+		//recv_window_set_ISN(tcp_connection->receive_window, tcp_seqnum(tcp_packet));  -- Where is this??? Did you fully push??
 
 		/* then transition with the state machine */
 		state_machine_transition(connection->state_machine, receiveSYN_ACK);
@@ -187,35 +237,18 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		return;
 	}
 		
-	else if(tcp_syn_bit(tcp_packet_itself)){
+	else if(tcp_syn_bit(tcp_packet)){
 		state_machine_transition(connection->state_machine, receiveSYN);
 	}
 	
-	else if(tcp_syn_bit(tcp_packet_itself)){
+	else if(tcp_ack_bit(tcp_packet)){
 		state_machine_transition(connection->state_machine, receiveACK);
 	}
-
-	/*	
-	if(state){
-	
-		case CLOSED: 
-			puts("CLOSED packet received a message. Discarding...\n");
-			return;
-		
-		default:
-			return;
-	}
-	*/
 
 	/* pull out the ack and pass it to the send window */
 	uint16_t ack = tcp_ack(tcp_packet_data->packet);
 	send_window_ack(connection->send_window, ack);
 
-	/* get the data */
-	memchunk_t data = tcp_unwrap_data(tcp_packet_data->packet, tcp_packet_data->packet_size);
-	if(data){
-//		recv_window_push(connection->recv_window, 
-	}
 
 	printf("connection on port %d handling packet\n", (connection->local_addr).virt_port);
 	tcp_packet_data_destroy(tcp_packet_data);

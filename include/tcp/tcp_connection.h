@@ -59,6 +59,7 @@ int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* t
 	
 	/****** Functions called as actions by statemachine ******/
 	int tcp_connection_CLOSED_to_LISTEN(tcp_connection_t connection);
+	int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection);
 	/****** End of Functions called as actions by statemachine ******/
 
 /********** End of Sate Changing Functions *******/
