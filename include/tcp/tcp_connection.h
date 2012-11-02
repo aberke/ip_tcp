@@ -4,6 +4,9 @@
 #include <inttypes.h>
 #include <netinet/tcp.h>
 #include "bqueue.h"
+#include "send_window.h"
+#include "recv_window.h"
+#include "state_machine.h"
 
 /* for tcp_packet_data_t HA! */
 #include "ip_utils.h"
@@ -23,6 +26,24 @@ uint32_t tcp_connection_get_local_ip(tcp_connection_t connection);
 
 int tcp_connection_get_socket(tcp_connection_t connection);
 
+/******* Window getting and setting and destroying functions *********/
+send_window_t tcp_connection_send_window_init(tcp_connection_t connection, double timeout, int send_window_size, int send_size, int ISN);
+send_window_t tcp_connection_get_send_window(tcp_connection_t connection);
+// we should destroy the window when we close connections
+void tcp_connection_send_window_destroy(tcp_connection_t connection);
+
+recv_window_t tcp_connection_recv_window_init(tcp_connection_t connection, uint32_t window_size, uint32_t ISN);
+recv_window_t tcp_connection_get_recv_window(tcp_connection_t connection);
+void tcp_connection_recv_window_destroy(tcp_connection_t connection);
+
+
+/******* End of Window getting and setting and destroying functions *********/
+
+uint32_t tcp_connection_get_last_seq_received(tcp_connection_t connection);
+uint32_t tcp_connection_get_last_seq_sent(tcp_connection_t connection);
+
+state_machine_t tcp_connection_get_state_machine(tcp_connection_t connection);
+
 void tcp_connection_print_state(tcp_connection_t connection);
 
 /****** Receiving packets **********/
@@ -35,6 +56,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 // returns 1 on success, -1 on failure (failure when queue actually already destroyed)
 int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t packet);
 
+int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len);
 
 // pushes data to send_window for window to break into chunks which we can call get next on
 // meant to be used before tcp_connection_send_next
@@ -50,19 +72,6 @@ int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* t
 /******* End of Sending Packets **************/
 //////////////////////////////////////////////////////////////////////////////////////
 
-/********** State Changing Functions *************/
-
-	/****** Functions called to invoke statemachine ******/
-	int tcp_connection_passive_open(tcp_connection_t connection);
-	int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, uint16_t port);
-	/****** End of Functions called to invoke statemachine ******/
-	
-	/****** Functions called as actions by statemachine ******/
-	int tcp_connection_CLOSED_to_LISTEN(tcp_connection_t connection);
-	int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection);
-	/****** End of Functions called as actions by statemachine ******/
-
-/********** End of Sate Changing Functions *******/
 
 /* for testing */
 void tcp_connection_print(tcp_connection_t connection);

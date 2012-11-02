@@ -14,6 +14,7 @@
 #include "util/parselinks.h"
 #include "tcp_node.h"
 #include "tcp_connection.h"
+#include "tcp_connection_state_machine_handle.h"
 
 #include "ip_node.h" 
 

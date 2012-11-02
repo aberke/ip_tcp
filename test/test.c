@@ -1,4 +1,4 @@
-#define TEST_STATES_ON
+//#define TEST_STATES_ON
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -7,6 +7,8 @@
 #include <assert.h>
 
 #include "utils.h"
+#include "tcp_states.h"
+#include "tcp_connection.h"
 #include "routing_table.h"
 #include "state_machine.h"
 #include "queue.h"
@@ -14,7 +16,6 @@
 #include "recv_window.h"
 #include "ext_array.h"
 
-#include "test_states.h"
 
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
@@ -165,6 +166,19 @@ void debug_update_routing_table(routing_table_t rt, forwarding_table_t ft, struc
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 
+void test_tcp_states(){
+	state_machine_t machine = state_machine_init();
+	tcp_connection_t connection = tcp_connection_init(1, NULL);
+	
+	state_machine_print_state(machine);
+		
+	state_machine_transition(machine, activeOPEN);
+		
+	state_machine_print_state(machine);
+	
+	state_machine_destroy(&machine);
+}
+
 void test_send_window_scale(){
 	send_window_t window = send_window_init(1.0, 100, 50, 0);
 	
@@ -303,8 +317,8 @@ void test_recv_window(){
 	
 	char buffer[BUFFER_SIZE];
 	strcpy(buffer, "hello world");
-	ack = recv_window_receive(rw, buffer,strlen("hello world"), 0);
-	TEST_EQ(ack, strlen("hello world"), "");
+	recv_window_receive(rw, buffer,strlen("hello world"), 0);
+	//TEST_EQ(ack, strlen("hello world"), "");
 	
 	got = recv_window_get_next(rw);
 	ASSERT(got!=NULL);
@@ -428,32 +442,6 @@ void test_ext_array(){
 	ext_array_destroy(&ar);
 
 	free(str);
-}
-
-//// Testing the state machine
-void test_state_machine(){
-	state_machine_t machine = state_machine_init();
-
-	// current state
-	print_state( state_machine_get_state(machine) );
-
-	// transition with T1, should --> S2
-	state_machine_transition(machine, T1);
-	print_state( state_machine_get_state(machine) );
-
-	// transition with T2, should --> S3
-	state_machine_transition(machine, T1);
-	print_state( state_machine_get_state(machine) );
-
-	// nothing should change anymore
-	state_machine_transition(machine, T1);
-	print_state( state_machine_get_state(machine) );
-	
-	// ditto
-	state_machine_transition(machine, T2);	
-	print_state( state_machine_get_state(machine) );
-
-	state_machine_destroy(&machine);	
 }
 
 //// Testing for utils
@@ -741,7 +729,6 @@ int main(int argc, char** argv){
 	TEST(test_empty);
 	TEST(test_overflow);
 
-	TEST(test_state_machine); 
 	TEST(test_queue); 
 	
 	TEST(test_ext_array);
@@ -752,7 +739,9 @@ int main(int argc, char** argv){
 	TEST(test_send_window);
 	TEST(test_send_window_scale);*/
 
-	TEST(test_recv_window);
+	//TEST(test_recv_window);
+
+	TEST(test_tcp_states);	
 
 	/* RETURN */
 	return(0);

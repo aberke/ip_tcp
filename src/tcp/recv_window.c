@@ -81,7 +81,11 @@ struct recv_window {
 recv_window_t recv_window_init(uint32_t window_size, uint32_t ISN){
 	recv_window_t recv_window = (struct recv_window*)malloc(sizeof(struct recv_window));
 	recv_window->size = window_size;
-	recv_window->left = ISN;
+	
+	/* the next byte you're expecting is the one after the 
+		first sequence number */
+	recv_window->left = (ISN + 1) % MAX_SEQNUM;
+
 	recv_window->slider = malloc(sizeof(recv_window_chunk_t)*(window_size+1));	
 	memset(recv_window->slider, 0, sizeof(recv_window_chunk_t)*(window_size+1));
 	recv_window->to_read = queue_init();
@@ -145,6 +149,11 @@ uint32_t recv_window_get_ack(recv_window_t recv_window){
 	return recv_window->left;
 }
 
+/* returns the current size of the window, which is currently
+	not dynamic */
+uint32_t recv_window_get_size(recv_window_t recv_window){
+	return recv_window->size;
+}
 
 /* 
 recv_window_receive
@@ -157,7 +166,7 @@ recv_window_receive
 void recv_window_receive(recv_window_t recv_window, void* data, uint32_t length, uint32_t seqnum){
 	if(_validate_seqnum(recv_window, seqnum, length) < 0){
 		LOG(("seqnum %d not accepted. left: %d\n", seqnum, recv_window->left)); 
-		return -1;
+		return;
 	}
 
 	uint32_t window_max = recv_window->left + recv_window->size;	

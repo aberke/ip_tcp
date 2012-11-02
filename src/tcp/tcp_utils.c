@@ -50,50 +50,68 @@ memchunk_t tcp_unwrap_data(void* packet, int length){
 	return payload;
 }
 
-struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_port, uint32_t seq, uint32_t ack){
-	struct tcphdr* header = malloc(sizeof(struct tcphdr));
+struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_port, int data_size){
+	struct tcphdr* header = malloc(sizeof(struct tcphdr) + data_size);
 	memset(header, 0, sizeof(struct tcphdr));
 	header->th_sport = htons(host_port);
 	header->th_dport = htons(dest_port);
-	tcp_set_seq(header, seq);
-	tcp_set_ack(header, ack);
 	tcp_set_offset(header);
 	return header;
 }
 
+/* MOVED TO TCP_CONNECTION.c !! */
 // Combines the header and data into one piece of data and creates the tcp_packet_data and queues it -- frees data
 // return -1 on failure, 1 on success
-int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len){	
-	//TODO: LAST STEP WITH READYING HEADER IS SETTING CHECKSUM -- SET CHECKSUM!
-	
-	// concatenate tcp_packet	-- TODO FOR NEIL: YOU HAVE FANCY THEORIES ABOUT EFFICIENT MEMORY ALLOCATION AND COPYING - IDEAS?
-	char* packet = (char*)malloc(sizeof(char)*(TCP_HEADER_MIN_SIZE+data_len));
-	memcpy(packet, header, TCP_HEADER_MIN_SIZE);
-	memcpy(packet+TCP_HEADER_MIN_SIZE, packet, data_len);
-	// no longer need data
-	free(data);
-	
-	// add checksum here?
-	tcp_utils_add_checksum(packet);
-	
-	// get addresses
-	uint32_t local_virt_ip, remote_virt_ip;
-	local_virt_ip = tcp_connection_get_local_ip(connection);
-	remote_virt_ip = tcp_connection_get_remote_ip(connection);
-	
-	// send off to ip_node as a tcp_packet_data_t
-	tcp_packet_data_t packet_data= tcp_packet_data_init(packet, data_len+TCP_HEADER_MIN_SIZE, local_virt_ip, remote_virt_ip);
-	// no longer need packet
-	free(packet);
-	
-	if(tcp_connection_queue_ip_send(connection, packet_data) < 0){
-		//TODO: HANDLE!
-		puts("Something wrong with sending tcp_packet to_send queue--How do we want to handle this??");	
-		free(packet_data);
-		return -1;
-	}
-	return 1;
-}
+
+//int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len){	
+//	//TODO: LAST STEP WITH READYING HEADER IS SETTING CHECKSUM -- SET CHECKSUM!
+//	
+//
+//	/* there is a TON of mallocing, memcpying and freeing going on in this function
+//		we have to find a way to do this more efficiently */
+//
+//
+//	// concatenate tcp_packet	-- TODO FOR NEIL: YOU HAVE FANCY THEORIES ABOUT EFFICIENT MEMORY ALLOCATION AND COPYING - IDEAS?
+//	/* A better way might be to init the header with room for the data, this would
+//	 	allow us to just paste it in right here (1 less malloc, 1 less free) */
+//	/*char* packet = (char*)malloc(sizeof(char)*(TCP_HEADER_MIN_SIZE+data_len));
+//	memcpy(packet, header, TCP_HEADER_MIN_SIZE);
+//	memcpy(packet+TCP_HEADER_MIN_SIZE, packet, data_len);*/
+//
+//	/* data_len had better be the same size as when you called 
+//		tcp_header_init()!! */
+//	memcpy(header+tcp_offset_in_bytes(header), data, data_len);
+//
+//	// no longer need data
+//	free(data);
+//	
+//	// add checksum here?
+//	//tcp_utils_add_checksum(packet);
+//	tcp_utils_add_checksum(header);
+//	
+//	// get addresses
+//	uint32_t local_virt_ip, remote_virt_ip;
+//	local_virt_ip = tcp_connection_get_local_ip(connection);
+//	remote_virt_ip = tcp_connection_get_remote_ip(connection);
+//	
+//	// send off to ip_node as a tcp_packet_data_t
+//	//tcp_packet_data_t packet_data = tcp_packet_data_init(packet, data_len+TCP_HEADER_MIN_SIZE, local_virt_ip, remote_virt_ip);
+//	tcp_packet_data_t packet_data = tcp_packet_data_init((char*)header, data_len+tcp_offset_in_bytes(header), local_virt_ip, remote_virt_ip);
+//
+//	// no longer need packet
+//	//free(packet);
+//	free(header);
+//	
+//	if(tcp_connection_queue_ip_send(connection, packet_data) < 0){
+//		//TODO: HANDLE!
+//		puts("Something wrong with sending tcp_packet to_send queue--How do we want to handle this??");	
+//		free(packet_data);
+//		return -1;
+//	}
+//
+//	return 1;
+//}
+
 //##TODO##
 void tcp_utils_add_checksum(void* packet){
 	puts("TODO: HANDLE CHECK SUM IN TCP");

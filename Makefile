@@ -19,7 +19,7 @@ UTHASH_INC=$(UTHASH_DIR)/src #not a mistake
 
 _IP_OBJS=ip_node.o routing_table.o forwarding_table.o ip_utils.o link_interface.o 
 
-_TCP_OBJS=main.o tcp_node.o tcp_utils.o tcp_node_stdin.o tcp_connection.o tcp_states.o send_window.o recv_window.o
+_TCP_OBJS=main.o tcp_node.o tcp_utils.o tcp_node_stdin.o tcp_connection.o tcp_connection_state_machine_handle.o tcp_states.o send_window.o recv_window.o
 _UTIL_OBJS=ipsum.o parselinks.o utils.o list.o bqueue.o queue.o ext_array.o state_machine.o ##Could use dbg.o but for now I commented out references to it in bqueue.c
 
 
@@ -54,8 +54,8 @@ TEST_BUILD_DIR=$(TEST_DIR)/build
 TEST_DEFAULT_ARGS=
 PYTEST=pyLink.py
 
-_TEST_OBJS=test.o tcp/test_states.o
-_TEST_DEP_OBJS=ip/routing_table.o ip/forwarding_table.o util/utils.o util/state_machine.o util/queue.o tcp/send_window.o util/ext_array.o tcp/recv_window.o
+_TEST_OBJS=test.o 
+_TEST_DEP_OBJS=ip/routing_table.o ip/forwarding_table.o util/utils.o util/state_machine.o util/queue.o tcp/send_window.o util/ext_array.o tcp/recv_window.o tcp/tcp_connection.o tcp/tcp_states.o util/bqueue.o tcp/tcp_utils.o ip/ip_utils.o
 TEST_OBJS=$(patsubst %.o, $(TEST_BUILD_DIR)/%.o, $(_TEST_OBJS)) $(patsubst %.o, $(BUILD_DIR)/%.o, $(_TEST_DEP_OBJS))
 
 _TEST_INCLUDE=$(TEST_DIR)/include
