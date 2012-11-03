@@ -346,21 +346,25 @@ int tcp_connection_get_socket(tcp_connection_t connection){
 }
 /******************* Window getting and setting and destroying functions ****************************/
 /******************* Window getting and setting and destroying functions ****************************/
-
+	
 /************** Sending Window *********************/
-send_window_t tcp_connection_send_window_init(tcp_connection_t connection, double timeout, int send_window_size, int send_size, int ISN){
+// what's the point of these helper functions?
+ send_window_t tcp_connection_send_window_init(tcp_connection_t connection, double timeout, int send_window_size, int send_size, int ISN){
 	connection->send_window = send_window_init(timeout, send_window_size, send_size, ISN);
 	return connection->send_window;
 }
+
 send_window_t tcp_connection_get_send_window(tcp_connection_t connection){
 	return connection->send_window;
 }
+
 // we should destroy the window when we close connections
 void tcp_connection_send_window_destroy(tcp_connection_t connection){	
 	if(connection->send_window)
 		send_window_destroy(&(connection->send_window));	
 	connection->send_window = NULL;
 }
+
 /************** End of Sending Window *********************/
 
 /************** Receiving Window *********************/
@@ -438,5 +442,8 @@ void tcp_connection_set_remote(tcp_connection_t connection, uint32_t remote, uin
 	connection->remote_addr.virt_ip = remote;
 	connection->remote_addr.virt_port = port;
 }
+
+/* hacky? */
+#include "tcp_connection_state_machine_handle.c"
 
 	
