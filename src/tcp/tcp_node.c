@@ -33,6 +33,16 @@ static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t* tcp_stdin_thread)
 // returns number of connections in array
 static int _insert_connection_array(tcp_node_t tcp_node, tcp_connection_t connection);
 
+// a tcp_connection in the listen state queues this triple on its accept_queue when
+// it receives a syn.  Nothing further happens until the user calls accept at which point
+// this triple is dequeued and a connection is initiated with this information
+// the connection should then set its state to listen and go through the LISTEN_to_SYN_RECEIVED transition
+struct accept_queue_triple{
+	uint32_t remote_ip;
+	uint16_t remote_port;
+	uint32_t last_seq_received;
+};
+
 
 /*********************** Hash Table Maintenance ****************************/
 
@@ -209,6 +219,49 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 }
 /************** Functions dealing with Kernal Table  *************/
 
+
+/* For accept */
+/* - calls on the listening_connection to dequeue its triple and node creates new connection with information
+     returned int is the new socket assigned to that new connection.  
+   - The connection finishes its handshake to get to established state
+   - Fills addr with ip address information from dequeued triple*/
+int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_connection, struct in_addr *addr){
+	
+	if(tcp_connection_get_state(listening_connection) != LISTEN)
+		return -EINVAL; //Socket is not listening for connections, or addrlen is invalid (e.g., is negative).
+	
+	// dequeue from accept_queue of listening connection to get triple of information about new connection
+	accept_queue_triple_t triple = tcp_connection_accept_queue_dequeue(listening_connection);
+	
+	if(triple == NULL)
+		return -1;
+	
+	// fill struct in_addr
+	addr->s_addr = triple->remote_ip;
+	
+	// create new connection which will be the accepted connection 
+	// -- function will insert it into kernal array and socket hashmap
+	tcp_connection_t new_connection = tcp_node_new_connection(tcp_node);
+	
+	// assign values from triple to that connection
+	tcp_connection_set_remote(new_connection, triple->remote_ip, triple->remote_port);
+	tcp_connection_set_last_seq_received(new_connection, triple->last_seq_received);
+	
+	// assign new port to new_connection
+	int port = tcp_node_next_port(tcp_node);
+	tcp_node_assign_port(tcp_node, new_connection, port);
+	
+	// set state of this new_connection to LISTEN so that we can send it through transition LISTEN_to_SYN_RECEIVED
+	tcp_connection_set_state(new_connection, LISTEN);
+	
+	// have connection transition from LISTEN to SYN_RECEIVED
+	tcp_connection_state_machine_transition(new_connection, SYN_RECEIVED);
+	
+	// destroy triple
+	accept_queue_triple_destroy(triple);
+	
+	return tcp_connection_get_socket(new_connection);
+}
 // creates a new tcp_connection and properly places it in kernal table -- ports and ips initialized to 0
 tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 	// init new tcp_connection
@@ -297,18 +350,11 @@ void tcp_node_print(tcp_node_t tcp_node){
 
 	//char* buffer = malloc(sizeof(char)*INET_ADDRSTRLEN);
 	tcp_connection_t connection;
-	int socket, local_port, remote_port;
 	
 	connection_virt_socket_keyed_t socket_keyed, tmp;
 	HASH_ITER(hh, tcp_node->virt_socketToConnection, socket_keyed, tmp){
 		connection = socket_keyed->connection;
-		socket = socket_keyed->virt_socket;
-		local_port = tcp_connection_get_local_port(connection);
-		remote_port = tcp_connection_get_remote_port(connection);
-		printf("\n[Socket %d]:\n", socket);
-		printf("\t<Local Port: %d> <Remote Port: %d> <State: ", local_port, remote_port);
-		tcp_connection_print_state(connection);
-		printf(">\n");
+		tcp_connection_print_sockets(connection);
 	}	
 }
 
@@ -418,15 +464,7 @@ void tcp_node_command_ip(tcp_node_t tcp_node, const char* cmd){
 	ip_node_command(tcp_node->ip_node, cmd);
 }
 
-/*
-send data:
->>>>>>> 530c89f3eb189185b64498c67b0f28bb48f451c9
-	
-	chunk = window push(data)
-	int window_send_size = 
-	
 
-*/
 
 /* num_butes>0 indicates there is data and therefore to_write must be pushed to window 
 int tcp_node_send(tcp_node_t tcp_node, char* to_write, int socket, uint32_t num_bytes){
@@ -489,11 +527,17 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 		free(tcp_packet);
 		return;
 	}
+
+	/* validating the checksum happens in handle_receive_packet in tcp_connection,
+		because it's dependent on the ip of the sender/receiver, and why does the
+		node care if its gonna get discarded 
+	
 	if(tcp_utils_validate_checksum(tcp_packet->packet) < 0){
 		puts("Bad checksum -- discarding packet");
 		free(tcp_packet);
 		return;
 	}
+	*/
 		
 	uint16_t dest_port   = tcp_dest_port(tcp_packet->packet);
 

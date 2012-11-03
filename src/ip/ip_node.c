@@ -643,7 +643,7 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 		return;
 		//continue;
 	}
-	
+		
 	// get next hop for sending message to send_to_vip
 	uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
 	if(next_hop_addr == -1){

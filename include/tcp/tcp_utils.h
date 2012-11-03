@@ -47,6 +47,7 @@ memchunk_t tcp_unwrap_data(void* packet, int length);
 #define tcp_dest_port(header) ntohs(((struct tcphdr*)header)->th_dport)
 #define tcp_source_port(header) ntohs(((struct tcphdr*)header)->th_dport)
 #define tcp_offset_in_bytes(header) ((((struct tcphdr*)header)->th_off)*4) 
+#define tcp_checksum(header) (((struct tcphdr*)header)->th_sum)
 
 #define tcp_fin_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << FIN_BIT)) > 0) // is fin set? 
 #define tcp_syn_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << SYN_BIT)) > 0) // is syn set?
@@ -60,6 +61,7 @@ memchunk_t tcp_unwrap_data(void* packet, int length);
 #define tcp_set_ack(header, ack) ((((struct tcphdr*)header)->th_ack) = ((uint32_t)htonl(ack)))
 #define tcp_set_seq(header, seq) ((((struct tcphdr*)header)->th_seq) = ((uint32_t)htonl(seq)))
 #define tcp_set_offset(header) ((((struct tcphdr*)header)->th_off) = NO_OPTIONS_HEADER_LENGTH)
+#define tcp_set_checksum(header, sum) ((((struct tcphdr*)header)->th_sum) = sum)
 
 #define tcp_set_fin_bit(header) ((((struct tcphdr*)header)->th_flags) |= (1 << FIN_BIT)) // set the fin bit to 1
 #define tcp_set_syn_bit(header) ((((struct tcphdr*)header)->th_flags) |= (1 << SYN_BIT)) // set the syn bit to 1
@@ -73,15 +75,14 @@ struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_por
 // takes in data and wraps data in header with correct addresses.  
 // frees parameter data and mallocs new packet  -- sets data to point to new packet
 // returns size of new packet that data points to
-int tcp_utils_wrap_packet(void** data, int data_len, tcp_connection_t connection);
+//int tcp_utils_wrap_packet(void** data, int data_len, tcp_connection_t connection);
 
-//##TODO##
 // now defined in tcp_connection.c
 //int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len);
 
 
-//TODO:  ####TODO###
-void tcp_utils_add_checksum(void* packet);
-int tcp_utils_validate_checksum(void* packet);
+uint16_t tcp_utils_calc_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t proto);
+void tcp_utils_add_checksum(void* packet, uint16_t  total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t proto);
+int tcp_utils_validate_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t proto);
 
 #endif

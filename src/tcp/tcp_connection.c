@@ -20,6 +20,32 @@
 #include "queue.h"
 #include "tcp_connection_state_machine_handle.h"
 
+
+// a tcp_connection in the listen state queues this triple on its accept_queue when
+// it receives a syn.  Nothing further happens until the user calls accept at which point
+// this triple is dequeued and a connection is initiated with this information
+// the connection should then set its state to listen and go through the LISTEN_to_SYN_RECEIVED transition
+struct accept_queue_triple{
+	uint32_t remote_ip;
+	uint16_t remote_port;
+	uint32_t last_seq_received;
+};
+
+accept_queue_triple_t accept_queue_triple_init(uint32_t remote_ip, uint16_t remote_port, uint32_t last_seq_received){
+	accept_queue_triple_t triple = (accept_queue_triple_t)malloc(sizeof(struct accept_queue_triple));
+	triple->remote_ip = remote_ip;
+	triple->remote_port = remote_port;
+	triple->last_seq_received = last_seq_received;
+	
+	return triple;
+}
+
+void accept_queue_triple_destroy(accept_queue_triple_t triple){
+	free(triple);
+}
+
+
+
 // all those fancy things we defined here are now located in tcp_utils so they can also 
 // be shared with tcp_connection_state_handle
 
@@ -55,10 +81,6 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	// init state machine
 	state_machine_t state_machine = state_machine_init();
 
-	// init windows
-	queue_t accept_queue = queue_init();
-	queue_set_size(accept_queue, ACCEPT_QUEUE_DEFAULT_SIZE);
-	
 	tcp_connection_t connection = (tcp_connection_t)malloc(sizeof(struct tcp_connection));
 
 	// let's do this the first time we send the SYN, just so if we try to send before that
@@ -75,7 +97,7 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	connection->remote_addr.virt_port = 0;
 	
 	connection->state_machine = state_machine;
-	connection->accept_queue = accept_queue;
+	connection->accept_queue = NULL;  //initialized when connection goes to LISTEN state
 	connection->to_send = tosend;
 	
 	/* 	I know that this will set it to a huge number and not
@@ -105,6 +127,7 @@ void tcp_connection_destroy(tcp_connection_t connection){
 	
 	// destroy state machine
 	state_machine_destroy(&(connection->state_machine));
+	tcp_connection_accept_queue_destroy(connection);
 
 	free(connection);
 	connection = NULL;
@@ -136,7 +159,7 @@ tcp_connection_handle_receive_packet
 */
 
 void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
-
+	puts("tcp_connection_receive_packet: received packet");
 	/* RFC 793: 
 		Although these examples do not show connection synchronization using data
 		-carrying segments, this is perfectly legitimate, so long as the receiving TCP
@@ -148,6 +171,18 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 
 	void* tcp_packet = tcp_packet_data->packet;
 
+	/* ensure the integrity */
+	int checksum_result = tcp_utils_validate_checksum(tcp_packet, 
+											tcp_packet_data->packet_size, 
+											connection->remote_addr.virt_ip, // this is the local IP of the sender, 
+											connection->local_addr.virt_ip,  // so the pseudo header will match this order
+											TCP_DATA);
+	if(checksum_result < 0){
+		puts("Bad checksum! what happened? not discarding");
+		//return;
+	}
+	
+
 	/* check if there's any data, and if there is push it to the window,
 		but what does the seqnum even mean if the ACKs haven't been synchronized? */
 	memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
@@ -158,6 +193,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 
 	/* now check the bits */
 	if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
+		puts("received packet with syn_bit and ack_bit set");
 		if(_validate_ack(connection, tcp_ack(tcp_packet)) < 0){
 			/* then you sent a syn with a seqnum that wasn't faithfully returned. 
 				what should we do? for now, let's discard */
@@ -176,22 +212,45 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	}
 
 	else if(tcp_syn_bit(tcp_packet)){
-		/* got a SYN, set the last_seq_received, then pass off to state machine */
-		connection->last_seq_received = tcp_seqnum(tcp_packet);
-	
-
-		state_machine_transition(connection->state_machine, receiveSYN);
+		puts("received packet with syn_bit set");
+		/* got a SYN -- only valid changes are LISTEN_to_SYN_RECEIVED or SYN_SENT_to_SYN_RECEIVED */ 
+		
+		if(state_machine_get_state(connection->state_machine) == SYN_SENT){
+			/* set the last_seq_received, then pass off to state machine to make transition SYN_SENT_to_SYN_RECEIVED */	
+			connection->last_seq_received = tcp_seqnum(tcp_packet);
+			state_machine_transition(connection->state_machine, receiveSYN);
+		}
+		else if(state_machine_get_state(connection->state_machine) == LISTEN){
+			/* queue triple to dequeue upon accept call.  It's upon the accept call that 
+				a new connection will be initiated with below triple and LISTEN state and then
+				go through the LISTEN_to_SYN_RECEIVED transition.  */
+			
+			accept_queue_triple_t triple = accept_queue_triple_init(tcp_packet_data->remote_virt_ip, 
+																		tcp_source_port(tcp_packet),
+																		tcp_seqnum(tcp_packet));
+			tcp_connection_accept_queue_connect(connection, triple);
+			// anything else??		
+		}
 	}
-
 	/* this will almost universally be true. */
-	if(tcp_ack_bit(tcp_packet)){
-	
-		/* careful, this might be NULL */
-		send_window_ack(connection->send_window, tcp_ack(tcp_packet));
+	else if(tcp_ack_bit(tcp_packet)){
+		if(_validate_ack(connection, tcp_ack(tcp_packet)) < 0){
+			// should we drop the packet here?
+			puts("Received invalid ack with SYN/ACK. Discarding.");
+			return;
+		}
+		//TODO: ***************todo *********************
+		
+		/* careful, this might be NULL -- shouldn't we actually do this in the state_machine transition?*/
+		//send_window_ack(connection->send_window, tcp_ack(tcp_packet));
+		
+		// should we give this ack to the receive window?
+		
+		state_machine_transition(connection->state_machine, receiveACK);
 	}
 			
 	/* Umm, anything else ? */	
-	// free it??
+	// FREE IT??????
 }
 
 /* 0o0o0oo0o0o0o0o0o0o0o SENDING o0o0o0ooo0o0o0o0o0o0o0o0o0oo0o */
@@ -234,15 +293,15 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 	free(data);
 	
 	// tcp checksum calculated on BOTH header and data
-	tcp_utils_add_checksum(header);
+	tcp_utils_add_checksum(header, total_length, connection->local_addr.virt_ip, connection->remote_addr.virt_ip, TCP_DATA);//TCP_DATA is tcp protocol number right?
 	
 	// send off to ip_node as a tcp_packet_data_t
 	//tcp_packet_data_t packet_data = tcp_packet_data_init(packet, data_len+TCP_HEADER_MIN_SIZE, local_virt_ip, remote_virt_ip);
 	tcp_packet_data_t packet_data = tcp_packet_data_init(
 										(char*)header, 
 										total_length,
-										tcp_connection_get_local_port(connection),
-										tcp_connection_get_remote_port(connection));
+										tcp_connection_get_local_ip(connection),
+										tcp_connection_get_remote_ip(connection));
 										
 	// no longer need packet
 	free(header);
@@ -402,7 +461,53 @@ void tcp_connection_recv_window_destroy(tcp_connection_t connection){
 /******************* End of Window getting and setting functions *****************************************/
 /******************* End of Window getting and setting functions *****************************************/
 
-/*
+/************* Functions regarding the accept queue ************************/
+	/* The accept queue is initialized when the server goes into the listen state.  
+		Destroyed when leaves LISTEN state 
+		Each time a syn is received, a new tcp_connection is created in the SYN_RECEIVED state and queued */
+
+void tcp_connection_accept_queue_init(tcp_connection_t connection){
+	queue_t accept_queue = queue_init();
+	queue_set_size(accept_queue, ACCEPT_QUEUE_DEFAULT_SIZE);
+	connection->accept_queue = accept_queue;
+}
+
+void tcp_connection_accept_queue_destroy(tcp_connection_t connection){
+
+	queue_t q = connection->accept_queue;
+	if(!q)
+		return;
+		
+	// need to destroy each connection on the accept queue before destroying queue
+	accept_queue_triple_t triple = NULL;
+	triple = (accept_queue_triple_t)queue_pop(q);
+	while(triple != NULL){
+		accept_queue_triple_destroy(triple);
+		triple = (accept_queue_triple_t)queue_pop(q);
+	}
+	queue_destroy(&q);
+	connection->accept_queue = NULL;
+}
+
+void tcp_connection_accept_queue_connect(tcp_connection_t connection, accept_queue_triple_t triple){
+	queue_t q = connection->accept_queue;
+	queue_push(q, (void*)triple);
+}
+
+// return popped triple
+accept_queue_triple_t tcp_connection_accept_queue_dequeue(tcp_connection_t connection){
+	queue_t q = connection->accept_queue;
+	accept_queue_triple_t triple = (accept_queue_triple_t)queue_pop(q);
+	return triple;
+}
+
+/************* End of Functions regarding the accept queue ************************/
+
+
+void tcp_connection_set_last_seq_received(tcp_connection_t connection, uint32_t seq){
+	connection->last_seq_received = seq;
+}
+
 uint32_t tcp_connection_get_last_seq_received(tcp_connection_t connection){
 	return connection->last_seq_received;
 }
@@ -410,13 +515,56 @@ uint32_t tcp_connection_get_last_seq_sent(tcp_connection_t connection){
 	return connection->last_seq_sent;
 }
 
+
+
+void tcp_connection_state_machine_transition(tcp_connection_t connection, state_e state){
+	state_machine_transition(connection->state_machine, state);
+}
+
+/*
 state_machine_t tcp_connection_get_state_machine(tcp_connection_t connection){
 	return connection->state_machine;
 }
 */
 
+state_e tcp_connection_get_state(tcp_connection_t connection){
+	return state_machine_get_state(connection->state_machine);
+}
+
+void tcp_connection_set_state(tcp_connection_t connection, state_e state){
+	state_machine_set_state(connection->state_machine, state);
+}
+
 void tcp_connection_print_state(tcp_connection_t connection){
 	state_machine_print_state(connection->state_machine);	
+}
+
+
+// to print when user calls 'sockets'
+void tcp_connection_print_sockets(tcp_connection_t connection){
+
+	int socket, local_port, local_ip, remote_port, remote_ip;
+	char local_buffer[INET_ADDRSTRLEN], remote_buffer[INET_ADDRSTRLEN];
+	struct in_addr local, remote;
+
+	socket = tcp_connection_get_socket(connection);
+	local_port = tcp_connection_get_local_port(connection);
+	local_ip = tcp_connection_get_local_ip(connection);
+	remote_port = tcp_connection_get_remote_port(connection);
+	remote_ip = tcp_connection_get_remote_ip(connection);
+		
+	local.s_addr = local_ip; 
+	remote.s_addr = remote_ip;
+	
+	inet_ntop(AF_INET, &local, local_buffer, INET_ADDRSTRLEN);
+	inet_ntop(AF_INET, &remote, remote_buffer, INET_ADDRSTRLEN);
+
+	printf("\n[Socket %d]:\n", socket);
+	printf("\t<Local Port: %d, Local IP: (%u) %s > <Remote Port: %d, Remote IP: (%u) %s > <State: ", 
+				local_port, local_ip, local_buffer, remote_port, remote_ip, remote_buffer);
+	tcp_connection_print_state(connection);
+	printf(">\n");
+
 }
 
 /* FOR TESTING */
@@ -429,7 +577,7 @@ void tcp_connection_set_remote(tcp_connection_t connection, uint32_t remote, uin
 	connection->remote_addr.virt_port = port;
 }
 
-/* hacky? */
+/* hacky? */  //<-- yeah kinda
 #include "tcp_connection_state_machine_handle.c"
 
 	

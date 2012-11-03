@@ -29,6 +29,9 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection);
 int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection);
 int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection);
 int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection);
+///##TODO##
+int tcp_connection_SYN_RECEIVED_to_ESTABLISHED(tcp_connection_t connection);
+int tcp_connection_SYN_RECEIVED_to_FIN_WAIT_1(tcp_connection_t connection);
 
 int tcp_connection_ESTABLISHED_to_CLOSE_WAIT(tcp_connection_t connection);
 int tcp_connection_ESTABLISHED_to_FIN_WAIT_1(tcp_connection_t connection);

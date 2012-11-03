@@ -13,6 +13,7 @@
 
 #define NO_OPTIONS_HEADER_LENGTH 5
 
+
 /* just encapsulates unwrapping the header. the reason this is its own
 	function is because we may want to (or at least we should be able to)
 	puts some logic in here thats actually checking whether or not the void*
@@ -112,14 +113,84 @@ struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_por
 //	return 1;
 //}
 
-//##TODO##
-void tcp_utils_add_checksum(void* packet){
-	puts("TODO: HANDLE CHECK SUM IN TCP");
+/* requires the packet with the header as 
+	well as information for the pseudo-header (see below) */
+uint16_t tcp_utils_calc_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t protocol){
+	int i;
+	uint32_t sum = 0;
+	uint16_t word;
+
+	/* calculcate one's complement sum of the data and the tcp header */
+	for(i=0;i<total_length/2;i++){
+		word = *((uint16_t*)(((char*)packet)+i*2));
+		sum = sum+word;
+	}
+
+	/* we're doing full 16-bit words, so if the length is
+		odd, then we need to pad the last byte with 0's */
+	if((total_length&1)==1){
+		// last byte
+		char last_byte = *(((char*)packet) + (total_length-1));		
+		sum += ((uint16_t)(last_byte << 8)) & 0xFF00;
+	}
+
+	/* now compute over the pseudo 96 byte header, which looks like this:
+					 +--------+--------+--------+--------+
+                     |           Source Address          |
+                     +--------+--------+--------+--------+
+                     |         Destination Address       |
+                     +--------+--------+--------+--------+
+                     |  zero  |  PTCL  |    TCP Length   |
+                     +--------+--------+--------+--------+
+	*/
+	sum = sum + ((src_ip>>16) & 0x00FF);
+	sum = sum + (src_ip & 0x00FF);
+	sum = sum + ((dest_ip>>16) & 0x00FF);
+	sum = sum + (dest_ip & 0x00FF);
+	sum = sum + total_length + protocol;
+
+	uint16_t result;
+	result = (sum & 0xFF) + (sum >> 16);
+
+	return ~result;
 }
-//	##TODO HANDLE##
-int tcp_utils_validate_checksum(void* packet){
-	puts("TODO: HANDLE CHECKSUM IN TCP");
-	return 1;
+
+/* calculates the checksum and adds it to the tcphdr */
+void tcp_utils_add_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t protocol){
+	/* zero out the checksum */
+	tcp_set_checksum(packet, 0);
+
+	uint16_t checksum = tcp_utils_calc_checksum(packet, total_length, src_ip, dest_ip, protocol);
+	
+	tcp_set_checksum(packet, checksum);
+}
+
+/* 
+returns
+	NOTE: when you're giving me the src_ip and the dest_ip, the src is the person who SENT the
+			TCP packet, ie the ip of the remote addr 
+
+	1  if correct
+	-1 if incorrect
+*/
+int tcp_utils_validate_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t protocol){
+	/* store the original checksum */
+	uint16_t checksum = tcp_checksum(packet);
+
+	/* zero out the checksum to calculate it */
+	tcp_set_checksum(packet, 0);
+
+	/* get the actual checksum */
+	uint16_t actual_checksum = tcp_utils_calc_checksum(packet, total_length, src_ip, dest_ip, protocol);
+
+	/* XOR the actual checksum and the given checksum, 
+	   if it's not 0, then they're not the same */
+	if(checksum ^ actual_checksum){
+		tcp_set_checksum(packet, checksum);
+		return -1;
+	}
+	else
+		return 1;
 }
 
 
@@ -128,35 +199,5 @@ int tcp_utils_validate_checksum(void* packet){
 // 	uint32_t virt_ip;
 // 	uint16_t virt_port;
 // };
-// 
-//  81 struct tcphdr {
-//  82     unsigned short  th_sport;   /* source port */
-//  83     unsigned short  th_dport;   /* destination port */
-//  84     tcp_seq th_seq;         /* sequence number */
-//  85     tcp_seq th_ack;         /* acknowledgement number */
-//  86 #if __DARWIN_BYTE_ORDER == __DARWIN_LITTLE_ENDIAN
-//  87     unsigned int    th_x2:4,    /* (unused) */
-//  88             th_off:4;   /* data offset */
-//  89 #endif
-//  90 #if __DARWIN_BYTE_ORDER == __DARWIN_BIG_ENDIAN
-//  91     unsigned int    th_off:4,   /* data offset */
-//  92             th_x2:4;    /* (unused) */
-//  93 #endif
-//  94     unsigned char   th_flags;
-//  95 #define TH_FIN  0x01
-//  96 #define TH_SYN  0x02
-//  97 #define TH_RST  0x04
-//  98 #define TH_PUSH 0x08
-//  99 #define TH_ACK  0x10
-// 100 #define TH_URG  0x20
-// 101 #define TH_ECE  0x40
-// 102 #define TH_CWR  0x80
-// 103 #define TH_FLAGS    (TH_FIN|TH_SYN|TH_RST|TH_ACK|TH_URG|TH_ECE|TH_CWR)
-// 104 
-// 105     unsigned short  th_win;     /* window */
-// 106     unsigned short  th_sum;     /* checksum */
-// 107     unsigned short  th_urp;     /* urgent pointer */
-// 108 };
-
 
 
