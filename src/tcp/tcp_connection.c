@@ -217,7 +217,10 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		puts("received packet with syn_bit set");
 		/* got a SYN -- only valid changes are LISTEN_to_SYN_RECEIVED or SYN_SENT_to_SYN_RECEIVED */ 
 		
-		if(state_machine_get_state(connection->state_machine) == SYN_SENT){
+		if(state_machine_get_state(connection->state_machine) == SYN_SENT){		
+		
+			tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
+			
 			/* set the last_seq_received, then pass off to state machine to make transition SYN_SENT_to_SYN_RECEIVED */	
 			connection->last_seq_received = tcp_seqnum(tcp_packet);
 			state_machine_transition(connection->state_machine, receiveSYN);
@@ -241,6 +244,10 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 			puts("Received invalid ack with SYN/ACK. Discarding.");
 			return;
 		}
+		
+		//reset remote ip/port in case it has changed
+		tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
+		
 		//TODO: ***************todo *********************
 		
 		/* careful, this might be NULL -- shouldn't we actually do this in the state_machine transition?*/
@@ -285,14 +292,16 @@ int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t 
    I also left the original version intact in src/tcp/tcp_utils.s
 */
 int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len){	
-
-	/* data_len had better be the same size as when you called 
-		tcp_header_init()!! */
-	memcpy(header+tcp_offset_in_bytes(header), data, data_len);
+	
 	uint32_t total_length = tcp_offset_in_bytes(header) + data_len;
-
-	// no longer need data
-	free(data);
+	
+	// if we're sending data, concatenate header and data into one packet
+	if((data != NULL)&&(data_len)){
+		/* data_len had better be the same size as when you called tcp_header_init()!! */
+		memcpy(header+tcp_offset_in_bytes(header), data, data_len);
+		free(data);
+	}
+	
 	
 	// tcp checksum calculated on BOTH header and data
 	tcp_utils_add_checksum(header, total_length, connection->local_addr.virt_ip, connection->remote_addr.virt_ip, TCP_DATA);//TCP_DATA is tcp protocol number right?
