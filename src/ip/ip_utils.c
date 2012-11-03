@@ -38,6 +38,12 @@ void tcp_packet_data_destroy(tcp_packet_data_t packet_data){
 	free(packet_data);
 }
 
+void tcp_packet_print(tcp_packet_data_t packet_data){
+	char* to_print = malloc(sizeof(char)*(packet_data->packet_size + 1));
+	memcpy(to_print, packet_data->packet, packet_data->packet_size);
+	to_print[packet_data->packet_size] = '\0';
+	printf("packet: %s\n", to_print);
+}
 
 
 /****** End of Structs/Functions for tcp_packet **************************/

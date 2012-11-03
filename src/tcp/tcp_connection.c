@@ -56,8 +56,6 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	state_machine_t state_machine = state_machine_init();
 
 	// init windows
-	
-	
 	queue_t accept_queue = queue_init();
 	queue_set_size(accept_queue, ACCEPT_QUEUE_DEFAULT_SIZE);
 	
@@ -95,8 +93,15 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 void tcp_connection_destroy(tcp_connection_t connection){
 
 	// destroy windows
+	if(connection->send_window)
+		send_window_destroy(&(connection->send_window));
+	if(connection->receive_window)
+		recv_window_destroy(&(connection->receive_window));
+
+	/*
 	tcp_connection_send_window_destroy(connection);
 	tcp_connection_recv_window_destroy(connection);
+	*/
 	
 	// destroy state machine
 	state_machine_destroy(&(connection->state_machine));
@@ -200,6 +205,14 @@ tcp_connection_queue_ip_send
 	is using. 
 */
 int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t packet){
+	/* if the queue isn't there, then you're probably testing, so just
+		print it out for debugging purposes */
+	if(!connection->to_send){
+		printf("Trying to print packet: ");
+		tcp_packet_print(packet);
+		return 1;
+	}
+
 	return bqueue_enqueue(connection->to_send, packet);
 }
 	
@@ -349,6 +362,7 @@ int tcp_connection_get_socket(tcp_connection_t connection){
 	
 /************** Sending Window *********************/
 // what's the point of these helper functions?
+/*
  send_window_t tcp_connection_send_window_init(tcp_connection_t connection, double timeout, int send_window_size, int send_size, int ISN){
 	connection->send_window = send_window_init(timeout, send_window_size, send_size, ISN);
 	return connection->send_window;
@@ -364,10 +378,11 @@ void tcp_connection_send_window_destroy(tcp_connection_t connection){
 		send_window_destroy(&(connection->send_window));	
 	connection->send_window = NULL;
 }
-
+*/
 /************** End of Sending Window *********************/
 
 /************** Receiving Window *********************/
+/*
 recv_window_t tcp_connection_recv_window_init(tcp_connection_t connection, uint32_t window_size, uint32_t ISN){
 	connection->receive_window = recv_window_init(window_size, ISN);
 	return connection->receive_window;
@@ -381,11 +396,13 @@ void tcp_connection_recv_window_destroy(tcp_connection_t connection){
 		recv_window_destroy(&(connection->receive_window));	
 	connection->receive_window = NULL;
 }
+*/
 /************** End of Receiving Window *********************/
 
 /******************* End of Window getting and setting functions *****************************************/
 /******************* End of Window getting and setting functions *****************************************/
 
+/*
 uint32_t tcp_connection_get_last_seq_received(tcp_connection_t connection){
 	return connection->last_seq_received;
 }
@@ -396,6 +413,7 @@ uint32_t tcp_connection_get_last_seq_sent(tcp_connection_t connection){
 state_machine_t tcp_connection_get_state_machine(tcp_connection_t connection){
 	return connection->state_machine;
 }
+*/
 
 void tcp_connection_print_state(tcp_connection_t connection){
 	state_machine_print_state(connection->state_machine);	
