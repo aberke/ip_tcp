@@ -210,12 +210,12 @@ int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
 
 	/* just got a SYN/ACK, so send back a ACK, and that's it */
 
-	if(tcp_connection_get_recv_window(connection) != NULL){
+	if(connection->receive_window != NULL){
 		puts("Something went wrong, your receive window already exists and we just received a SYN/ACK, in SYN_SENT-->ESTABLISHED");
 		exit(1); // CRASH AND BURN
 	}
 		
-	connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, tcp_connection_get_last_seq_received(connection));
+	connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, connection->last_seq_received);
 	
 	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port,0);
 

@@ -139,10 +139,11 @@ send_window_t send_window_init(double timeout, int send_window_size, int send_si
 	/* this will be a placeholder for when we have acked a time_chunk, but it
 		isn't on the left of the send_window */
 	send_window->acked_chunk_placeholder = timed_chunk_init(0, 0);
-
+ 
+	send_window->ISN = ISN;
+	ISN = (ISN + 1) % (MAX_SEQNUM);
 	send_window->left = send_window->right = send_window->sent_left = ISN;
 	send_window->wrap_count = 0;
-	send_window->ISN = ISN;
 
 	return send_window;
 }
@@ -170,12 +171,20 @@ void send_window_push(send_window_t send_window, void* data, int length){
 	
 }
 
+// just add a function for getting the next sequence number
+// that you're going to send 
+uint32_t send_window_get_next_seq(send_window_t send_window){
+	return send_window->left;
+}
+
 send_window_chunk_t send_window_get_next(send_window_t send_window){
 	timed_chunk_t chunk;
 	if((chunk = (timed_chunk_t)queue_pop(send_window->to_send)) == NULL){
 		int left_to_send = WRAP_DIFF(send_window->sent_left, send_window->right, MAX_SEQNUM);
-		if(!left_to_send) 
+		if(!left_to_send){
+			
 			return NULL;
+		}
 		else 
 		{
 			int chunk_size = MIN(send_window->send_size, left_to_send);

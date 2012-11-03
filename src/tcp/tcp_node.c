@@ -227,7 +227,7 @@ void tcp_node_destroy(tcp_node_t tcp_node){
    - Fills addr with ip address information from dequeued triple*/
 int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_connection, struct in_addr *addr){
 	
-	if(state_machine_get_state(tcp_connection_get_state_machine(listening_connection)) != LISTEN)
+	if(tcp_connection_get_state(listening_connection) != LISTEN)
 		return -EINVAL; //Socket is not listening for connections, or addrlen is invalid (e.g., is negative).
 	
 	// dequeue from accept_queue of listening connection to get triple of information about new connection
@@ -528,11 +528,17 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 		free(tcp_packet);
 		return;
 	}
+
+	/* validating the checksum happens in handle_receive_packet in tcp_connection,
+		because it's dependent on the ip of the sender/receiver, and why does the
+		node care if its gonna get discarded 
+	
 	if(tcp_utils_validate_checksum(tcp_packet->packet) < 0){
 		puts("Bad checksum -- discarding packet");
 		free(tcp_packet);
 		return;
 	}
+	*/
 		
 	uint16_t dest_port   = tcp_dest_port(tcp_packet->packet);
 

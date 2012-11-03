@@ -30,6 +30,7 @@ struct accept_queue_triple{
 	uint16_t remote_port;
 	uint32_t last_seq_received;
 };
+
 accept_queue_triple_t accept_queue_triple_init(uint32_t remote_ip, uint16_t remote_port, uint32_t last_seq_received){
 	accept_queue_triple_t triple = (accept_queue_triple_t)malloc(sizeof(struct accept_queue_triple));
 	triple->remote_ip = remote_ip;
@@ -114,8 +115,15 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 void tcp_connection_destroy(tcp_connection_t connection){
 
 	// destroy windows
+	if(connection->send_window)
+		send_window_destroy(&(connection->send_window));
+	if(connection->receive_window)
+		recv_window_destroy(&(connection->receive_window));
+
+	/*
 	tcp_connection_send_window_destroy(connection);
 	tcp_connection_recv_window_destroy(connection);
+	*/
 	
 	// destroy state machine
 	state_machine_destroy(&(connection->state_machine));
@@ -162,6 +170,17 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		and we simply shouldn't call get_next until we're in the established state */
 
 	void* tcp_packet = tcp_packet_data->packet;
+
+	/* ensure the integrity */
+	int checksum_result = tcp_utils_validate_checksum(tcp_packet, 
+											tcp_packet_data->packet_size, 
+											connection->remote_addr.virt_ip, // this is the local IP of the sender, 
+											connection->local_addr.virt_ip,  // so the pseudo header will match this order
+											TCP_DATA);
+	if(checksum_result < 0){
+		puts("Bad checksum! what happened? not discarding");
+		//return;
+	}
 	
 	//TODO: ONLY PUSH DATA TO RECEIVE WINDOW WHEN OK TO DO SO
 	
@@ -169,7 +188,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		but what does the seqnum even mean if the ACKs haven't been synchronized? */
 	memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
 	if(data){ 
-		printf("tcp_connection_receive_packet: received packet with data: \n %s\n", data->data);
+		printf("tcp_connection_receive_packet: received packet with data: \n %s\n", (char*)data->data);
 		uint32_t seqnum = tcp_seqnum(tcp_packet);	
 		recv_window_receive(connection->receive_window, data->data, data->length, seqnum);
 	}	
@@ -247,6 +266,14 @@ tcp_connection_queue_ip_send
 	is using. 
 */
 int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t packet){
+	/* if the queue isn't there, then you're probably testing, so just
+		print it out for debugging purposes */
+	if(!connection->to_send){
+		printf("Trying to print packet: ");
+		tcp_packet_print(packet);
+		return 1;
+	}
+
 	return bqueue_enqueue(connection->to_send, packet);
 }
 	
@@ -268,7 +295,7 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 	free(data);
 	
 	// tcp checksum calculated on BOTH header and data
-	tcp_utils_add_checksum(header);
+	tcp_utils_add_checksum(header, total_length, connection->local_addr.virt_ip, connection->remote_addr.virt_ip, TCP_DATA);//TCP_DATA is tcp protocol number right?
 	
 	// send off to ip_node as a tcp_packet_data_t
 	//tcp_packet_data_t packet_data = tcp_packet_data_init(packet, data_len+TCP_HEADER_MIN_SIZE, local_virt_ip, remote_virt_ip);
@@ -396,6 +423,7 @@ int tcp_connection_get_socket(tcp_connection_t connection){
 	
 /************** Sending Window *********************/
 // what's the point of these helper functions?
+/*
  send_window_t tcp_connection_send_window_init(tcp_connection_t connection, double timeout, int send_window_size, int send_size, int ISN){
 	connection->send_window = send_window_init(timeout, send_window_size, send_size, ISN);
 	return connection->send_window;
@@ -411,10 +439,11 @@ void tcp_connection_send_window_destroy(tcp_connection_t connection){
 		send_window_destroy(&(connection->send_window));	
 	connection->send_window = NULL;
 }
-
+*/
 /************** End of Sending Window *********************/
 
 /************** Receiving Window *********************/
+/*
 recv_window_t tcp_connection_recv_window_init(tcp_connection_t connection, uint32_t window_size, uint32_t ISN){
 	connection->receive_window = recv_window_init(window_size, ISN);
 	return connection->receive_window;
@@ -428,6 +457,7 @@ void tcp_connection_recv_window_destroy(tcp_connection_t connection){
 		recv_window_destroy(&(connection->receive_window));	
 	connection->receive_window = NULL;
 }
+*/
 /************** End of Receiving Window *********************/
 
 /******************* End of Window getting and setting functions *****************************************/
@@ -451,11 +481,11 @@ void tcp_connection_accept_queue_destroy(tcp_connection_t connection){
 		return;
 		
 	// need to destroy each connection on the accept queue before destroying queue
-	tcp_connection_t next_connection = NULL;
-	next_connection = (tcp_connection_t)queue_pop(q);
-	while(next_connection != NULL){
-		tcp_connection_destroy(next_connection);
-		next_connection = (tcp_connection_t)queue_pop(q);
+	accept_queue_triple_t triple = NULL;
+	triple = (accept_queue_triple_t)queue_pop(q);
+	while(triple != NULL){
+		accept_queue_triple_destroy(triple);
+		triple = (accept_queue_triple_t)queue_pop(q);
 	}
 	queue_destroy(&q);
 	connection->accept_queue = NULL;
@@ -465,6 +495,7 @@ void tcp_connection_accept_queue_connect(tcp_connection_t connection, accept_que
 	queue_t q = connection->accept_queue;
 	queue_push(q, (void*)triple);
 }
+
 // return popped triple
 accept_queue_triple_t tcp_connection_accept_queue_dequeue(tcp_connection_t connection){
 	queue_t q = connection->accept_queue;
@@ -494,8 +525,15 @@ int tcp_connection_state_machine_transition(tcp_connection_t connection, state_e
 	tcp_connection_print_state(connection);
 	return ret;
 }
+
+/*
 state_machine_t tcp_connection_get_state_machine(tcp_connection_t connection){
 	return connection->state_machine;
+}
+*/
+
+state_e tcp_connection_get_state(tcp_connection_t connection){
+	return state_machine_get_state(connection->state_machine);
 }
 
 void tcp_connection_set_state(tcp_connection_t connection, state_e state){

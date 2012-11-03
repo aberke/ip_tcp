@@ -343,27 +343,49 @@ void test_send_window(){
 
 void test_recv_window(){
 	recv_window_t rw = recv_window_init(100, 0);
+
+	TEST_EQ(recv_window_get_ack(rw), 1, "");
 	
 	recv_window_chunk_t got;
-	int ack;
 
 	got = recv_window_get_next(rw);
 	ASSERT(got==NULL);
 	
 	char buffer[BUFFER_SIZE];
 	strcpy(buffer, "hello world");
-	recv_window_receive(rw, buffer,strlen("hello world"), 0);
-	//TEST_EQ(ack, strlen("hello world"), "");
+	recv_window_receive(rw, buffer, strlen("hello world"), 0);
 	
 	got = recv_window_get_next(rw);
 	ASSERT(got!=NULL);
-	memcpy(buffer, got->data, got->length);
+	TEST_EQ(got->offset, 1, "");
+	memcpy(buffer, got->data+got->offset, got->length);
+	buffer[got->length] = '\0';
+	TEST_STR_EQ(buffer, "ello world", "");
+	recv_window_chunk_destroy_free(&got);
+	
+	recv_window_destroy(&rw);
+
+	/// now do it again, but with the right seqnum
+	rw = recv_window_init(100, 0);
+
+	TEST_EQ(recv_window_get_ack(rw), 1, "");
+	
+	got = recv_window_get_next(rw);
+	ASSERT(got==NULL);
+	
+	strcpy(buffer, "hello world");
+	recv_window_receive(rw, buffer, strlen("hello world"), 1);
+	
+	got = recv_window_get_next(rw);
+	ASSERT(got!=NULL);
+	TEST_EQ(got->offset, 0, "");
+	memcpy(buffer, got->data+got->offset, got->length);
 	buffer[got->length] = '\0';
 	TEST_STR_EQ(buffer, "hello world", "");
 	recv_window_chunk_destroy_free(&got);
 	
 	recv_window_destroy(&rw);
-}	
+}
 
 void test_wrapping(){
 	/* these functions REALLY needs to be correct */
@@ -774,7 +796,7 @@ int main(int argc, char** argv){
 	TEST(test_send_window);
 	TEST(test_send_window_scale);*/
 
-	//TEST(test_recv_window);
+	TEST(test_recv_window);
 
 	TEST(test_tcp_states);	
 

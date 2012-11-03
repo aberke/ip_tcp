@@ -44,7 +44,7 @@ uint32_t tcp_connection_get_local_ip(tcp_connection_t connection);
 int tcp_connection_get_socket(tcp_connection_t connection);
 
 /******* Window getting and setting and destroying functions *********/
-send_window_t tcp_connection_send_window_init(tcp_connection_t connection, double timeout, int send_window_size, int send_size, int ISN);
+/*send_window_t tcp_connection_send_window_init(tcp_connection_t connection, double timeout, int send_window_size, int send_size, int ISN);
 send_window_t tcp_connection_get_send_window(tcp_connection_t connection);
 // we should destroy the window when we close connections
 void tcp_connection_send_window_destroy(tcp_connection_t connection);
@@ -52,7 +52,7 @@ void tcp_connection_send_window_destroy(tcp_connection_t connection);
 recv_window_t tcp_connection_recv_window_init(tcp_connection_t connection, uint32_t window_size, uint32_t ISN);
 recv_window_t tcp_connection_get_recv_window(tcp_connection_t connection);
 void tcp_connection_recv_window_destroy(tcp_connection_t connection);
-
+*/
 
 /******* End of Window getting and setting and destroying functions *********/
 
@@ -61,19 +61,31 @@ void tcp_connection_recv_window_destroy(tcp_connection_t connection);
 		Destroyed when leaves LISTEN state 
 		Each time a syn is received, a new tcp_connection is created in the SYN_RECEIVED state and queued */
 
+
 void tcp_connection_accept_queue_init(tcp_connection_t connection);
 void tcp_connection_accept_queue_destroy(tcp_connection_t connection);
 void tcp_connection_accept_queue_connect(tcp_connection_t connection, accept_queue_triple_t triple);
 accept_queue_triple_t tcp_connection_accept_queue_dequeue(tcp_connection_t connection);
 
+
 /************* End of Functions regarding the accept queue ************************/
 
 void tcp_connection_set_last_seq_received(tcp_connection_t connection, uint32_t seq);
+
+/*
 uint32_t tcp_connection_get_last_seq_received(tcp_connection_t connection);
 uint32_t tcp_connection_get_last_seq_sent(tcp_connection_t connection);
 
-int tcp_connection_state_machine_transition(tcp_connection_t connection, state_e state);
+This function isn't needed and probably shouldn't exist, you shouldn't be 
+able to access the state machine of the connection directly, you should
+just be able to access it through the connection by calling get_state and
+set_state directly on the connection
+
 state_machine_t tcp_connection_get_state_machine(tcp_connection_t connection);
+*/
+
+int tcp_connection_state_machine_transition(tcp_connection_t connection, state_e state);
+state_e tcp_connection_get_state(tcp_connection_t connection);
 void tcp_connection_set_state(tcp_connection_t connection, state_e state);
 void tcp_connection_print_state(tcp_connection_t connection);
 

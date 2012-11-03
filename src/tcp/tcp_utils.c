@@ -113,14 +113,84 @@ struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_por
 //	return 1;
 //}
 
-//##TODO##
-void tcp_utils_add_checksum(void* packet){
-	puts("TODO: HANDLE CHECK SUM IN TCP");
+/* requires the packet with the header as 
+	well as information for the pseudo-header (see below) */
+uint16_t tcp_utils_calc_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t protocol){
+	int i;
+	uint32_t sum = 0;
+	uint16_t word;
+
+	/* calculcate one's complement sum of the data and the tcp header */
+	for(i=0;i<total_length/2;i++){
+		word = *((uint16_t*)(((char*)packet)+i*2));
+		sum = sum+word;
+	}
+
+	/* we're doing full 16-bit words, so if the length is
+		odd, then we need to pad the last byte with 0's */
+	if((total_length&1)==1){
+		// last byte
+		char last_byte = *(((char*)packet) + (total_length-1));		
+		sum += ((uint16_t)(last_byte << 8)) & 0xFF00;
+	}
+
+	/* now compute over the pseudo 96 byte header, which looks like this:
+					 +--------+--------+--------+--------+
+                     |           Source Address          |
+                     +--------+--------+--------+--------+
+                     |         Destination Address       |
+                     +--------+--------+--------+--------+
+                     |  zero  |  PTCL  |    TCP Length   |
+                     +--------+--------+--------+--------+
+	*/
+	sum = sum + ((src_ip>>16) & 0x00FF);
+	sum = sum + (src_ip & 0x00FF);
+	sum = sum + ((dest_ip>>16) & 0x00FF);
+	sum = sum + (dest_ip & 0x00FF);
+	sum = sum + total_length + protocol;
+
+	uint16_t result;
+	result = (sum & 0xFF) + (sum >> 16);
+
+	return ~result;
 }
-//	##TODO HANDLE##
-int tcp_utils_validate_checksum(void* packet){
-	puts("TODO: HANDLE CHECKSUM IN TCP");
-	return 1;
+
+/* calculates the checksum and adds it to the tcphdr */
+void tcp_utils_add_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t protocol){
+	/* zero out the checksum */
+	tcp_set_checksum(packet, 0);
+
+	uint16_t checksum = tcp_utils_calc_checksum(packet, total_length, src_ip, dest_ip, protocol);
+	
+	tcp_set_checksum(packet, checksum);
+}
+
+/* 
+returns
+	NOTE: when you're giving me the src_ip and the dest_ip, the src is the person who SENT the
+			TCP packet, ie the ip of the remote addr 
+
+	1  if correct
+	-1 if incorrect
+*/
+int tcp_utils_validate_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t protocol){
+	/* store the original checksum */
+	uint16_t checksum = tcp_checksum(packet);
+
+	/* zero out the checksum to calculate it */
+	tcp_set_checksum(packet, 0);
+
+	/* get the actual checksum */
+	uint16_t actual_checksum = tcp_utils_calc_checksum(packet, total_length, src_ip, dest_ip, protocol);
+
+	/* XOR the actual checksum and the given checksum, 
+	   if it's not 0, then they're not the same */
+	if(checksum ^ actual_checksum){
+		tcp_set_checksum(packet, checksum);
+		return -1;
+	}
+	else
+		return 1;
 }
 
 
