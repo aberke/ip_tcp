@@ -170,6 +170,11 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		and we simply shouldn't call get_next until we're in the established state */
 
 	void* tcp_packet = tcp_packet_data->packet;
+	
+	//TODO: FIGURE OUT WHEN ITS NOT APPROPRIATE TO RESET REMOTE ADDRESSES -- we don't want our connection sabotaged 
+	//reset remote ip/port in case it has changed + so that we can correctly calculate checksum
+	tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
+	tcp_connection_set_local_ip(connection, tcp_packet_data->local_virt_ip);
 
 	/* ensure the integrity */
 	int checksum_result = tcp_utils_validate_checksum(tcp_packet, 
@@ -202,8 +207,6 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 			return;
 		}
 
-		//reset remote ip/port in case it has changed
-		tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
 		
 		/* received a SYN/ACK, record the seq you got, and validate
 			that the ACK you received is correct */
@@ -589,6 +592,9 @@ void tcp_connection_print(tcp_connection_t connection){
 void tcp_connection_set_remote(tcp_connection_t connection, uint32_t remote, uint16_t port){
 	connection->remote_addr.virt_ip = remote;
 	connection->remote_addr.virt_port = port;
+}
+void tcp_connection_set_local_ip(tcp_connection_t connection, uint32_t ip){
+	connection->local_addr.virt_ip = ip;
 }
 
 /* hacky? */  //<-- yeah kinda

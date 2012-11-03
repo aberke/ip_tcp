@@ -53,7 +53,7 @@ memchunk_t tcp_unwrap_data(void* packet, int length){
 
 struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_port, int data_size){
 	struct tcphdr* header = malloc(sizeof(struct tcphdr) + data_size);
-	memset(header, 0, sizeof(struct tcphdr));
+	memset(header, 0, sizeof(struct tcphdr)+data_size);
 	header->th_sport = htons(host_port);
 	header->th_dport = htons(dest_port);
 	tcp_set_offset(header);

@@ -249,7 +249,7 @@ void vv_write(const char* line, tcp_node_t tcp_node){
 void vv_set_addrByInterface(const char* line, tcp_node_t tcp_node){
 
 	int socket;
-	uint32_t ip_addr;
+	uint32_t remote_ip_addr, local_ip_addr;
 	int interface_num;
 	
 	if(sscanf(line, "v_set_addrByInterface %d %d", &socket, &interface_num) != 2){
@@ -257,14 +257,16 @@ void vv_set_addrByInterface(const char* line, tcp_node_t tcp_node){
 		return;
 	}
 	
-	ip_addr = tcp_node_get_interface_remote_ip(tcp_node, interface_num);
+	remote_ip_addr = tcp_node_get_interface_remote_ip(tcp_node, interface_num);
+	local_ip_addr = tcp_node_get_interface_local_ip(tcp_node, interface_num);
 	
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(!connection){
 		printf("No connection with socket %d\n", socket);
 		return;
 	}
-	tcp_connection_set_remote(connection, ip_addr, 1);
+	tcp_connection_set_remote(connection, remote_ip_addr, 1);
+	tcp_connection_set_local_ip(connection, local_ip_addr);
 }
 
 

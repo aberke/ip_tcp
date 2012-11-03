@@ -49,6 +49,7 @@ int ip_node_running(ip_node_t ip_node);
 /****** FOR TESTING *******/
 
 uint32_t ip_node_get_interface_remote_ip(ip_node_t ip_node, int interface_num);
+uint32_t ip_node_get_interface_local_ip(ip_node_t ip_node, int interface_id);
 
 
 

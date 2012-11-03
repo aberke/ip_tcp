@@ -665,7 +665,6 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 			
 	// wrap and send IP packet
 	ip_wrap_send_packet(packet, packet_size, TCP_DATA, send_from, send_to, next_hop_interface);	
-	puts("ip_node: TCP_DATA packet sent");	
 	free(tcp_packet_data);
 }
 
@@ -864,6 +863,19 @@ int ip_node_running(ip_node_t ip_node){
 
 /****** FOR TESTING *******/
 
+uint32_t ip_node_get_interface_local_ip(ip_node_t ip_node, int interface_id){
+	
+	uint32_t ip_addr = 0;
+	
+	if((interface_id<0)||(interface_id >= ip_node->num_interfaces)){
+		puts("Proper command: where integer corresponds to interface id printed from command 'interfaces'");
+	}
+	else{
+		link_interface_t interface = ip_node->interfaces[interface_id];
+		ip_addr = link_interface_get_local_virt_ip(interface);
+	}
+	return ip_addr;
+}
 uint32_t ip_node_get_interface_remote_ip(ip_node_t ip_node, int interface_id){
 	
 	uint32_t ip_addr = 0;

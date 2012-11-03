@@ -100,5 +100,6 @@ int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_c
 
 /**** FOR TESTING *****/
 uint32_t tcp_node_get_interface_remote_ip(tcp_node_t tcp_node, int interface_num);
+uint32_t tcp_node_get_interface_local_ip(tcp_node_t tcp_node, int interface_num);
 
 #endif //__TCP_NODE_H__

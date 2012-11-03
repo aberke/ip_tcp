@@ -254,7 +254,7 @@ int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_c
 	tcp_connection_set_state(new_connection, LISTEN);
 	
 	// have connection transition from LISTEN to SYN_RECEIVED
-	if(tcp_connection_state_machine_transition(new_connection, receiveSYN))
+	if(tcp_connection_state_machine_transition(new_connection, receiveSYN)<0)
 		puts("Alex and Neil go debug: tcp_connection_state_machine_transition(new_connection, receiveSYN)) returned negative value in tcp_node_connection_accept");
 	// destroy triple
 	accept_queue_triple_destroy(triple);
@@ -629,6 +629,11 @@ uint32_t tcp_node_get_interface_remote_ip(tcp_node_t tcp_node, int interface_num
 	return ip_addr;
 }
 
+uint32_t tcp_node_get_interface_local_ip(tcp_node_t tcp_node, int interface_num){
+	uint32_t ip_addr;
+	ip_addr = ip_node_get_interface_local_ip(tcp_node->ip_node, interface_num);
+	return ip_addr;
+}	
 
 
 

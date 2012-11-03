@@ -35,6 +35,7 @@ uint16_t tcp_connection_get_remote_port(tcp_connection_t connection);
 uint16_t tcp_connection_get_local_port(tcp_connection_t connection);
 
 void tcp_connection_set_local_port(tcp_connection_t connection, uint16_t port);
+void tcp_connection_set_local_ip(tcp_connection_t connection, uint32_t ip);
 
 void tcp_connection_set_remote(tcp_connection_t connection, uint32_t remote_ip, uint16_t remote_port);
 
