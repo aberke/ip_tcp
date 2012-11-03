@@ -96,7 +96,8 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 	tcp_set_ack_bit(header);
 
 	tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
-	tcp_set_seq(header, ISN); //<-- why is it random?  should it correspond to last_seq?
+	tcp_set_seq(header, ISN); 
+	connection->last_seq_sent = ISN;
 
 	tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
 
@@ -109,7 +110,7 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 /* this function should actually be called ONLY by tcp_node, because 
 	don't we need to first verify that this is a valid IP? */
 int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, uint16_t port){
-	printf("in tcp_connection_active_open.  remote_ip: %d\n", ip_addr);
+	printf("in tcp_connection_active_open.  remote_ip: %u\n", ip_addr);
 	tcp_connection_set_remote(connection, ip_addr, port);
 
 	state_machine_transition(connection->state_machine, activeOPEN);
@@ -135,6 +136,7 @@ int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection){
 	/* fill the syn, and set the seqnum */
 	tcp_set_syn_bit(header);
 	tcp_set_seq(header, ISN);
+	connection->last_seq_sent = ISN;
 
 	/*  that should be good? send it off. Note: NULL because I'm assuming there's
 		to send when initializing a connection, but that's not necessarily true */
@@ -168,6 +170,7 @@ int tcp_connection_LISTEN_to_SYN_SENT(tcp_connection_t connection){
 	tcp_set_syn_bit(header);
 	tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
 	tcp_set_seq(header, ISN);
+	tcp_set_ack(header, connection->last_seq_received);
 
 	tcp_wrap_packet_send(connection, header, NULL, 0);
 	
@@ -217,8 +220,11 @@ int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
 	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port,0);
 
 	// load it up!
+	tcp_set_seq(header, connection->last_seq_sent + 1);
 	tcp_set_ack_bit(header);
-	tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
+	printf("setting ack to connection->last_seq_receved+1 = %u\n", ((connection->last_seq_received)+1));
+	tcp_set_ack(header, ((connection->last_seq_received)+1));
+	//tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
 
 	// window size?
 	tcp_set_window_size(header, recv_window_get_size(connection->receive_window));

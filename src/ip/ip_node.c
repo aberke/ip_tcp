@@ -664,7 +664,8 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 	link_interface_t next_hop_interface = address_keyed->interface;
 			
 	// wrap and send IP packet
-	ip_wrap_send_packet(packet, packet_size, TCP_DATA, send_from, send_to, next_hop_interface);		
+	ip_wrap_send_packet(packet, packet_size, TCP_DATA, send_from, send_to, next_hop_interface);	
+	puts("ip_node: TCP_DATA packet sent");	
 	free(tcp_packet_data);
 }
 

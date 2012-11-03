@@ -43,8 +43,6 @@ memchunk_t tcp_unwrap_data(void* packet, int length){
 	struct tcphdr* header = (struct tcphdr*)packet;
 	unsigned int data_offset = 4*header->th_off; /* because it's the length in 32-bit words */
 	
-	printf("tcp_unwrap_data: length: %d, data_offset: %u\n", length, data_offset);
-	
 	/* if there's no data, just return NULL */
 	if(!(length-data_offset)) 
 		return NULL;

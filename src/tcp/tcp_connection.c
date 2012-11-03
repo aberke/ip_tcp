@@ -163,6 +163,8 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 
 	void* tcp_packet = tcp_packet_data->packet;
 	
+	//TODO: ONLY PUSH DATA TO RECEIVE WINDOW WHEN OK TO DO SO
+	
 	/* check if there's any data, and if there is push it to the window,
 		but what does the seqnum even mean if the ACKs haven't been synchronized? */
 	memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
@@ -178,11 +180,12 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 			/* then you sent a syn with a seqnum that wasn't faithfully returned. 
 				what should we do? for now, let's discard */
 			puts("Received invalid ack with SYN/ACK. Discarding.");
-
 			return;
 		}
 
-
+		//reset remote ip/port in case it has changed
+		tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
+		
 		/* received a SYN/ACK, record the seq you got, and validate
 			that the ACK you received is correct */
 		connection->last_seq_received = tcp_seqnum(tcp_packet);

@@ -144,10 +144,6 @@ void _set_transitioning(state_machine_t machine, state_e state, transition_e tra
 	ARRAY_PUT(machine->transition_matrix, state, transition, t);
 	
 	transitioning_t t1 = ARRAY_GET(machine->transition_matrix, (state_e)0, (transition_e)1);
-	if(!t1){
-		puts("0,1 not set");
-		return;
-	}
 }	
 
 void state_machine_print_state(state_machine_t state_machine){
