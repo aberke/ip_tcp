@@ -70,7 +70,7 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 	puts("LISTEN --> SYN_RECEIVED");
 
 	/* Must create new connection that will handle the rest of the connection establishment.  This connection will sit on
-		the queue rather than being inserted into the connections array of the node.
+		the queue rather than being inserted into the connections array of the node.*/
 
 	/*  1. ack their SEQ number 
 	    2. send your own SEQ number */
@@ -96,7 +96,7 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 	tcp_set_ack_bit(header);
 
 	tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
-	tcp_set_seq(header, ISN);
+	tcp_set_seq(header, ISN); //<-- why is it random?  should it correspond to last_seq?
 
 	tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
 
@@ -109,6 +109,7 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 /* this function should actually be called ONLY by tcp_node, because 
 	don't we need to first verify that this is a valid IP? */
 int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, uint16_t port){
+	printf("in tcp_connection_active_open.  remote_ip: %d\n", ip_addr);
 	tcp_connection_set_remote(connection, ip_addr, port);
 
 	state_machine_transition(connection->state_machine, activeOPEN);

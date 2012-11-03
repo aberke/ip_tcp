@@ -195,31 +195,31 @@ void print_state(state_e s){
 	printf("%d=", (int)s);
 	switch(s){
 		case CLOSED:
-			printf("CLOSED\n");
+			printf("CLOSED");
 			return;
 		case LISTEN:
-			printf("LISTEN\n");
+			printf("LISTEN");
 			return;
 		case SYN_SENT:
-			printf("SYN_SENT\n");
+			printf("SYN_SENT");
 			return;
 		case SYN_RECEIVED:
-			printf("SYN_RECEIVED\n");
+			printf("SYN_RECEIVED");
 			return;
 		case ESTABLISHED:
-			printf("ESTABLISHED\n");
+			printf("ESTABLISHED");
 			return;	
 		case FIN_WAIT_1:
-			printf("FIN_WAIT_1\n");
+			printf("FIN_WAIT_1");
 			return;
 		case FIN_WAIT_2:
-			printf("FIN_WAIT_2\n");
+			printf("FIN_WAIT_2");
 			return;
 		case CLOSE_WAIT:
-			printf("CLOSE_WAIT\n");	
+			printf("CLOSE_WAIT");	
 			return;
 		case TIME_WAIT:
-			printf("TIME_WAIT\n");
+			printf("TIME_WAIT");
 			return;
 		case LAST_ACK:
 			printf("LAST_ACK\n");

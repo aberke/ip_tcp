@@ -56,7 +56,6 @@ state_machine_t state_machine_init(){
 	state_machine->argument = NULL;
 	state_machine->current_state = START_STATE;
 	_init(state_machine);
-	_print(state_machine);
 	
 	return state_machine;
 }
@@ -85,17 +84,9 @@ void state_machine_set_argument(state_machine_t state_machine, void* arg){
 	next state as dictated by the state transition matrix. It sets the current
 	state to this new state. */
 int state_machine_transition(state_machine_t machine, transition_e t){
-	printf("Transition from ");
-	print_transition(t);
-	printf(",");
-	state_machine_print_state(machine);
-	printf("-->");
 
 	transitioning_t transitioning = ARRAY_GET(machine->transition_matrix, machine->current_state, t);	
 	machine->current_state = transitioning->next_state;
-
-	state_machine_print_state(machine);
-	printf("\n");
 
 	if(transitioning->action)
 		return transitioning->action(machine->argument);	
@@ -144,10 +135,6 @@ void _init(state_machine_t machine){
 			_set_transitioning(machine, (state_e)i, (transition_e)j, transition);
 
 		}
-
-		printf("Finished state %d\n\n", i);
-		_print(machine);
-		printf("\n\n");
 	}
 }
 			
@@ -161,23 +148,6 @@ void _set_transitioning(state_machine_t machine, state_e state, transition_e tra
 		puts("0,1 not set");
 		return;
 	}
-	
-	print_transition(transition);
-	printf(",");
-	print_state(state);
-	printf("    ");
-	printf("(0,1) == ");
-	print_state(t1->next_state);
-	printf("\n");
-	 
-	printf("GETTING: ");
-	print_transition(transition);
-	printf(",");
-	print_state(state);
-	printf("-->");
-	t1 = ARRAY_GET(machine->transition_matrix, state, transition);
-	print_state(t1->next_state);
-	printf("\n");
 }	
 
 void state_machine_print_state(state_machine_t state_machine){

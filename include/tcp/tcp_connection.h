@@ -17,7 +17,8 @@
 // this triple is dequeued and a connection is initiated with this information
 // the connection should then set its state to listen and go through the LISTEN_to_SYN_RECEIVED transition
 typedef struct accept_queue_triple* accept_queue_triple_t;
-
+accept_queue_triple_t accept_queue_triple_init(uint32_t remote_ip, uint16_t remote_port, uint32_t last_seq_received);
+void accept_queue_triple_destroy(accept_queue_triple_t triple);
 
 
 typedef struct tcp_connection* tcp_connection_t;  
@@ -96,6 +97,9 @@ int tcp_connection_send_next(tcp_connection_t connection);
 int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* to_write, int num_bytes);
 /******* End of Sending Packets **************/
 //////////////////////////////////////////////////////////////////////////////////////
+
+// to print when user calls 'sockets'
+void tcp_connection_print_sockets(tcp_connection_t connection);
 
 
 /* for testing */

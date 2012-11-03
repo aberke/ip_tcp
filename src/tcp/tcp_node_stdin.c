@@ -126,6 +126,8 @@ int v_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 	//NEED TO CHANGE TO CORRESPOND TO SPECS BUT FOR NOW just using normal api
 
 	tcp_connection_t listening_connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(listening_connection == NULL)
+		return -EBADF;
 	
 	// calls on the listening_connection to dequeue its triple and node creates new connection with information
 	// new socket is the socket assigned to that new connection.  The connection finishes its handshake to get to
@@ -171,7 +173,8 @@ int v_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t por
 	if(connection == NULL)	
 		return -EBADF; 	 // = The file descriptor is not a valid index in the descriptor table.
 	
-	int ret = tcp_connection_active_open(connection, addr.s_addr, port);
+	int ret = tcp_connection_active_open(connection, tcp_connection_get_remote_ip(connection), port);
+	//int ret = tcp_connection_active_open(connection, addr.s_addr, port);
 	if(ret < 0)
 		return ret;	
 		
@@ -195,11 +198,12 @@ void vv_connect(const char *line, tcp_node_t tcp_node){
 	}	
 	//convert string ip address to real ip address
 	if(inet_pton(AF_INET, addr_buffer, &(sa.sin_addr)) <= 0){ // IPv4
-		printf("Bad ip address format -- cannot connect");
+		printf("Bad ip address format -- cannot connect\n");
 		return;
 	}
 	
 	ret = v_connect(tcp_node, socket, sa.sin_addr, (uint16_t)port);
+
 	printf("v_connect call returned value: %d\n", ret);
 }
 
@@ -252,9 +256,7 @@ void vv_set_addrByInterface(const char* line, tcp_node_t tcp_node){
 		printf("No connection with socket %d\n", socket);
 		return;
 	}
-
 	tcp_connection_set_remote(connection, ip_addr, 1);
-	puts("Successful.");	
 }
 
 

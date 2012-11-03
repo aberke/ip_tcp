@@ -208,7 +208,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 			accept_queue_triple_t triple = accept_queue_triple_init(tcp_packet_data->remote_virt_ip, 
 																		tcp_source_port(tcp_packet),
 																		tcp_seqnum(tcp_packet));
-			tcp_connection_queue_connect(connection, triple);
+			tcp_connection_accept_queue_connect(connection, triple);
 			// anything else??		
 		}
 	}
@@ -272,8 +272,8 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 	tcp_packet_data_t packet_data = tcp_packet_data_init(
 										(char*)header, 
 										total_length,
-										tcp_connection_get_local_port(connection),
-										tcp_connection_get_remote_port(connection));
+										tcp_connection_get_local_ip(connection),
+										tcp_connection_get_remote_ip(connection));
 										
 	// no longer need packet
 	free(header);
@@ -458,7 +458,7 @@ void tcp_connection_accept_queue_destroy(tcp_connection_t connection){
 	connection->accept_queue = NULL;
 }
 
-void tcp_connection_queue_connect(tcp_connection_t connection, accept_queue_triple_t triple){
+void tcp_connection_accept_queue_connect(tcp_connection_t connection, accept_queue_triple_t triple){
 	queue_t q = connection->accept_queue;
 	queue_push(q, (void*)triple);
 }
@@ -498,6 +498,34 @@ void tcp_connection_set_state(tcp_connection_t connection, state_e state){
 
 void tcp_connection_print_state(tcp_connection_t connection){
 	state_machine_print_state(connection->state_machine);	
+}
+
+
+// to print when user calls 'sockets'
+void tcp_connection_print_sockets(tcp_connection_t connection){
+
+	int socket, local_port, local_ip, remote_port, remote_ip;
+	char local_buffer[INET_ADDRSTRLEN], remote_buffer[INET_ADDRSTRLEN];
+	struct in_addr local, remote;
+
+	socket = tcp_connection_get_socket(connection);
+	local_port = tcp_connection_get_local_port(connection);
+	local_ip = tcp_connection_get_local_ip(connection);
+	remote_port = tcp_connection_get_remote_port(connection);
+	remote_ip = tcp_connection_get_remote_ip(connection);
+		
+	local.s_addr = local_ip; 
+	remote.s_addr = remote_ip;
+	
+	inet_ntop(AF_INET, &local, local_buffer, INET_ADDRSTRLEN);
+	inet_ntop(AF_INET, &remote, remote_buffer, INET_ADDRSTRLEN);
+
+	printf("\n[Socket %d]:\n", socket);
+	printf("\t<Local Port: %d, Local IP: (%u) %s > <Remote Port: %d, Remote IP: (%u) %s > <State: ", 
+				local_port, local_ip, local_buffer, remote_port, remote_ip, remote_buffer);
+	tcp_connection_print_state(connection);
+	printf(">\n");
+
 }
 
 /* FOR TESTING */

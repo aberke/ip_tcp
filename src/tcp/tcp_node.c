@@ -227,8 +227,17 @@ void tcp_node_destroy(tcp_node_t tcp_node){
    - Fills addr with ip address information from dequeued triple*/
 int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_connection, struct in_addr *addr){
 	
+	if(state_machine_get_state(tcp_connection_get_state_machine(listening_connection)) != LISTEN)
+		return -EINVAL; //Socket is not listening for connections, or addrlen is invalid (e.g., is negative).
+	
 	// dequeue from accept_queue of listening connection to get triple of information about new connection
 	accept_queue_triple_t triple = tcp_connection_accept_queue_dequeue(listening_connection);
+	
+	if(triple == NULL)
+		return -1;
+	
+	// fill struct in_addr
+	addr->s_addr = triple->remote_ip;
 	
 	// create new connection which will be the accepted connection 
 	// -- function will insert it into kernal array and socket hashmap
@@ -247,6 +256,9 @@ int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_c
 	
 	// have connection transition from LISTEN to SYN_RECEIVED
 	tcp_connection_state_machine_transition(new_connection, SYN_RECEIVED);
+	
+	// destroy triple
+	accept_queue_triple_destroy(triple);
 	
 	return tcp_connection_get_socket(new_connection);
 }
@@ -338,18 +350,11 @@ void tcp_node_print(tcp_node_t tcp_node){
 
 	//char* buffer = malloc(sizeof(char)*INET_ADDRSTRLEN);
 	tcp_connection_t connection;
-	int socket, local_port, remote_port;
 	
 	connection_virt_socket_keyed_t socket_keyed, tmp;
 	HASH_ITER(hh, tcp_node->virt_socketToConnection, socket_keyed, tmp){
 		connection = socket_keyed->connection;
-		socket = socket_keyed->virt_socket;
-		local_port = tcp_connection_get_local_port(connection);
-		remote_port = tcp_connection_get_remote_port(connection);
-		printf("\n[Socket %d]:\n", socket);
-		printf("\t<Local Port: %d> <Remote Port: %d> <State: ", local_port, remote_port);
-		tcp_connection_print_state(connection);
-		printf(">\n");
+		tcp_connection_print_sockets(connection);
 	}	
 }
 
