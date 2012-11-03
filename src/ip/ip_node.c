@@ -238,7 +238,7 @@ returns:
 	0 	on success
 	-1 	queue does not exist 
 */
-int ip_node_read(ip_node_t ip_node, char* packet, int packet_size, uint32_t remote_virt_ip, uint32_t local_virt_ip){
+int ip_node_read(ip_node_t ip_node, char* packet, int packet_size, uint32_t local_virt_ip, uint32_t remote_virt_ip){
 
 	packet[packet_size] = '\0';
 	printf("In ip_node_read.  TCP_DATA packet_size: %d, packet: \n%s\n", packet_size, packet);
@@ -623,7 +623,7 @@ static void _handle_user_command_up(ip_node_t ip_node, char* buffer){
 }
 /* _handle_user_command_send iterates through to_send queue to handle each packet that has been wrapped by tcp_node */
 static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
-
+	
 	tcp_packet_data_t tcp_packet_data = (tcp_packet_data_t)packet;
 	
 	//char* packet = (char*) malloc(sizeof(char)*MTU);
@@ -665,7 +665,6 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 			
 	// wrap and send IP packet
 	ip_wrap_send_packet(packet, packet_size, TCP_DATA, send_from, send_to, next_hop_interface);		
-
 	free(tcp_packet_data);
 }
 

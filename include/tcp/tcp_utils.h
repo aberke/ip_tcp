@@ -45,7 +45,7 @@ memchunk_t tcp_unwrap_data(void* packet, int length);
 #define tcp_ack(header) ntohl(((struct tcphdr*)header)->th_ack)
 #define tcp_seqnum(header) ntohl(((struct tcphdr*)header)->th_seq)
 #define tcp_dest_port(header) ntohs(((struct tcphdr*)header)->th_dport)
-#define tcp_source_port(header) ntohs(((struct tcphdr*)header)->th_dport)
+#define tcp_source_port(header) ntohs(((struct tcphdr*)header)->th_sport)
 #define tcp_offset_in_bytes(header) ((((struct tcphdr*)header)->th_off)*4) 
 
 #define tcp_fin_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << FIN_BIT)) > 0) // is fin set? 

@@ -154,10 +154,13 @@ void vv_accept(const char *line, tcp_node_t tcp_node){
 	char remote_buffer[INET_ADDRSTRLEN];
 	
 	ret = v_accept(tcp_node, socket, &addr);
-
+	if(ret<0){
+		printf("Accept Error %d\n", ret);
+		return;
+	}
 	inet_ntop(AF_INET, &addr, remote_buffer, INET_ADDRSTRLEN);
 	
-	printf("v_accept returned socket %d addr %s\n", socket, remote_buffer);
+	printf("v_accept returned socket %d addr %s\n", ret, remote_buffer);
 		
 	/*
 	ret = sscanf(line, "v_accept %d", &port);
@@ -169,9 +172,14 @@ void vv_accept(const char *line, tcp_node_t tcp_node){
 /* connects a socket to an address (active OPEN in the RFC)
 returns 0 on success or a negative number on failure */
 int v_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t port){
+	
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(connection == NULL)	
 		return -EBADF; 	 // = The file descriptor is not a valid index in the descriptor table.
+	
+	/* Make sure connection has a unique port before sending anything so that node can multiplex response */
+	if(!tcp_connection_get_local_port(connection))
+		tcp_node_assign_port(tcp_node, connection, tcp_node_next_port(tcp_node));
 	
 	int ret = tcp_connection_active_open(connection, tcp_connection_get_remote_ip(connection), port);
 	//int ret = tcp_connection_active_open(connection, addr.s_addr, port);
@@ -198,7 +206,7 @@ void vv_connect(const char *line, tcp_node_t tcp_node){
 	}	
 	//convert string ip address to real ip address
 	if(inet_pton(AF_INET, addr_buffer, &(sa.sin_addr)) <= 0){ // IPv4
-		printf("Bad ip address format -- cannot connect\n");
+		fprintf(stderr, "syntax error - could not parse ip address (usage: v_conect [socket] [ip address] [port])\n");
 		return;
 	}
 	

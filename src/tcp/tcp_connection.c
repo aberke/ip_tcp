@@ -162,15 +162,15 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		and we simply shouldn't call get_next until we're in the established state */
 
 	void* tcp_packet = tcp_packet_data->packet;
-
+	
 	/* check if there's any data, and if there is push it to the window,
 		but what does the seqnum even mean if the ACKs haven't been synchronized? */
 	memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
 	if(data){ 
+		printf("tcp_connection_receive_packet: received packet with data: \n %s\n", data->data);
 		uint32_t seqnum = tcp_seqnum(tcp_packet);	
 		recv_window_receive(connection->receive_window, data->data, data->length, seqnum);
 	}	
-
 	/* now check the bits */
 	if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
 		puts("received packet with syn_bit and ack_bit set");
@@ -485,8 +485,11 @@ uint32_t tcp_connection_get_last_seq_sent(tcp_connection_t connection){
 
 
 
-void tcp_connection_state_machine_transition(tcp_connection_t connection, state_e state){
-	state_machine_transition(connection->state_machine, state);
+int tcp_connection_state_machine_transition(tcp_connection_t connection, state_e state){
+	tcp_connection_print_state(connection);
+	int ret = state_machine_transition(connection->state_machine, state);
+	tcp_connection_print_state(connection);
+	return ret;
 }
 state_machine_t tcp_connection_get_state_machine(tcp_connection_t connection){
 	return connection->state_machine;
