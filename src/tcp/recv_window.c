@@ -98,7 +98,7 @@ _validate_seqnum
 	determines whether or not the sequence number is valid. 
 	
 returns
-	0  successful (valid seqnum)
+	>0 if successful (offset at which the first byte from data should be read)
 	-1 otherwise
 */
 static int _validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t length){
@@ -135,12 +135,14 @@ static int _validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t
 		if(recv_window->size == 0)
 			return -1;
 
-		else{ /* recv_window->size > 0 */
-			if(BETWEEN_WRAP(seqnum, window_min, window_max) || BETWEEN_WRAP((seqnum+length)%MAX_SEQNUM, window_min, window_max))
-				return 0;
-			else 
-				return -1;
-		}
+		else if (BETWEEN_WRAP(seqnum, window_min, window_max)) 
+			return 0;
+	
+		else if (BETWEEN_WRAP((seqnum+length)%MAX_SEQNUM, window_min, window_max))
+			return WRAP_DIFF(seqnum, window_min, MAX_SEQNUM);
+
+		else 
+			return -1;
 	}
 }
 
@@ -164,19 +166,22 @@ recv_window_receive
 	it will return -1.
 */
 void recv_window_receive(recv_window_t recv_window, void* data, uint32_t length, uint32_t seqnum){
-	if(_validate_seqnum(recv_window, seqnum, length) < 0){
+	int offset = _validate_seqnum(recv_window, seqnum, length);
+	if(offset<0){
 		LOG(("seqnum %d not accepted. left: %d\n", seqnum, recv_window->left)); 
 		return;
 	}
+	
 
 	uint32_t window_max = recv_window->left + recv_window->size;	
 
 	/* this will be what we store in the receiving buffer */
 	recv_window_chunk_t to_store = recv_window_chunk_init(data, length);
+	to_store->offset = offset;
 
 	uint32_t i, index;
 	recv_window_chunk_t stored;
-	for(i=0;i<length;i++){
+	for(i=offset;i<length;i++){
 
 		index = (seqnum + i) % (recv_window->size+1);
 		if (index==window_max)
@@ -192,7 +197,7 @@ void recv_window_receive(recv_window_t recv_window, void* data, uint32_t length,
 
 	/* if you didn't actually get placed into the array, then why
 		do we need you at all? */
-	if(i==0)
+	if(i==offset)
 		recv_window_chunk_destroy_total(&to_store,util_free);
 	
 	/* otherwise reset the length of the chunk that we're storing
@@ -200,19 +205,19 @@ void recv_window_receive(recv_window_t recv_window, void* data, uint32_t length,
 		receive more than was available in the window, so this 
 		might not be equal to the original length */
 	else	
-		to_store->length = i;
+		to_store->length = i-offset;
 
 	/* now check to see if this is the left-most piece of the window. 
 		If it is, then we can pass it along with all of the following
 		chunks that already in the window up to the application (ie
 		push them on the to_read queue) */
-	if(seqnum==recv_window->left){	
+	if(((seqnum+offset)%MAX_SEQNUM)==recv_window->left){	
 
 		queue_push(recv_window->to_read, to_store);
 		recv_window_chunk_t just_pushed = to_store;
 
 		uint32_t j;
-		for(j=0;j<recv_window->size;j++){
+		for(j=offset;j<recv_window->size;j++){
 			index = (seqnum+j) % (recv_window->size+1);
 			if((seqnum+j % MAX_SEQNUM)==window_max)
 				break;
