@@ -2,6 +2,7 @@
 #define __WINDOW_H__
 
 #include "utils.h"
+#include <inttypes.h>
 
 #define WINDOW_CHUNK_SIZE 1024
 #define MAX_SEQNUM ((unsigned)-1)
@@ -27,6 +28,7 @@ void send_window_push(send_window_t send_window, void* data, int length);
 void send_window_check_timers(send_window_t send_window);
 void send_window_ack(send_window_t send_window, int index);
 void send_window_resize(send_window_t send_window, int size);
+uint32_t send_window_get_next_seq(send_window_t send_window);
 send_window_chunk_t send_window_get_next(send_window_t send_window);
 
 void send_window_print(send_window_t send_window);
