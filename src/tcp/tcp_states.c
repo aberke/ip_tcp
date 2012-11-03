@@ -30,7 +30,7 @@ transitioning_t listen_next_state(transition_e t){
 				and handle establishing the rest of the connection.  
 				This is implemented in tcp_connection_LISTEN_to_SYN_RECEIVED
 			*/	
-			return transitioning_init(LISTEN, (action_f)tcp_connection_LISTEN_to_SYN_RECEIVED);
+			return transitioning_init(SYN_RECEIVED, (action_f)tcp_connection_LISTEN_to_SYN_RECEIVED);
 		case CLOSE:
 			/* delete TCB */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_LISTEN_to_CLOSED);

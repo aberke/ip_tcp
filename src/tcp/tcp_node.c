@@ -232,7 +232,6 @@ int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_c
 	
 	// dequeue from accept_queue of listening connection to get triple of information about new connection
 	accept_queue_triple_t triple = tcp_connection_accept_queue_dequeue(listening_connection);
-	
 	if(triple == NULL)
 		return -1;
 	
@@ -255,8 +254,8 @@ int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_c
 	tcp_connection_set_state(new_connection, LISTEN);
 	
 	// have connection transition from LISTEN to SYN_RECEIVED
-	tcp_connection_state_machine_transition(new_connection, SYN_RECEIVED);
-	
+	if(tcp_connection_state_machine_transition(new_connection, receiveSYN))
+		puts("Alex and Neil go debug: tcp_connection_state_machine_transition(new_connection, receiveSYN)) returned negative value in tcp_node_connection_accept");
 	// destroy triple
 	accept_queue_triple_destroy(triple);
 	
@@ -264,8 +263,10 @@ int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_c
 }
 // creates a new tcp_connection and properly places it in kernal table -- ports and ips initialized to 0
 tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
+
+	int socket = tcp_node_next_virt_socket(tcp_node);
 	// init new tcp_connection
-	tcp_connection_t connection = tcp_connection_init(tcp_node_next_virt_socket(tcp_node), tcp_node->to_send);
+	tcp_connection_t connection = tcp_connection_init(socket, tcp_node->to_send);
 
 	// place connection in array
 	_insert_connection_array(tcp_node, connection);
