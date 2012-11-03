@@ -25,8 +25,6 @@
 #define SHUTDOWN_BOTH	2
 
 // TODO remove the below #defines, replace by linking with API implementation 	
-#define v_accept(a,b,c)	-ENOTSUP
-//#define v_write(a,b,c)	-ENOTSUP
 #define v_read(a,b,c)	-ENOTSUP
 #define v_shutdown(a,b)	-ENOTSUP
 #define v_close(a)	-ENOTSUP
@@ -121,14 +119,54 @@ void vv_listen(const char *line, tcp_node_t tcp_node){
 	ret = v_listen(tcp_node, socket);
 	printf("listen result: %d\n", ret);
 }
+/* accept a requested connection (behave like unix socket’s accept)
+returns new socket handle on success or negative number on failure 
+int v accept(int socket, struct in addr *node); */
+int v_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
+	//NEED TO CHANGE TO CORRESPOND TO SPECS BUT FOR NOW just using normal api
 
-void vv_accept(const char *line, tcp_node_t tcp_node){
+	tcp_connection_t listening_connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	
+	// calls on the listening_connection to dequeue its triple and node creates new connection with information
+	// new socket is the socket assigned to that new connection.  The connection finishes its handshake to get to
+	// 	established state
+	int new_socket = tcp_node_connection_accept(tcp_node, listening_connection, addr);
+	return new_socket; 
+}
+/*
+accept/a port Open a socket, bind it to the given port, and start accepting connections on that
+port. Your driver must continute to accept other commands.
+*/
+void vv_accept(const char *line, tcp_node_t tcp_node){
+	//NEED TO CHANGE TO CORRESPOND TO SPECS BUT FOR NOW just working like normal api
+	int ret, socket;
+	// int port;
+	
+	ret = sscanf(line, "v_accept %d", &socket);
+	if(ret != 1){
+		fprintf(stderr, "syntax error (usage: v_accept [socket])\n");
+		return;
+	}
+	
+	struct in_addr addr;
+	char remote_buffer[INET_ADDRSTRLEN];
+	
+	ret = v_accept(tcp_node, socket, &addr);
+
+	inet_ntop(AF_INET, &addr, remote_buffer, INET_ADDRSTRLEN);
+	
+	printf("v_accept returned socket %d addr %s\n", socket, remote_buffer);
+		
+	/*
+	ret = sscanf(line, "v_accept %d", &port);
+	if(ret != 1){
+		fprintf(stderr, "syntax error (usage: v_accept [port])\n");
+		return;
+	}*/
 }
 /* connects a socket to an address (active OPEN in the RFC)
 returns 0 on success or a negative number on failure */
 int v_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t port){
-	printf("call to v_connect with socket %d\n", socket);
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(connection == NULL)	
 		return -EBADF; 	 // = The file descriptor is not a valid index in the descriptor table.

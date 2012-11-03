@@ -10,7 +10,16 @@
 
 /* for tcp_packet_data_t HA! */
 #include "ip_utils.h"
- 
+#include "tcp_utils.h"
+
+ // a tcp_connection in the listen state queues this triple on its accept_queue when
+// it receives a syn.  Nothing further happens until the user calls accept at which point
+// this triple is dequeued and a connection is initiated with this information
+// the connection should then set its state to listen and go through the LISTEN_to_SYN_RECEIVED transition
+typedef struct accept_queue_triple* accept_queue_triple_t;
+
+
+
 typedef struct tcp_connection* tcp_connection_t;  
 
 tcp_connection_t tcp_connection_init(int socket, bqueue_t *to_send);
@@ -20,6 +29,8 @@ uint16_t tcp_connection_get_remote_port(tcp_connection_t connection);
 uint16_t tcp_connection_get_local_port(tcp_connection_t connection);
 
 void tcp_connection_set_local_port(tcp_connection_t connection, uint16_t port);
+
+void tcp_connection_set_remote(tcp_connection_t connection, uint32_t remote_ip, uint16_t remote_port);
 
 uint32_t tcp_connection_get_remote_ip(tcp_connection_t connection);
 uint32_t tcp_connection_get_local_ip(tcp_connection_t connection);
@@ -46,15 +57,18 @@ void tcp_connection_recv_window_destroy(tcp_connection_t connection);
 
 void tcp_connection_accept_queue_init(tcp_connection_t connection);
 void tcp_connection_accept_queue_destroy(tcp_connection_t connection);
-
+void tcp_connection_accept_queue_connect(tcp_connection_t connection, accept_queue_triple_t triple);
+accept_queue_triple_t tcp_connection_accept_queue_dequeue(tcp_connection_t connection);
 
 /************* End of Functions regarding the accept queue ************************/
 
+void tcp_connection_set_last_seq_received(tcp_connection_t connection, uint32_t seq);
 uint32_t tcp_connection_get_last_seq_received(tcp_connection_t connection);
 uint32_t tcp_connection_get_last_seq_sent(tcp_connection_t connection);
 
+void tcp_connection_state_machine_transition(tcp_connection_t connection, state_e state);
 state_machine_t tcp_connection_get_state_machine(tcp_connection_t connection);
-
+void tcp_connection_set_state(tcp_connection_t connection, state_e state);
 void tcp_connection_print_state(tcp_connection_t connection);
 
 /****** Receiving packets **********/
@@ -86,7 +100,6 @@ int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* t
 
 /* for testing */
 void tcp_connection_print(tcp_connection_t connection);
-void tcp_connection_set_remote(tcp_connection_t connection, uint32_t remote_ip, uint16_t remote_port);
 
 
 #endif //__TCP_CONNECTION_H__

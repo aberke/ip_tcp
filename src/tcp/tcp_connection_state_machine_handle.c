@@ -320,7 +320,8 @@ int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection){
 	return 1;
 }
 int tcp_connection_SYN_RECEIVED_to_FIN_WAIT_1(tcp_connection_t connection){
-return 1;
+	
+	return 1;
 }
 
 

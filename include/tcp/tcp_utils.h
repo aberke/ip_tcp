@@ -73,7 +73,7 @@ struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_por
 // takes in data and wraps data in header with correct addresses.  
 // frees parameter data and mallocs new packet  -- sets data to point to new packet
 // returns size of new packet that data points to
-int tcp_utils_wrap_packet(void** data, int data_len, tcp_connection_t connection);
+//int tcp_utils_wrap_packet(void** data, int data_len, tcp_connection_t connection);
 
 //##TODO##
 // now defined in tcp_connection.c

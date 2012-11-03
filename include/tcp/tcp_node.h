@@ -6,6 +6,7 @@
 #include "tcp_connection.h"
 #include "ip_node.h"
 #include "list.h"
+#include "tcp_states.h"
 
 #define START_NUM_INTERFACES 20
 
@@ -90,6 +91,12 @@ int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int p
 
 // returns tcp_connection corresponding to socket
 tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int socket);
+
+/* For accept */
+// calls on the listening_connection to dequeue its triple and node creates new connection with information
+// returned int is the new socket assigned to that new connection.  The connection finishes its handshake to get to
+// 	established state
+int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_connection, struct in_addr *addr);
 
 /**** FOR TESTING *****/
 uint32_t tcp_node_get_interface_remote_ip(tcp_node_t tcp_node, int interface_num);
