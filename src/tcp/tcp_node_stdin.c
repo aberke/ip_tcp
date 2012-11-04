@@ -35,13 +35,15 @@ void sockets_cmd(const char *line, tcp_node_t tcp_node){
 
 int v_socket(tcp_node_t tcp_node){
 	tcp_connection_t connection = tcp_node_new_connection(tcp_node);
+	if(connection == NULL)
+		return -ENFILE; //The system limit on the total number of open files has been reached.
 	int socket = tcp_connection_get_socket(connection);
 	return socket;
 }
 
 void vv_socket(const char *line, tcp_node_t tcp_node){
 	int socket = v_socket(tcp_node);
-	printf("socket: %d\n", socket);	
+	printf("v_socket returned: %d\n", socket);	
 }
 
 /* binds a socket to a port

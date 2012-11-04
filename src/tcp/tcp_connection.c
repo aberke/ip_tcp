@@ -17,7 +17,6 @@
 
 #include "tcp_connection.h"
 #include "tcp_utils.h"
-#include "queue.h"
 #include "tcp_connection_state_machine_handle.h"
 
 
@@ -159,7 +158,7 @@ tcp_connection_handle_receive_packet
 */
 
 void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
-	puts("tcp_connection_receive_packet: received packet");
+	//puts("tcp_connection_receive_packet: received packet");
 	/* RFC 793: 
 		Although these examples do not show connection synchronization using data
 		-carrying segments, this is perfectly legitimate, so long as the receiving TCP
@@ -183,7 +182,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 											connection->local_addr.virt_ip,  // so the pseudo header will match this order
 											TCP_DATA);
 	if(checksum_result < 0){
-		puts("Bad checksum! what happened? not discarding");
+		//puts("Bad checksum! what happened? not discarding");
 		//return;
 	}
 	
@@ -199,7 +198,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	}	
 	/* now check the bits */
 	if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
-		puts("received packet with syn_bit and ack_bit set");
+		//puts("received packet with syn_bit and ack_bit set");
 		if(_validate_ack(connection, tcp_ack(tcp_packet)) < 0){
 			/* then you sent a syn with a seqnum that wasn't faithfully returned. 
 				what should we do? for now, let's discard */
@@ -217,7 +216,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	}
 
 	else if(tcp_syn_bit(tcp_packet)){
-		puts("received packet with syn_bit set");
+		//puts("received packet with syn_bit set");
 		/* got a SYN -- only valid changes are LISTEN_to_SYN_RECEIVED or SYN_SENT_to_SYN_RECEIVED */ 
 		
 		if(state_machine_get_state(connection->state_machine) == SYN_SENT){		

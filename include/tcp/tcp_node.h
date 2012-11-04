@@ -7,8 +7,8 @@
 #include "ip_node.h"
 #include "list.h"
 #include "tcp_states.h"
-
-#define START_NUM_INTERFACES 20
+/* set artificially low right now so we can make sure have no segfaults if ever reach limit */
+#define MAX_FILE_DESCRIPTORS 5 // per process limit commonly set to 1024 on mac and linux machines
 
 //// some helpful static globals
 #define IP_HEADER_SIZE sizeof(struct ip)

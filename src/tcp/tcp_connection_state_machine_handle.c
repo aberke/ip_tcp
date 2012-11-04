@@ -55,7 +55,7 @@ tcp_connection_transition_passive_open
 	transition
 */
 int tcp_connection_CLOSED_to_LISTEN(tcp_connection_t connection){
-	puts("CLOSED --> LISTEN");
+	//puts("CLOSED --> LISTEN");
 	tcp_connection_accept_queue_init(connection);
 	return 1;	
 }
@@ -67,7 +67,7 @@ tcp_connection_LISTEN_to_SYN_RECEIVED
 	send that off. The sending window should have been NULL before this point, if it
 	wasn't then it was init()ed somewhere else, which is probably a mistake */
 int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){	
-	puts("LISTEN --> SYN_RECEIVED");
+	//puts("LISTEN --> SYN_RECEIVED");
 
 	/* Must create new connection that will handle the rest of the connection establishment.  This connection will sit on
 		the queue rather than being inserted into the connections array of the node.*/
@@ -110,7 +110,6 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 /* this function should actually be called ONLY by tcp_node, because 
 	don't we need to first verify that this is a valid IP? */
 int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, uint16_t port){
-	printf("in tcp_connection_active_open.  remote_ip: %u\n", ip_addr);
 	tcp_connection_set_remote(connection, ip_addr, port);
 
 	state_machine_transition(connection->state_machine, activeOPEN);
@@ -123,7 +122,7 @@ tcp_connection_CLOSED_to_SYN_SENT
 	to actively connect to someone. 
 */
 int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection){
-	puts("CLOSED --> SYN_SENT");
+	//puts("CLOSED --> SYN_SENT");
 
 	/* first pick a syn to send */
 	uint32_t ISN = rand(); // only up to RAND_MAX, don't know what that is, but probably < SEQNUM_MAX
@@ -145,7 +144,7 @@ int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection){
 	return 1;
 }
 int tcp_connection_LISTEN_to_SYN_SENT(tcp_connection_t connection){
-	puts("LISTEN --> SYN_SENT");
+	//puts("LISTEN --> SYN_SENT");
 
 	// should we destroy the accept queue?  Like are we all done listening? -- lets check the RFC at some point...
 	tcp_connection_accept_queue_destroy(connection);
@@ -206,7 +205,7 @@ int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection){
 	return 1;
 }
 int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
-	puts("SYN_SENT --> ESTABLISHED");
+	//puts("SYN_SENT --> ESTABLISHED");
 
 	/* just got a SYN/ACK, so send back a ACK, and that's it */
 
@@ -222,7 +221,7 @@ int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
 	// load it up!
 	tcp_set_seq(header, connection->last_seq_sent + 1);
 	tcp_set_ack_bit(header);
-	printf("setting ack to connection->last_seq_receved+1 = %u\n", ((connection->last_seq_received)+1));
+	//printf("setting ack to connection->last_seq_receved+1 = %u\n", ((connection->last_seq_received)+1));
 	tcp_set_ack(header, ((connection->last_seq_received)+1));
 	//tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
 

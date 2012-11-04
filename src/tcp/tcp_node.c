@@ -121,9 +121,10 @@ struct tcp_node{
 	connection_virt_socket_keyed_t virt_socketToConnection;
 	connection_port_keyed_t portToConnection;
 	
-	// For now have silly way of making sure we don't repeat a virt_socket or port number.  TODO: FIX!!!!!
-	int virt_socket_count;	//TODO: Instead of increasing virt_socket by one at each new connection, create system of storing available socket Id's
-	int port_count;	//TODO: same as directly above, but with ports
+	// used to systematically keep track of available file descriptors/ports and to reuse them after socket closed
+	// each time need new unique socket/port, call dequeue and item is pointer to int to use as socket/port
+	queue_t sockets_available_queue;
+	queue_t ports_available_queue;
 };
 
 tcp_node_t tcp_node_init(iplist_t* links){
@@ -153,15 +154,29 @@ tcp_node_t tcp_node_init(iplist_t* links){
 	/************ Queues Created *****************/
 		
 	/*********** create kernal table  ************/
-	tcp_node->connection_array_size = START_NUM_INTERFACES;  
+	tcp_node->connection_array_size = MAX_FILE_DESCRIPTORS;  
 	tcp_node->num_connections = 0; // no connections at start
 	tcp_node->connections = (tcp_connection_t*)malloc(sizeof(tcp_connection_t)*(tcp_node->connection_array_size));
 	
 	tcp_node->virt_socketToConnection = NULL;
 	tcp_node->portToConnection = NULL;
 	
-	tcp_node->virt_socket_count = 0;
-	tcp_node->port_count = 0;
+	/* Initialize sockets/ports available queues */
+	queue_t sockets_available_queue = queue_init();
+	queue_t ports_available_queue = queue_init();
+	
+	queue_set_size(sockets_available_queue, MAX_FILE_DESCRIPTORS);
+	queue_set_size(ports_available_queue, MAX_FILE_DESCRIPTORS);
+	
+	uint32_t i;
+	for(i=0; i<MAX_FILE_DESCRIPTORS; i++){		
+		/* We're just queueing the integers we want to use as sockets/ports */
+		queue_push(sockets_available_queue, (void*)i);
+		queue_push(ports_available_queue, (void*)i);	
+	}
+	
+	tcp_node->sockets_available_queue = sockets_available_queue;
+	tcp_node->ports_available_queue = ports_available_queue;
 	/************ Kernal Table Created ***********/
 	
 	//// you're still running right? right
@@ -213,7 +228,10 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	bqueue_destroy(tcp_node->stdin_commands);
 	free(tcp_node->stdin_commands);
 	
-		
+	// destroy socket/port queues -- they just hold ints so i don't think we need to destroy each item inside
+	queue_destroy(&(tcp_node->sockets_available_queue));
+	queue_destroy(&(tcp_node->ports_available_queue));
+	
 	free(tcp_node);
 	tcp_node = NULL;
 }
@@ -241,6 +259,11 @@ int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_c
 	// create new connection which will be the accepted connection 
 	// -- function will insert it into kernal array and socket hashmap
 	tcp_connection_t new_connection = tcp_node_new_connection(tcp_node);
+	if(new_connection == NULL){
+		// reached limit MAX_FILE_DESCRIPTORS
+		accept_queue_triple_destroy(triple);
+		return -ENFILE; //The system limit on the total number of open files has been reached.
+	}
 	
 	// assign values from triple to that connection
 	tcp_connection_set_remote(new_connection, triple->remote_ip, triple->remote_port);
@@ -262,9 +285,13 @@ int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_c
 	return tcp_connection_get_socket(new_connection);
 }
 // creates a new tcp_connection and properly places it in kernal table -- ports and ips initialized to 0
+// returns NULL if reached limit MAX_FILE_DESCRIPTORS
 tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 
 	int socket = tcp_node_next_virt_socket(tcp_node);
+	if(socket<0) // reached limit MAX_FILE_DESCRIPTORS
+		return NULL;
+		
 	// init new tcp_connection
 	tcp_connection_t connection = tcp_connection_init(socket, tcp_node->to_send);
 
@@ -303,6 +330,9 @@ tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t p
 // returns 1 if port successfully assigned, 0 otherwise
 int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int port){
 	
+	if(tcp_node_port_unused(tcp_node, port)<0)
+		return -1; // port already in use
+		
 	// set connection's port
 	uint16_t uport = (uint16_t)port;
 	tcp_connection_set_local_port(connection, uport);
@@ -328,20 +358,18 @@ int tcp_node_port_unused(tcp_node_t tcp_node, int port){
 
 // returns next available, currently unused, port to bind or connect/accept a new tcp_connection with
 int tcp_node_next_port(tcp_node_t tcp_node){
-	int next_port = tcp_node->port_count + 1;
+	int next_port = (int)queue_pop(tcp_node->ports_available_queue);
 	
 	// check that next_port not already in use -- not already in hashmap	
 	while(!tcp_node_port_unused(tcp_node, next_port)){
-		next_port ++;
+		next_port = (int)queue_pop(tcp_node->ports_available_queue);
 	}
-	tcp_node->port_count = next_port;
 	return next_port;
 }
 
 // returns next available, currently unused, virtual socket file descriptor to initiate a new tcp_connection with
 int tcp_node_next_virt_socket(tcp_node_t tcp_node){
-	int next_socket = (tcp_node->virt_socket_count)+1;
-	tcp_node->virt_socket_count = next_socket;
+	int next_socket = (int)queue_pop(tcp_node->sockets_available_queue);
 	return next_socket;
 }
 /**************** End of functions that deal with Kernal Table *******************/
@@ -493,7 +521,7 @@ void tcp_node_invalid_port(tcp_node_t tcp_node, tcp_packet_data_t packet){
 
 /************************** Internal Functions Below ********************************************/
 
-// inserts connection in array of connections -- grows the array if necessary
+// inserts connection in array of connections -- sfd id is the index
 // returns number of connections in array
 static int _insert_connection_array(tcp_node_t tcp_node, tcp_connection_t connection){
 	
@@ -501,18 +529,7 @@ static int _insert_connection_array(tcp_node_t tcp_node, tcp_connection_t connec
 	int connection_array_size = tcp_node->connection_array_size;
 	
 	if(num_connections+1 > connection_array_size){
-		// need to create larger array of tcp_connections
-		tcp_connection_t* orig_connections = tcp_node->connections;
-		connection_array_size = connection_array_size*2;
-		tcp_connection_t* new_connections = (tcp_connection_t*)realloc(tcp_node->connections, connection_array_size*sizeof(tcp_connection_t));
-		// iterate through new array to put old function pointers into new array
-		int i;
-		for(i = 0; i<num_connections; i++){
-			new_connections[i] = orig_connections[i];
-		}
-		// set new array 
-		tcp_node->connections = new_connections;
-		tcp_node->connection_array_size = connection_array_size;
+		return -1; // reached max size
 	}
 	// insert new connection in array
 	tcp_node->connections[num_connections] = connection;

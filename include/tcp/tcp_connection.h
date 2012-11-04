@@ -11,6 +11,7 @@
 /* for tcp_packet_data_t HA! */
 #include "ip_utils.h"
 #include "tcp_utils.h"
+#include "queue.h"
 
  // a tcp_connection in the listen state queues this triple on its accept_queue when
 // it receives a syn.  Nothing further happens until the user calls accept at which point

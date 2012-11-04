@@ -124,10 +124,10 @@ ALEX:
 		
 	DEAL WITH ESTABLISHED STATE AND TEAR-DOWN	
 	fix states.c to deal with corner conditions
-	
-	perhaps connections array should be of fixed size?
-	ENFILE: The system limit on the total number of open files has been reached.
-	
+
+SET BACK TO 1024: in tcp_node.h:	
+/* set artificially low right now so we can make sure have no segfaults if ever reach limit */
+#define MAX_FILE_DESCRIPTORS 5 // per process limit commonly set to 1024 on mac and linux machines
 	
 alex's questions for neil:
 

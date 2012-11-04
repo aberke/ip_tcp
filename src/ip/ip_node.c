@@ -241,7 +241,7 @@ returns:
 int ip_node_read(ip_node_t ip_node, char* packet, int packet_size, uint32_t local_virt_ip, uint32_t remote_virt_ip){
 
 	packet[packet_size] = '\0';
-	printf("In ip_node_read.  TCP_DATA packet_size: %d, packet: \n%s\n", packet_size, packet);
+	//printf("In ip_node_read.  TCP_DATA packet_size: %d, packet: \n%s\n", packet_size, packet);
 
 	if(!ip_node->read_queue) 
 		return -1;
