@@ -8,10 +8,37 @@
 
 #include "tcp_utils.h"
 
+#define MAX_BUFFER_LEN 1024 // how big should this be?
+
 #define TCP_HEADER_SIZE sizeof(struct tcphdr);
 
 
 #define NO_OPTIONS_HEADER_LENGTH 5
+
+/* struct that tcp_node handles up with raw data for tcp_connection to handle sending
+	tcp_node creates a tcp_connection_to_send_data and queues it to tcp_connection's my_to_send queue 
+	tcp_connection reads these structures off its queue */
+struct tcp_connection_tosend_data{
+	int bytes; // length of data in bytes
+	char to_write[MAX_BUFFER_LEN];
+};
+
+tcp_connection_tosend_data_t tcp_connection_tosend_data_init(char* to_write, int bytes){
+
+	tcp_connection_tosend_data_t to_send = (tcp_connection_tosend_data_t)malloc(sizeof(struct tcp_connection_tosend_data));
+	
+	if(bytes > MAX_BUFFER_LEN)
+		bytes = MAX_BUFFER_LEN;
+	
+	to_send->bytes = bytes;
+	
+	memcpy(to_send->to_write, to_write, bytes);
+	
+	return to_send;
+}
+void tcp_connection_tosend_data_destroy(tcp_connection_tosend_data_t to_send){
+	free(to_send);
+}
 
 
 /* just encapsulates unwrapping the header. the reason this is its own

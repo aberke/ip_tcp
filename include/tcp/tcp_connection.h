@@ -59,6 +59,11 @@ void tcp_connection_recv_window_destroy(tcp_connection_t connection);
 
 /******* End of Window getting and setting and destroying functions *********/
 
+/*0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0 to_read Thread o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0*/
+
+// runs thread for tcp_connection to handle sending/reading and keeping track of its packets/acks
+void *_handle_read_send(void *tcpconnection);
+
 /************* Functions regarding the accept queue ************************/
 	/* The accept queue is initialized when the server goes into the listen state.  
 		Destroyed when leaves LISTEN state 
@@ -87,7 +92,7 @@ set_state directly on the connection
 state_machine_t tcp_connection_get_state_machine(tcp_connection_t connection);
 */
 
-int tcp_connection_state_machine_transition(tcp_connection_t connection, state_e state);
+int tcp_connection_state_machine_transition(tcp_connection_t connection, transition_e transition);
 state_e tcp_connection_get_state(tcp_connection_t connection);
 void tcp_connection_set_state(tcp_connection_t connection, state_e state);
 void tcp_connection_print_state(tcp_connection_t connection);

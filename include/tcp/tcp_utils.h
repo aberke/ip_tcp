@@ -22,6 +22,13 @@
 #define DEFAULT_CHUNK_SIZE 100
 #define RAND_ISN() rand()
 
+/* tcp_connection_tosend_data_t is what is loaded on and off each tcp_connection's my_to_send queue */
+typedef struct tcp_connection_tosend_data* tcp_connection_tosend_data_t;
+
+tcp_connection_tosend_data_t tcp_connection_tosend_data_init(char* to_write, int bytes);
+void tcp_connection_tosend_data_destroy(tcp_connection_tosend_data_t to_send);
+
+
 typedef struct tcp_socket_address{
 	uint32_t virt_ip;
 	uint16_t virt_port;

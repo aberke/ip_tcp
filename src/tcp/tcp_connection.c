@@ -14,10 +14,13 @@
 #include <errno.h>
 #include <netinet/tcp.h>
 #include <inttypes.h>
+#include <sys/time.h>
 
 #include "tcp_connection.h"
 #include "tcp_utils.h"
 #include "tcp_connection_state_machine_handle.h"
+
+#define SYN_TIMEOUT 2 //2 seconds at first, and doubles each time next syn_sent
 
 
 // a tcp_connection in the listen state queues this triple on its accept_queue when
@@ -71,9 +74,22 @@ struct tcp_connection{
 	   ack that we get back is valid */
 	uint32_t last_seq_received;
 	uint32_t last_seq_sent;	
-
+	
+	// keeping track of if need to fail connect attempt or retry
+	int syn_count;
+	time_t connect_accept_timer;
+	
 	// needs reference to the to_send queue in order to queue its packets
 	bqueue_t *to_send;	//--- tcp data for ip to send
+	// when tcp_node demultiplexes packets, gives packet to tcp_connection by placing packet on its my_to_read queue
+	bqueue_t *my_to_read; // holds tcp_packet_data_t's 
+	/* when tcp_node gets a send command, needs to give that command to correct tcp connection for connection
+		to handle appropriately, package, and send off to the shared to_send queue */
+	bqueue_t *my_to_send; // holds tcp_connection_tosend_data_t's that it needs to handle, package, and put on its to_send queue
+	
+	pthread_t read_send_thread; //has thread that handles the my_to_read queue and window timeouts in a loop
+
+	int running; //are we running still?  1 for true, 0 for false -- indicates to thread to shut down
 };
 
 tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
@@ -107,27 +123,69 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	connection->last_seq_sent 	  = -1;
 
 	state_machine_set_argument(state_machine, connection);		
-
+	
+	// init my_to_read queue
+	bqueue_t *my_to_read = (bqueue_t*) malloc(sizeof(bqueue_t));
+	bqueue_init(my_to_read);
+	connection->my_to_read = my_to_read;
+	// init my_to_send queue
+	bqueue_t *my_to_send = (bqueue_t*)malloc(sizeof(bqueue_t));
+	bqueue_init(my_to_send);
+	connection->my_to_send = my_to_send;
+	
+	connection->running = 1;
+	
+	//start read_thread
+	/* Initialize and set thread detached attribute */
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+		
+	int status = pthread_create(&(connection->read_send_thread), &attr, _handle_read_send, (void *)connection);
+    if (status){
+         printf("ERROR; return code from pthread_create() for _handle_read_ack is %d\n", status);
+         return 0;
+    }
+    pthread_attr_destroy(&attr);
+	
 	return connection;
 }
 
 void tcp_connection_destroy(tcp_connection_t connection){
-
+	
+	connection->running = 0;
+	
 	// destroy windows
 	if(connection->send_window)
 		send_window_destroy(&(connection->send_window));
 	if(connection->receive_window)
 		recv_window_destroy(&(connection->receive_window));
-
-	/*
-	tcp_connection_send_window_destroy(connection);
-	tcp_connection_recv_window_destroy(connection);
-	*/
 	
 	// destroy state machine
 	state_machine_destroy(&(connection->state_machine));
 	tcp_connection_accept_queue_destroy(connection);
-
+	
+	// cancel read_thread
+	int rc = pthread_join(connection->read_send_thread, NULL);
+	if (rc) {
+		printf("ERROR; return code from pthread_cancel() for tcp_connection of socket %d is %d\n", connection->socket_id, rc);
+		exit(-1);
+	}
+	
+	// take all packets off my_to_read queue and destroys queue
+	tcp_packet_data_t tcp_packet_data;
+	while(!bqueue_trydequeue(connection->my_to_read, (void**)&tcp_packet_data))
+		tcp_packet_data_destroy(tcp_packet_data);	
+	
+	bqueue_destroy(connection->my_to_read);
+		
+	// take all packets off my_to_send queue and destroys queue
+	tcp_connection_tosend_data_t to_send_data;
+	while(!bqueue_trydequeue(connection->my_to_send, (void**)&to_send_data))
+		tcp_connection_tosend_data_destroy(to_send_data);	
+	
+	bqueue_destroy(connection->my_to_send);
+					
 	free(connection);
 	connection = NULL;
 }
@@ -474,6 +532,45 @@ void tcp_connection_recv_window_destroy(tcp_connection_t connection){
 /******************* End of Window getting and setting functions *****************************************/
 /******************* End of Window getting and setting functions *****************************************/
 
+
+/*0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0 to_read Thread o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0*/
+
+// runs thread for tcp_connection to handle sending/reading and keeping track of its packets/acks
+void *_handle_read_send(void *tcpconnection){
+	
+	tcp_connection_t connection = (tcp_connection_t)tcpconnection;
+	time_t now; // keep track of time to compare to window timeouts and connections' connect_accept_timer
+
+	//runs the following thread:
+	while(connection->running){
+		//bqueue_dequeue(connection->my_to_read, .01);
+
+		gettimeofday(&now, NULL);
+		if(tcp_connection_get_state(connection)==SYN_SENT){	
+			//if(difftime(now, connection->connect_accept_timer) > 2**((connection->syn_count)-1)*SYN_TIMEOUT){
+				// we timeout connect or resend
+				if((connection->syn_count)>2){
+					// timeout connection attempt
+					connection->syn_count = 0;
+					tcp_connection_state_machine_transition(connection, CLOSE);
+					
+				// resend syn
+				//tcp_connection
+				//my syn ++;
+			}
+		}/*
+		if(established){
+			check_timers(my to_send);
+			chunk_t chunk;
+			while(chunk = get_next(my to_send)){
+				send(chunk);
+			}
+		}*/
+		// dequeue off my_to_send queue to send stuff
+	}
+	pthread_exit(NULL);
+}
+
 /************* Functions regarding the accept queue ************************/
 	/* The accept queue is initialized when the server goes into the listen state.  
 		Destroyed when leaves LISTEN state 
@@ -530,9 +627,9 @@ uint32_t tcp_connection_get_last_seq_sent(tcp_connection_t connection){
 
 
 
-int tcp_connection_state_machine_transition(tcp_connection_t connection, state_e state){
+int tcp_connection_state_machine_transition(tcp_connection_t connection, transition_e transition){
 	tcp_connection_print_state(connection);
-	int ret = state_machine_transition(connection->state_machine, state);
+	int ret = state_machine_transition(connection->state_machine, transition);
 	tcp_connection_print_state(connection);
 	return ret;
 }

@@ -3,14 +3,15 @@ Thread-heavy solution
 TCP_NODE
 -----------------------------
 
-struct file_descriptor{
-	bqueue_t read_queue;
-	int sfd;
-	tcp_connection_t connection;
-};
+has array of connections
+hashmap: virt_socketToConnection
+hashmap: portToConnection
 
-file_descriptor[] file_system;
-
+when demultiplexes a packet calls 
+	connection = portToConnection(port)
+	tcp_connection_queue_to_read(connection, packet)
+	
+	each tcp_connection runs a thread to handle packets on to_read
 
 threads will be handled within the TCP_CONNECTION itself and will not
 be known about anywhere
@@ -21,13 +22,18 @@ TCP_CONNECTION
 #include <sys/time.h>
 
 int syn_count=0;
+time_t connect_accept_timer;
+
 time_t now;
+
+runs the following thread:
+
 while(tcp_connection->running){
 	bqueue_dequeue(my to_read, .001);
 
 	gettimeofday(&now, NULL);
 	if(syn_sent){	
-		if(difftime(now, syn_timer) > 2**syn_count * SYN_TIME_ELAPSED){
+		if(difftime(now, connect_accept_timer) > 2**syn_count * SYN_TIMEOUT){
 			resend (my syn);
 			my syn ++;
 		}

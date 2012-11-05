@@ -28,8 +28,12 @@ tcp_packet_data_t tcp_packet_data_init(char* packet_data, int packet_data_size, 
 
 	/* did we talk about this ? how is this not seg-faulting, because it's trying
 		to copy MTU bytes from packet_data which is definitely NOT guaranteed to 
-		be that long?? */
-	memcpy(tcp_packet->packet, packet_data, MTU);
+		be that long?? */ //<-- want to write a quick min function?
+	int copy_over = packet_data_size;
+	if(MTU < packet_data_size)
+		copy_over = MTU;
+			
+	memcpy(tcp_packet->packet, packet_data, copy_over);
 	
 	return tcp_packet;
 }
