@@ -1,3 +1,47 @@
+Thread-heavy solution
+
+TCP_NODE
+-----------------------------
+
+struct file_descriptor{
+	bqueue_t read_queue;
+	int sfd;
+	tcp_connection_t connection;
+};
+
+file_descriptor[] file_system;
+
+
+threads will be handled within the TCP_CONNECTION itself and will not
+be known about anywhere
+
+
+TCP_CONNECTION
+------------------------------
+#include <sys/time.h>
+
+int syn_count=0;
+time_t now;
+while(tcp_connection->running){
+	bqueue_dequeue(my to_read, .001);
+
+	gettimeofday(&now, NULL);
+	if(syn_sent){	
+		if(difftime(now, syn_timer) > 2**syn_count * SYN_TIME_ELAPSED){
+			resend (my syn);
+			my syn ++;
+		}
+	}
+	if(established){
+		check_timers(my to_send);
+		chunk_t chunk;
+		while(chunk = get_next(my to_send)){
+			send(chunk);
+		}
+	}
+}
+
+
 LISTEN TO SYN_RECEIVED:
 	so when we receive a syn we need to create a new connection!  It is that connection that must set the 
 		seq_num in the received packet as its last_seq_received
