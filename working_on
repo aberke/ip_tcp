@@ -112,9 +112,14 @@ tcp_node runs ip_node in 3 separate threads that handle different responsibiliti
 	ip_command_thread: calls p_thread_cond_wait(&stdin_commands) and handles ip commands loaded on to queue
 	
 	
+checksum:
+	for this to work: only pass in tcp_connection_get_local_ip/remote_ip
+	only set remote/local_ip when first establish connection
+
 			
 NEIL:
 	write tcp checksum -- and write it for linux too!
+
 ALEX:
 
 	TODO:	
