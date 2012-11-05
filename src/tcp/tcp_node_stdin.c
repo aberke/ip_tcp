@@ -183,8 +183,16 @@ int v_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t por
 	if(!tcp_connection_get_local_port(connection))
 		tcp_node_assign_port(tcp_node, connection, tcp_node_next_port(tcp_node));
 	
+	//connection needs to know both its local and remote ip before sending
+	uint32_t local_ip = tcp_node_get_local_ip(tcp_node, (addr.s_addr));
+	
+	if(!local_ip)
+		return -ENETUNREACH;
+	
+	tcp_connection_set_remote_ip(connection, addr.s_addr);
+	tcp_connection_set_local_ip(connection, local_ip);
+	
 	int ret = tcp_connection_active_open(connection, tcp_connection_get_remote_ip(connection), port);
-	//int ret = tcp_connection_active_open(connection, addr.s_addr, port);
 	if(ret < 0)
 		return ret;	
 		
@@ -247,34 +255,10 @@ void vv_write(const char* line, tcp_node_t tcp_node){
 
 	free(to_write);
 }
-// takes given interfaces number and sets socket's remote ip to be that interface's remote ip
+// NO LONGER NEED
 void vv_set_addrByInterface(const char* line, tcp_node_t tcp_node){
-
-	int socket;
-	uint32_t remote_ip_addr, local_ip_addr;
-	int interface_num;
-	
-	if(sscanf(line, "v_set_addrByInterface %d %d", &socket, &interface_num) != 2){
-		fprintf(stderr, "syntax error (usage: v_set_addrByInterface [socket] [interface number])\n");
-		return;
-	}
-	
-	remote_ip_addr = tcp_node_get_interface_remote_ip(tcp_node, interface_num);
-	local_ip_addr = tcp_node_get_interface_local_ip(tcp_node, interface_num);
-	
-	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
-	if(!connection){
-		printf("No connection with socket %d\n", socket);
-		return;
-	}
-	tcp_connection_set_remote(connection, remote_ip_addr, 1);
-	tcp_connection_set_local_ip(connection, local_ip_addr);
+	puts("Whatup Neil you can now just call connect with the ip address -- we're not using this anymore");
 }
-
-
-	
-	
-	
 
 /*
 struct sendrecvfile_arg {

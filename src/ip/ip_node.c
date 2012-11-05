@@ -861,6 +861,36 @@ int ip_node_running(ip_node_t ip_node){
 	return ip_node->running;
 }
 
+// returns ip address of remote side of passed in remote ip
+// returns 0 if remote ip unreachable
+uint32_t tcp_ip_node_get_local_ip(ip_node_t ip_node, uint32_t remote_ip){
+	
+	// get next hop for sending message to send_to_vip
+	uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, remote_ip);
+	if(next_hop_addr == -1){
+		puts("couldn't find next_hop to remote_ip");
+		return 0;
+	}
+	
+	// get interface corresponding to next_hop_addr
+	interface_ip_keyed_t address_keyed;
+	HASH_FIND(hh, ip_node->addressToInterface, &next_hop_addr, sizeof(uint32_t), address_keyed);
+	if(!address_keyed){
+		return 0;
+	}
+	link_interface_t interface = address_keyed->interface;
+	
+	uint32_t local_ip = link_interface_get_local_virt_ip(interface);
+	
+	printf("local_ip = %u\n", local_ip);
+	
+	// just to double check:
+	if(!_is_local_ip(ip_node, local_ip))
+		return 0;
+		
+	return local_ip;
+}	
+
 /****** FOR TESTING *******/
 
 uint32_t ip_node_get_interface_local_ip(ip_node_t ip_node, int interface_id){

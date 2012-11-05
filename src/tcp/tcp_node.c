@@ -172,7 +172,7 @@ tcp_node_t tcp_node_init(iplist_t* links){
 	for(i=0; i<MAX_FILE_DESCRIPTORS; i++){		
 		/* We're just queueing the integers we want to use as sockets/ports */
 		queue_push(sockets_available_queue, (void*)i);
-		queue_push(ports_available_queue, (void*)i);	
+		queue_push(ports_available_queue, (void*)(i+1)); // tcp_connection with port = 0 signifies that port hasn't been set	
 	}
 	
 	tcp_node->sockets_available_queue = sockets_available_queue;
@@ -210,6 +210,7 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	//// NOW destroy all the connections
 	int i;
 	for(i=0; i<(tcp_node->num_connections); i++){
+		// use void tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection) instead??
 		tcp_connection_destroy(tcp_node->connections[i]);
 	}
 	// free the array itself
@@ -284,7 +285,7 @@ int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_c
 	
 	return tcp_connection_get_socket(new_connection);
 }
-// creates a new tcp_connection and properly places it in kernal table -- ports and ips initialized to 0
+// creates a new tcp_connection and properly places it in kernal table -- ports initialized to unique value, ip to 0
 // returns NULL if reached limit MAX_FILE_DESCRIPTORS
 tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 
@@ -294,6 +295,7 @@ tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 		
 	// init new tcp_connection
 	tcp_connection_t connection = tcp_connection_init(socket, tcp_node->to_send);
+	tcp_connection_set_local_port(connection, tcp_node_next_port(tcp_node));
 
 	// place connection in array
 	_insert_connection_array(tcp_node, connection);
@@ -304,7 +306,67 @@ tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 
 	return connection;
 }
+//needs to be called when close connection so that we can return port/socket to available queue for reuse
+void tcp_node_return_socket_to_kernal(tcp_node_t tcp_node, int socket){
+	
+	// return socket to available queue
+	queue_push_front(tcp_node->sockets_available_queue, (void*)socket);
+	
+	connection_virt_socket_keyed_t socket_keyed;
+	HASH_FIND_INT(tcp_node->virt_socketToConnection, &socket, socket_keyed);
+	if(!socket_keyed){
+		puts("Error: Alex Neil see tcp_node_close_connection -- this SHOULD be in table");
+		return;
+	}
 
+	HASH_DEL(tcp_node->virt_socketToConnection, socket_keyed);
+	connection_virt_socket_keyed_destroy(&socket_keyed);
+}
+
+//needs to be called when close connection so that we can return port/socket to available queue for reuse
+void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, int port){
+	
+	// port of zero means port wasn't actually set for that connection -- not a valid port
+	if(!port) 
+		return;
+		
+	// return port to available queue
+	if(port<=MAX_FILE_DESCRIPTORS)
+		queue_push_front(tcp_node->ports_available_queue, (void*)port);
+	
+	connection_port_keyed_t port_keyed;
+	HASH_FIND_INT(tcp_node->portToConnection, &port, port_keyed);
+	if(!port_keyed){
+		puts("Error: Alex Neil see tcp_node_close_connection -- this SHOULD be in table");
+		return;
+	}
+
+	HASH_DEL(tcp_node->portToConnection, port_keyed);
+	connection_port_keyed_destroy(&port_keyed);
+}
+
+//###TODO: FINISH LOGIC ####
+//needs to be called when close connection so that we can return port/socket to available queue for reuse
+// returns new number of connections in kernal
+int tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection){
+
+	//TODO: CONNECTION CLOSING LOGIG
+	
+	// return port and socket to available queue for reuse
+	int port = (int)tcp_connection_get_local_port(connection);
+	int socket = tcp_connection_get_socket(connection);
+	
+	// remove from kernal	
+	tcp_node_return_socket_to_kernal(tcp_node, socket);
+	tcp_node_return_port_to_kernal(tcp_node, port);
+	
+	tcp_connection_destroy(connection);
+		
+	tcp_node->connections[socket] = NULL;
+	tcp_node->num_connections = (tcp_node->num_connections) - 1;
+	
+	return tcp_node->num_connections;
+}
 // returns tcp_connection corresponding to socket
 tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int socket){
 	
@@ -330,8 +392,11 @@ tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t p
 // returns 1 if port successfully assigned, 0 otherwise
 int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int port){
 	
+	if(port<=0)
+		return 0; // 0 is not a valid port
+		
 	if(tcp_node_port_unused(tcp_node, port)<0)
-		return -1; // port already in use
+		return 0; // port already in use
 		
 	// set connection's port
 	uint16_t uport = (uint16_t)port;
@@ -638,6 +703,17 @@ static int _start_ip_threads(tcp_node_t tcp_node,
     pthread_attr_destroy(&attr);
 	return 1;
 }
+
+/*********** For use by tcp_node to reach ip_node items ****************/
+// returns ip address of remote side of passed in remote ip
+// returns 0 if remote ip unreachable
+uint32_t tcp_node_get_local_ip(tcp_node_t tcp_node, uint32_t remote_ip){
+	uint32_t local_ip = tcp_ip_node_get_local_ip(tcp_node->ip_node, remote_ip);
+	return local_ip;
+}
+
+
+
 /***************** FOR TESTING *********************/
 
 uint32_t tcp_node_get_interface_remote_ip(tcp_node_t tcp_node, int interface_num){

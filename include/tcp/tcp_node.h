@@ -48,12 +48,39 @@ void tcp_node_start(tcp_node_t tcp_node);
 int tcp_node_running(tcp_node_t tcp_node);
 /* ***************************** */
 
+/******** Commands Regarding Kernal **********************/
 
 // returns next available, currently unused, virtual socket file descriptor to initiate a new tcp_connection with
 int tcp_node_next_virt_socket(tcp_node_t tcp_node);
 // returns next available, currently unused, port to bind or connect/accept a new tcp_connection with
 int tcp_node_next_port(tcp_node_t tcp_node);
+// creates a new tcp_connection and properly places it in kernal table -- ports and ips initialized to 0
+tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node);
 
+
+//needs to be called when close connection so that we can return port/socket to available queue for reuse
+void tcp_node_return_socket_to_kernal(tcp_node_t tcp_node, int socket);
+
+//needs to be called when close connection so that we can return port/socket to available queue for reuse
+void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, int port);
+
+//###TODO: FINISH LOGIC ####
+// use in node destroy??? to close better?
+//needs to be called when close connection so that we can return port/socket to available queue for reuse
+// returns new number of connections in kernal
+int tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection);
+
+// returns 1 if the port is available for use, 0 if already in use
+int tcp_node_port_unused(tcp_node_t tcp_node, int port);
+
+// assigns port to tcp_connection and puts entry in hash table that hashes ports to tcp_connections
+// returns 1 if port successfully assigned, 0 otherwise
+int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int port);
+
+// returns tcp_connection corresponding to socket
+tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int socket);
+
+/******** End of Commands Regarding Kernal **********************/
 
 /************************************ These commands currently unused due to Neil's commands below being used instead ****/
 // puts command on to stdin_commands queue
@@ -79,24 +106,17 @@ void tcp_node_send(tcp_node_t tcp_node, char* to_write, int socket, uint32_t num
 /* ADDED BY NEIL : informs a remote connection of invalid port */
 void tcp_node_invalid_port(tcp_node_t tcp_node, tcp_packet_data_t packet);
 
-// creates a new tcp_connection and properly places it in kernal table -- ports and ips initialized to 0
-tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node);
-
-// returns 1 if the port is available for use, 0 if already in use
-int tcp_node_port_unused(tcp_node_t tcp_node, int port);
-
-// assigns port to tcp_connection and puts entry in hash table that hashes ports to tcp_connections
-// returns 1 if port successfully assigned, 0 otherwise
-int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int port);
-
-// returns tcp_connection corresponding to socket
-tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int socket);
 
 /* For accept */
 // calls on the listening_connection to dequeue its triple and node creates new connection with information
 // returned int is the new socket assigned to that new connection.  The connection finishes its handshake to get to
 // 	established state
 int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_connection, struct in_addr *addr);
+
+/*********** For use by tcp_node to reach ip_node items ****************/
+// returns ip address of remote side of passed in remote ip
+// returns 0 if remote ip unreachable
+uint32_t tcp_node_get_local_ip(tcp_node_t tcp_node, uint32_t remote_ip);
 
 /**** FOR TESTING *****/
 uint32_t tcp_node_get_interface_remote_ip(tcp_node_t tcp_node, int interface_num);

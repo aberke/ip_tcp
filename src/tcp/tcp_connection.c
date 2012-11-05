@@ -592,6 +592,9 @@ void tcp_connection_set_remote(tcp_connection_t connection, uint32_t remote, uin
 	connection->remote_addr.virt_ip = remote;
 	connection->remote_addr.virt_port = port;
 }
+void tcp_connection_set_remote_ip(tcp_connection_t connection, uint32_t remote_ip){
+	connection->remote_addr.virt_ip = remote_ip;
+}
 void tcp_connection_set_local_ip(tcp_connection_t connection, uint32_t ip){
 	connection->local_addr.virt_ip = ip;
 }

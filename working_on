@@ -114,7 +114,7 @@ tcp_node runs ip_node in 3 separate threads that handle different responsibiliti
 	
 			
 NEIL:
-	write tcp checksum
+	write tcp checksum -- and write it for linux too!
 ALEX:
 
 	TODO:	
