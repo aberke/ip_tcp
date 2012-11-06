@@ -76,7 +76,7 @@ struct tcp_connection{
 give to tcp_connection:
 
 	tcp_connection	
-		int ret_value; // return value for the calling tcp_api function
+		int api_ret; // return value for the calling tcp_api function
 		pthread_mutex_t api_mutex
 		pthread_cond_t api_cond
 		// now when a tcp_api function calls, it will lock the mutex, and wait on the api_cond for the 
@@ -627,6 +627,7 @@ void tcp_connection_accept_queue_destroy(tcp_connection_t connection){
 		return;
 		
 	// need to destroy each connection on the accept queue before destroying queue
+
 	accept_queue_data_t data = NULL;
 	while(!bqueue_trydequeue(q, (void**)&data)){
 		accept_queue_data_destroy(&data);

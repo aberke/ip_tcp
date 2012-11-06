@@ -11,13 +11,13 @@
 /* connects a socket to an address (active OPEN in the RFC)
 returns 0 on success or a negative number on failure */
 int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t port){
+
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(connection == NULL)	
 		return -EBADF; 	 // = The file descriptor is not a valid index in the descriptor table.
 	
 	tcp_connection_api_lock(connection);// make sure no one else is messing with the socket/connection
 
-	
 	/* Make sure connection has a unique port before sending anything so that node can multiplex response */
 	if(!tcp_connection_get_local_port(connection))
 		tcp_node_assign_port(tcp_node, connection, tcp_node_next_port(tcp_node));
@@ -103,6 +103,7 @@ int tcp_api_listen(tcp_node_t tcp_node, int socket){
 returns new socket handle on success or negative number on failure 
 int v accept(int socket, struct in addr *node); */
 int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
+
 	tcp_connection_t listening_connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(listening_connection == NULL)
 		return -EBADF;

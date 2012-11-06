@@ -9,7 +9,7 @@
 
 /* connects a socket to an address (active OPEN in the RFC)
 returns 0 on success or a negative number on failure */
-int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t port);
+void* tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t port);
 
 
 int tcp_api_socket(tcp_node_t tcp_node);
@@ -21,7 +21,7 @@ int tcp_api_listen(tcp_node_t tcp_node, int socket);
 /* accept a requested connection (behave like unix socket’s accept)
 returns new socket handle on success or negative number on failure 
 int v accept(int socket, struct in addr *node); */
-int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr);
+void* tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr);
 
 
 
