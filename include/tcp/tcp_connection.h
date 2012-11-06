@@ -13,19 +13,6 @@
 #include "tcp_utils.h"
 #include "queue.h"
 
- // a tcp_connection in the listen state queues this triple on its accept_queue when
-// it receives a syn.  Nothing further happens until the user calls accept at which point
-// this triple is dequeued and a connection is initiated with this information
-// the connection should then set its state to listen and go through the LISTEN_to_SYN_RECEIVED transition
-/*struct accept_queue_triple{
-	uint32_t remote_ip;
-	uint16_t remote_port;
-	uint32_t last_seq_received;
-};*/
-typedef struct accept_queue_triple* accept_queue_triple_t;
-accept_queue_triple_t accept_queue_triple_init(uint32_t remote_ip, uint16_t remote_port, uint32_t last_seq_received);
-void accept_queue_triple_destroy(accept_queue_triple_t triple);
-
 
 typedef struct tcp_connection* tcp_connection_t;  
 

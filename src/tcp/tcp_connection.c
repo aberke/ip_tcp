@@ -23,29 +23,6 @@
 #define SYN_TIMEOUT 2 //2 seconds at first, and doubles each time next syn_sent
 
 
-// a tcp_connection in the listen state queues this triple on its accept_queue when
-// it receives a syn.  Nothing further happens until the user calls accept at which point
-// this triple is dequeued and a connection is initiated with this information
-// the connection should then set its state to listen and go through the LISTEN_to_SYN_RECEIVED transition
-struct accept_queue_triple{
-	uint32_t remote_ip;
-	uint16_t remote_port;
-	uint32_t last_seq_received;
-};
-
-accept_queue_triple_t accept_queue_triple_init(uint32_t remote_ip, uint16_t remote_port, uint32_t last_seq_received){
-	accept_queue_triple_t triple = (accept_queue_triple_t)malloc(sizeof(struct accept_queue_triple));
-	triple->remote_ip = remote_ip;
-	triple->remote_port = remote_port;
-	triple->last_seq_received = last_seq_received;
-	
-	return triple;
-}
-
-void accept_queue_triple_destroy(accept_queue_triple_t triple){
-	free(triple);
-}
-
 
 
 // all those fancy things we defined here are now located in tcp_utils so they can also 
@@ -83,10 +60,7 @@ struct tcp_connection{
 	bqueue_t *to_send;	//--- tcp data for ip to send
 	// when tcp_node demultiplexes packets, gives packet to tcp_connection by placing packet on its my_to_read queue
 	bqueue_t *my_to_read; // holds tcp_packet_data_t's 
-	/* when tcp_node gets a send command, needs to give that command to correct tcp connection for connection
-		to handle appropriately, package, and send off to the shared to_send queue */
-	bqueue_t *my_to_send; // holds tcp_connection_tosend_data_t's that it needs to handle, package, and put on its to_send queue
-	
+
 	pthread_t read_send_thread; //has thread that handles the my_to_read queue and window timeouts in a loop
 
 	int running; //are we running still?  1 for true, 0 for false -- indicates to thread to shut down

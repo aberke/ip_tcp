@@ -36,12 +36,12 @@ void tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint1
 	uint32_t local_ip = tcp_node_get_local_ip(tcp_node, (addr.s_addr));
 	
 	if(!local_ip)
-		tcp_api_finish(connection, -ENETUNREACH);
+		tcp_connection_api_finish(connection, -ENETUNREACH);
 	
 	tcp_connection_set_remote_ip(connection, addr.s_addr);
 	tcp_connection_set_local_ip(connection, local_ip);
 	
-	int ret = tcp_connection_active_open(connection, tcp_connection_get_remote_ip(connection), port);
+	tcp_connection_active_open(connection, tcp_connection_get_remote_ip(connection), port);
 }
 // called by v_socket	
 void tcp_api_socket(tcp_node_t tcp_node){
