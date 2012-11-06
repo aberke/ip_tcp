@@ -611,17 +611,6 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 		return;
 	}
 
-	/* validating the checksum happens in handle_receive_packet in tcp_connection,
-		because it's dependent on the ip of the sender/receiver, and why does the
-		node care if its gonna get discarded 
-	
-	if(tcp_utils_validate_checksum(tcp_packet->packet) < 0){
-		puts("Bad checksum -- discarding packet");
-		free(tcp_packet);
-		return;
-	}
-	*/
-		
 	uint16_t dest_port   = tcp_dest_port(tcp_packet->packet);
 
 	tcp_connection_t connection = tcp_node_get_connection_by_port(tcp_node, dest_port);
@@ -630,8 +619,8 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 		free(tcp_packet);
 		return;
 	}
-
-	tcp_connection_handle_receive_packet(connection, tcp_packet);
+	// put it on that connection's my_to_read queue
+	tcp_connection_queue_to_read(connection, tcp_packet);
 }
 
 

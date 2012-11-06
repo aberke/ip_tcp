@@ -77,7 +77,7 @@ struct tcp_connection{
 	
 	// keeping track of if need to fail connect attempt or retry
 	int syn_count;
-	time_t connect_accept_timer;
+	struct timeval connect_accept_timer;
 	
 	// needs reference to the to_send queue in order to queue its packets
 	bqueue_t *to_send;	//--- tcp data for ip to send
@@ -205,6 +205,17 @@ int _validate_ack(tcp_connection_t connection, uint32_t ack){
 
 	return 0;
 }
+/* Function for tcp_node to call to place a packet on this connection's
+	my_to_read queue for this connection to handle in its _handle_read_send thread 
+	returns 1 on success, 0 on failure */
+int tcp_connection_queue_to_read(tcp_connection_t connection, tcp_packet_data_t tcp_packet){
+	
+	if(bqueue_enqueue(connection->my_to_send, tcp_packet))
+		return 0;
+
+	return 1;
+}
+	
 
 /*
 tcp_connection_handle_receive_packet
@@ -216,7 +227,7 @@ tcp_connection_handle_receive_packet
 */
 
 void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
-	//puts("tcp_connection_receive_packet: received packet");
+	puts("tcp_connection_receive_packet: received packet");
 	/* RFC 793: 
 		Although these examples do not show connection synchronization using data
 		-carrying segments, this is perfectly legitimate, so long as the receiving TCP
@@ -539,34 +550,48 @@ void tcp_connection_recv_window_destroy(tcp_connection_t connection){
 void *_handle_read_send(void *tcpconnection){
 	
 	tcp_connection_t connection = (tcp_connection_t)tcpconnection;
-	time_t now; // keep track of time to compare to window timeouts and connections' connect_accept_timer
 
-	//runs the following thread:
-	while(connection->running){
-		//bqueue_dequeue(connection->my_to_read, .01);
+	struct timespec wait_cond;	
+	struct timeval now;	// keep track of time to compare to window timeouts and connections' connect_accept_timer
+	void* packet;
+	int ret;
 
-		gettimeofday(&now, NULL);
+	while(connection->running){	
+		gettimeofday(&now, NULL);	
+		wait_cond.tv_sec = now.tv_sec+PTHREAD_COND_TIMEOUT_SEC;
+		wait_cond.tv_nsec = 1000*now.tv_usec+PTHREAD_COND_TIMEOUT_NSEC;
+		
+		ret = bqueue_timed_dequeue_abs(connection->my_to_read, &packet, &wait_cond);
+		if (ret != 0) 
+			/* should probably check at this point WHY we failed (for instance perhaps the queue
+				was destroyed */
+			continue;
+		
+		//handle to read packet
+		
+		
 		if(tcp_connection_get_state(connection)==SYN_SENT){	
-			//if(difftime(now, connection->connect_accept_timer) > 2**((connection->syn_count)-1)*SYN_TIMEOUT){
+			if(difftime(now, connection->connect_accept_timer) > (1 << ((connection->syn_count)-1))*SYN_TIMEOUT){
 				// we timeout connect or resend
 				if((connection->syn_count)>2){
 					// timeout connection attempt
 					connection->syn_count = 0;
 					tcp_connection_state_machine_transition(connection, CLOSE);
-					
-				// resend syn
-				//tcp_connection
-				//my syn ++;
+				}
+				else{	
+					// resend syn
+					tcp_connection_send_syn(connection);
+					connection->syn_count = connection->syn_count+1;
+				}
 			}
 		}/*
-		if(established){
+		else if(tcp_connection_get_state(connection)==ESTABLISHED){
 			check_timers(my to_send);
 			chunk_t chunk;
 			while(chunk = get_next(my to_send)){
 				send(chunk);
 			}
 		}*/
-		// dequeue off my_to_send queue to send stuff
 	}
 	pthread_exit(NULL);
 }

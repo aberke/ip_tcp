@@ -98,6 +98,12 @@ void tcp_connection_set_state(tcp_connection_t connection, state_e state);
 void tcp_connection_print_state(tcp_connection_t connection);
 
 /****** Receiving packets **********/
+
+/* Function for tcp_node to call to place a packet on this connection's
+	my_to_read queue for this connection to handle in its _handle_read_send thread 
+	returns 1 on success, 0 on failure */
+int tcp_connection_queue_to_read(tcp_connection_t connection, tcp_packet_data_t tcp_packet);
+
 void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t packet);
 /****** End of Receiving Packets **********/
 //////////////////////////////////////////////////////////////////////////////////////

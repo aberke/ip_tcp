@@ -116,30 +116,42 @@ int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, ui
 
 	return 1;
 }
-/*
-tcp_connection_CLOSED_to_SYN_SENT 
-	should handle sending the SYN when a connection is actively opened, ie trying
-	to actively connect to someone. 
-*/
-int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection){
-	//puts("CLOSED --> SYN_SENT");
+/* helper to CLOSED_to_SYN_SENT as well as in the _handle_read_write thread for resending syn */
+int tcp_connection_send_syn(tcp_connection_t connection){
 
-	/* first pick a syn to send */
-	uint32_t ISN = rand(); // only up to RAND_MAX, don't know what that is, but probably < SEQNUM_MAX
-
-	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
+	//Note: Window already initialized with connection->last_seq_sent when we transitioned from CLOSED_to_SYN_SENT
 
 	/* now init the packet */
 	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0);
 	
 	/* fill the syn, and set the seqnum */
 	tcp_set_syn_bit(header);
-	tcp_set_seq(header, ISN);
-	connection->last_seq_sent = ISN;
-
+	tcp_set_seq(header, connection->last_seq_sent);
+	
+	// set time of when we're sending off syn
+	gettimeofday(&(connection->connect_accept_timer), NULL);
+	
 	/*  that should be good? send it off. Note: NULL because I'm assuming there's
 		to send when initializing a connection, but that's not necessarily true */
 	tcp_wrap_packet_send(connection, header, NULL, 0);
+	return 1;
+}	
+
+
+/*
+tcp_connection_CLOSED_to_SYN_SENT 
+	should handle sending the SYN when a connection is actively opened, ie trying
+	to actively connect to someone. 
+*/
+int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection){
+	
+	/* first pick a syn to send */
+	uint32_t ISN = rand(); // only up to RAND_MAX, don't know what that is, but probably < SEQNUM_MAX	
+	connection->last_seq_sent = ISN; //seq for syn about to be sent
+	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
+
+	connection->syn_count = 1;
+	tcp_connection_send_syn(connection);
 
 	return 1;
 }

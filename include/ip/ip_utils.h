@@ -13,6 +13,10 @@
 #define ROUTING_INFO_HEADER_SIZE 4
 #define MTU (UDP_PACKET_MAX_SIZE - IP_HEADER_SIZE)
 
+
+#define PTHREAD_COND_TIMEOUT_NSEC 5000000
+#define PTHREAD_COND_TIMEOUT_SEC 1 //WAY TOO LONG RIGHT??
+
 /****** Structs/Functions for tcp_packet **************************/
 
 // data type that to_send and to_read queues will store (ie queue and dequeue) -- need vip's associated with packet

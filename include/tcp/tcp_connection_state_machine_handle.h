@@ -26,6 +26,9 @@ int tcp_connection_LISTEN_to_SYN_SENT(tcp_connection_t connection);
 int tcp_connection_LISTEN_to_CLOSED(tcp_connection_t connection);	
 int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection);	
 
+/* helper to CLOSED_to_SYN_SENT as well as in the _handle_read_write thread for resending syn */
+int tcp_connection_send_syn(tcp_connection_t connection);
+
 int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection);
 int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection);
 int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection);
