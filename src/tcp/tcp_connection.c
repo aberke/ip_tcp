@@ -95,8 +95,7 @@ int tcp_connection_get_api_ret(tcp_connection_t connection){
 	return connection->api_ret;
 }
 		
-// calls pthread_cond_signal(api_cond) so that the waiting tcp_api function can stop waiting and take a look at the 
-// return value		
+/* calls pthread_cond_signal(api_cond) so that the waiting tcp_api function can stop waiting and take a look at the return value		
 tcp_connection_api_signal(connection); 
 */
 void tcp_connection_api_signal(tcp_connection_t connection, int ret){
@@ -228,7 +227,7 @@ int _validate_ack(tcp_connection_t connection, uint32_t ack){
 	returns 1 on success, 0 on failure */
 int tcp_connection_queue_to_read(tcp_connection_t connection, tcp_packet_data_t tcp_packet){
 	
-	if(bqueue_enqueue(connection->my_to_send, tcp_packet))
+	if(bqueue_enqueue(connection->my_to_read, tcp_packet))
 		return 0;
 
 	return 1;
@@ -333,7 +332,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		
 			// listening connection just reset its remote/local ip with where this packet came from
 			// so this is what the new connection should be initialized with
-			tcp_connection_handle_syn(tcp_connection_get_local_ip(connection),
+			tcp_connection_handle_syn(connection, tcp_connection_get_local_ip(connection),
 										tcp_connection_get_remote_ip(connection), 
 										tcp_source_port(tcp_packet), 
 										tcp_seqnum(tcp_packet));	
@@ -634,38 +633,33 @@ void *_handle_read_send(void *tcpconnection){
 		Destroyed when leaves LISTEN state 
 		Each time a syn is received, a new tcp_connection is created in the SYN_RECEIVED state and queued */
 
-void tcp_connection_accept_queue_init(tcp_connection_t connection){
-	queue_t accept_queue = queue_init();
-	queue_set_size(accept_queue, ACCEPT_QUEUE_DEFAULT_SIZE);
-	connection->accept_queue = accept_queue;
-}
 
 void tcp_connection_accept_queue_destroy(tcp_connection_t connection){
 
-	bqueue_t q = connection->accept_queue;
-	if(!q)
+	bqueue_t *q = connection->accept_queue;
+	if(q==NULL)
 		return;
 		
 	// need to destroy each connection on the accept queue before destroying queue
-	tcp_connection_t connection = NULL;
-	while(!bqueue_trydequeue(q, connection){
-		tcp_state_machine_transition(connection, CLOSE); //connection will either be in SYN_RECEIVED or ESTABLISHED
-		tcp_connection_destroy(connection);
+	tcp_connection_t c = NULL;
+	while(!bqueue_trydequeue(q, (void**)&c)){
+		tcp_connection_state_machine_transition(c, CLOSE); //connection will either be in SYN_RECEIVED or ESTABLISHED
+		tcp_connection_destroy(c);
 	}
 	bqueue_destroy(q);
 	connection->accept_queue = NULL;
 }
 
-void tcp_connection_accept_queue_connect(tcp_connection_t connection, accept_queue_triple_t triple){
-	queue_t q = connection->accept_queue;
-	queue_push(q, (void*)triple);
-}
 
 // return popped triple -- null if error in dequeue
 accept_queue_data_t tcp_connection_accept_queue_dequeue(tcp_connection_t connection){
-	queue_t q = connection->accept_queue;
-	accept_queue_triple_t data;
-	int ret = bqueue_dequeue(q, &data);
+	bqueue_t *q = connection->accept_queue;
+	if(q==NULL){
+		puts("Error in tcp_connection_accept_queue_dequeue: SEE CODE");
+		return NULL;
+	}
+	accept_queue_data_t data;
+	int ret = bqueue_dequeue(q, (void**)&data);
 	if(ret<0)
 		return NULL;
 	return data;

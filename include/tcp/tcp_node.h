@@ -3,6 +3,7 @@
 #define __TCP_NODE_H__
 
 #include <inttypes.h>
+#include "tcp_utils.h"
 #include "tcp_connection.h"
 #include "ip_node.h"
 #include "list.h"

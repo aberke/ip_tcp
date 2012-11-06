@@ -4,7 +4,6 @@
 #include <time.h>
 #include <sys/time.h>
 
-#include "tcp_utils.h"
 #include "tcp_node_stdin.h"
 #include "util/utils.h"
 #include "util/list.h"
@@ -245,7 +244,7 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 		return NULL; // means there was an error in dequeueing -- was accept_queue destroyed?
 	
 	// fill struct in_addr
-	addr->s_addr = data->remote_ip;
+	addr->s_addr = accept_queue_data_get_remote_ip(data);
 	
 	// create new connection which will be the accepted connection 
 	// -- function will insert it into kernal array and socket hashmap
@@ -256,18 +255,13 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 		return NULL; 
 	}
 	
+	// assign values from triple to that connection (tcp_node_new_connection assigned it a unique port)
+	tcp_connection_set_local_ip(new_connection, accept_queue_data_get_local_ip(data));
+	tcp_connection_set_remote(new_connection, accept_queue_data_get_remote_ip(data), accept_queue_data_get_remote_port(data));
+	tcp_connection_set_last_seq_received(new_connection, accept_queue_data_get_seq(data));
 	
-	// assign values from triple to that connection
-	tcp_connection_set_local_ip(new_connection, data->local_ip);
-	tcp_connection_set_remote(new_connection, data->remote_ip, data->remote_port);
-	tcp_connection_set_last_seq_received(new_connection, data->last_seq_received);
-	
-	// destroy triple
+	// destroy data -- all done with it
 	accept_queue_data_destroy(data);
-	// assign new unique port to new_connection
-	
-	int port = tcp_node_next_port(tcp_node);
-	
 	
 	return new_connection;
 }

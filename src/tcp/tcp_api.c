@@ -24,9 +24,6 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16
 	mtx = tcp_connection_get_api_mutex(connection);
 	pthread_mutex_lock(&mtx);
 	
-	/* Set api_finish for connection to call once connect should return */
-	tcp_connection_set_api_function(connection, (action_f)tcp_api_connect_finish);
-	
 	/* Make sure connection has a unique port before sending anything so that node can multiplex response */
 	if(!tcp_connection_get_local_port(connection))
 		tcp_node_assign_port(tcp_node, connection, tcp_node_next_port(tcp_node));
@@ -43,7 +40,7 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16
 	tcp_connection_active_open(connection, tcp_connection_get_remote_ip(connection), port);
 	
 	/* Now wait until connection ESTABLISHED or timed out -- ret value will indicate */
-	pthread_cond_wait(&cond, &mutex);
+	pthread_cond_wait(&cond, &mtx);
 	/* After we return from that get ret value and return */
 	int ret = tcp_connection_get_api_ret(connection); // should be 0 if successful
 	
@@ -111,11 +108,6 @@ int tcp_api_listen(tcp_node_t tcp_node, int socket){
 	port = (int)tcp_connection_get_local_port(connection);
 	
 	return port; // returns 0 on success
-}
-
-/* called as the tcp_connection_api_function */
-int tcp_api_accept_help(pthread_cond_t accept_cond, int ret){
-	pthread_cond_signal(&accept_cond);
 }	
 
 /* accept a requested connection (behave like unix socket’s accept)
@@ -133,7 +125,7 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 
 	/* Lock up api on this connection -- BLOCK  -- really we don't want to 
 		be able to call this if another api call in process */
-	mtx_listening = tcp_connection_get_api_mutex(connection);
+	mtx_listening = tcp_connection_get_api_mutex(listening_connection);
 	pthread_mutex_lock(&mtx_listening);
 	
 	/* listening connection must actually be listening */
@@ -164,11 +156,11 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 	/* Now wait until connection ESTABLISHED 
 		when established connection should call tcp_api_accept_help which will signal the accept_cond */
 	pthread_cond_wait( &cond_connecting, &mtx_connecting);
-	int ret = tcp_connectiong_get_api_ret(new_connection); // if successful = new_connection->socket_id;
+	int ret = tcp_connection_get_api_ret(new_connection); // if successful = new_connection->socket_id;
 	/* Our connection has been established! 
 	TODO:HANDLE bad ret value */
 	pthread_mutex_unlock(&mtx_connecting);
-	pthread_mutex_unlock(mtx_listening);
+	pthread_mutex_unlock(&mtx_listening);
 	
 	return ret;	
  

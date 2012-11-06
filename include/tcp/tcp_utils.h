@@ -3,7 +3,6 @@
 #define __TCP_UTILS_H__
 
 #include <netinet/tcp.h>
-#include "tcp_connection.h"
 
 #include "utils.h"
 #include "ip_utils.h" // tcp_packet_data_t and its associated functions defined there
@@ -33,6 +32,14 @@ struct accept_queue_data{
 	uint32_t last_seq_received;
 };*/
 typedef struct accept_queue_data* accept_queue_data_t;
+accept_queue_data_t accept_queue_data_init(uint32_t local_ip,uint32_t remote_ip,uint16_t remote_port,uint32_t last_seq_received);
+void accept_queue_data_destroy(accept_queue_data_t data);
+/* Getting functions for accept_queue_data_t */
+uint32_t accept_queue_data_get_local_ip(accept_queue_data_t data);
+uint32_t accept_queue_data_get_remote_ip(accept_queue_data_t data);
+uint16_t accept_queue_data_get_remote_port(accept_queue_data_t data);
+uint32_t accept_queue_data_get_seq(accept_queue_data_t data);
+
 
 /* tcp_connection_tosend_data_t is what is loaded on and off each tcp_connection's my_to_send queue */
 typedef struct tcp_connection_tosend_data* tcp_connection_tosend_data_t;

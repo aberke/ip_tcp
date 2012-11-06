@@ -247,14 +247,15 @@ int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
 	tcp_wrap_packet_send(connection, header, NULL, 0);
 	
 	/* We can return from connect with success! */
-	tcp_connection_api_finish(connection, 0); // returns 0 on success
+	tcp_connection_api_signal(connection, 0); //sets api_ret to 0 for success
 	
 	return 1;
 }
 
 int tcp_connection_SYN_RECEIVED_to_ESTABLISHED(tcp_connection_t connection){
-
-	
+	puts("SYN_RECEIVED->ESTABLISHED");
+	//signal successfully tcp_api_accept to successfully return
+	tcp_connection_api_signal(connection, tcp_connection_get_socket(connection)); 
 
 	return 1;
 }
@@ -341,7 +342,7 @@ int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection){
 	send_window_destroy(&(connection->send_window));
 	recv_window_destroy(&(connection->receive_window));
 	
-	tcp_connection_api_finish(conneciton, -ETIMEDOUT); // return from connect() api call with timeout error
+	tcp_connection_api_signal(connection, -ETIMEDOUT); // return from connect() api call with timeout error
 	
 	/* you're just closing up, there's nothing to do */
 	return 1;
