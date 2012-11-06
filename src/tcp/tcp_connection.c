@@ -579,6 +579,7 @@ void *_handle_read_send(void *tcpconnection){
 
 	struct timespec wait_cond;	
 	struct timeval now;	// keep track of time to compare to window timeouts and connections' connect_accept_timer
+	float time_elapsed;
 	void* packet;
 	int ret;
 
@@ -597,7 +598,10 @@ void *_handle_read_send(void *tcpconnection){
 		tcp_connection_handle_receive_packet(connection, packet);
 		
 		if(tcp_connection_get_state(connection)==SYN_SENT){	
-			if(difftime(now, connection->connect_accept_timer) > (1 << ((connection->syn_count)-1))*SYN_TIMEOUT){
+			// delta seconds + delta milliseconds/1000
+			time_elapsed = now.tv_usec - connection->connect_accept_timer.tv_usec;
+			time_elapsed += (now.tv_usec - connection->connect_accept_timer.tv_usec)/1000.0;
+			if(time_elapsed > (1 << ((connection->syn_count)-1))*SYN_TIMEOUT){
 				// we timeout connect or resend
 				if((connection->syn_count)>2){
 					// timeout connection attempt
@@ -634,9 +638,10 @@ void tcp_connection_accept_queue_destroy(tcp_connection_t connection){
 		return;
 		
 	// need to destroy each connection on the accept queue before destroying queue
-	accept_queue_data_t data;
+
+	accept_queue_data_t data = NULL;
 	while(!bqueue_trydequeue(q, (void**)&data)){
-		tcp_accept_data_destroy(&data);
+		accept_queue_data_destroy(&data);
 	}
 	bqueue_destroy(q);
 	connection->accept_queue = NULL;
