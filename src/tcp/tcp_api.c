@@ -22,6 +22,7 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16
 	
 	/* Lock up api on this connection -- BLOCK */
 	mtx = tcp_connection_get_api_mutex(connection);
+	cond = tcp_connection_get_api_cond(connection);
 	pthread_mutex_lock(&mtx);
 	
 	/* Make sure connection has a unique port before sending anything so that node can multiplex response */
