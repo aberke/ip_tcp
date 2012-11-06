@@ -46,12 +46,8 @@ void accept_queue_triple_destroy(accept_queue_triple_t triple){
 	free(triple);
 }
 
-
-
 // all those fancy things we defined here are now located in tcp_utils so they can also 
 // be shared with tcp_connection_state_handle
-
-
 
 struct tcp_connection{
 	int socket_id;	// also serves as index of tcp_connection in tcp_node's tcp_connections array
