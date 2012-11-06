@@ -238,13 +238,11 @@ void tcp_node_destroy(tcp_node_t tcp_node){
    - Fills addr with ip address information from dequeued triple*/
 tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_connection, struct in_addr *addr){
 	
-	if(tcp_connection_get_state(listening_connection) != LISTEN)
-		return -EINVAL; //Socket is not listening for connections, or addrlen is invalid (e.g., is negative).
-	
 	// dequeue from accept_queue of listening connection to get triple of information about new connection
+	/* THIS CALL IS BLOCKING  -- since the accept queue is a bqueue_t */
 	accept_queue_data_t data = tcp_connection_accept_queue_dequeue(listening_connection);
-	if(triple == NULL)
-		return -1;
+	if(data == NULL)
+		return NULL; // means there was an error in dequeueing -- was accept_queue destroyed?
 	
 	// fill struct in_addr
 	addr->s_addr = data->remote_ip;
@@ -253,9 +251,9 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 	// -- function will insert it into kernal array and socket hashmap
 	tcp_connection_t new_connection = tcp_node_new_connection(tcp_node);
 	if(new_connection == NULL){
-		// reached limit MAX_FILE_DESCRIPTORS
-		accept_queue_triple_destroy(triple);
-		return -ENFILE; //The system limit on the total number of open files has been reached.
+		// reached limit MAX_FILE_DESCRIPTORS?
+		accept_queue_data_destroy(data);
+		return NULL; 
 	}
 	
 	
@@ -269,7 +267,7 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 	// assign new unique port to new_connection
 	
 	int port = tcp_node_next_port(tcp_node);
-	tcp_node_assign_port(tcp_node, new_connection, port);
+	
 	
 	return new_connection;
 }
@@ -284,12 +282,12 @@ tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 		
 	// init new tcp_connection
 	tcp_connection_t connection = tcp_connection_init(socket, tcp_node->to_send);
-	tcp_connection_set_local_port(connection, tcp_node_next_port(tcp_node));
-
 	// place connection in array
 	_insert_connection_array(tcp_node, connection);
-	
 	// place connection in hashmaps
+	int port = tcp_node_next_port(tcp_node);
+	tcp_node_assign_port(tcp_node, connection, port);
+
 	connection_virt_socket_keyed_t socket_keyed = connection_virt_socket_keyed_init(connection);
 	HASH_ADD_INT(tcp_node->virt_socketToConnection, virt_socket, socket_keyed);
 

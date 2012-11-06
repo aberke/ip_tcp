@@ -1,15 +1,15 @@
 give to tcp_connection:
 
-	tcp_connection
-		api_mutex
-		action_f api_function
+	tcp_connection	
+		int ret_value; // return value for the calling tcp_api function
+		pthread_mutex_t api_mutex
+		pthread_cond_t api_cond
+		// now when a tcp_api function calls, it will lock the mutex, and wait on the api_cond for the 
+		//tcp connection to finish its duties
 		
-tcp_connection_set_api_function(connection, action_f);
-tcp_connection_api_lock(connection);
-tcp_connection_api_unlock(connection);
-tcp_connection_api_finish(connection, int return_value);
-	calls api_function(connection, return_value);
-	calls unlock on mutex
+// calls pthread_cond_signal(api_cond) so that the waiting tcp_api function can stop waiting and take a look at the 
+// return value		
+tcp_connection_api_signal(connection); 
 
 
 Thread-heavy solution

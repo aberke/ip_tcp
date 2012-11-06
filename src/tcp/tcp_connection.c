@@ -15,6 +15,8 @@
 #include <netinet/tcp.h>
 #include <inttypes.h>
 #include <sys/time.h>
+#include <time.h>
+#include <pthread.h>
 
 #include "tcp_connection.h"
 #include "tcp_utils.h"
@@ -32,6 +34,12 @@
 
 struct tcp_connection{
 	int socket_id;	// also serves as index of tcp_connection in tcp_node's tcp_connections array
+	
+	/* Needs mutex and signaling mechanism to interact with tcp_api as well as return value for tcp_api to read off*/
+	pthread_mutex_t api_mutex;
+	pthread_cond_t api_cond;
+	int api_ret;
+	
 	tcp_socket_address_t local_addr;
 	tcp_socket_address_t remote_addr;
 	// owns state machine
@@ -67,23 +75,54 @@ struct tcp_connection{
 	int running; //are we running still?  1 for true, 0 for false -- indicates to thread to shut down
 };
 
-/* NEIL TODO: Api function stuff for Neil to fill in */
-void tcp_connection_set_api_function(tcp_connection_t connection, action_f api_function);
-void tcp_connection_set_api_arg(tcp_connection_t connection, void* api_arg){}
-void tcp_connection_api_lock(tcp_connection_t connection){}
-void tcp_connection_api_unlock(tcp_connection_t connection){}
-/*	int tcp_connection_api_finish
-		calls api_function(connection->api_arg, return_value);
-		calls unlock on mutex*/
-void tcp_connection_api_finish(tcp_connection_t connection, int return_value){}
+/* TODO: Start using this in our implemenation:
+give to tcp_connection:
 
+	tcp_connection	
+		int ret_value; // return value for the calling tcp_api function
+		pthread_mutex_t api_mutex
+		pthread_cond_t api_cond
+		// now when a tcp_api function calls, it will lock the mutex, and wait on the api_cond for the 
+		//tcp connection to finish its duties
+*/
+pthread_mutex_t tcp_connection_get_api_mutex(tcp_connection_t connection){
+	return connection->api_mutex;
+}
+pthread_cond_t tcp_connection_get_api_cond(tcp_connection_t connection){
+	return connection->api_cond;
+}
+int tcp_connection_get_api_ret(tcp_connection_t connection){
+	return connection->api_ret;
+}
+		
+// calls pthread_cond_signal(api_cond) so that the waiting tcp_api function can stop waiting and take a look at the 
+// return value		
+tcp_connection_api_signal(connection); 
+*/
+void tcp_connection_api_signal(tcp_connection_t connection, int ret){
+	/* set return value and signal that tcp_api function finished on the connection's part */
+	connection->api_ret = ret;
+	
+	pthread_cond_t api_cond= connection->api_cond;
+	pthread_cond_signal(&api_cond);
+}
 
 tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	// init state machine
 	state_machine_t state_machine = state_machine_init();
 
 	tcp_connection_t connection = (tcp_connection_t)malloc(sizeof(struct tcp_connection));
-
+	
+	/* Set what it needs in order to interact with tcp_api */
+	pthread_mutex_t api_mutex;
+	pthread_mutex_init(&api_mutex, NULL);
+	pthread_cond_t api_cond;
+	pthread_cond_init(&api_cond, NULL);
+	
+	connection->api_mutex = api_mutex;
+	connection->api_cond = api_cond;
+	connection->api_ret = 0;
+	
 	// let's do this the first time we send the SYN, just so if we try to send before that
 	// we'll crash and burn because it's null
 
@@ -136,6 +175,10 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 void tcp_connection_destroy(tcp_connection_t connection){
 	
 	connection->running = 0;
+	
+	/* Destroy mutex and signal */
+	pthread_mutex_destroy(&(connection->api_mutex));
+	pthread_cond_destroy(&(connection->api_cond));
 	
 	// destroy windows
 	if(connection->send_window)
@@ -618,11 +661,14 @@ void tcp_connection_accept_queue_connect(tcp_connection_t connection, accept_que
 	queue_push(q, (void*)triple);
 }
 
-// return popped triple
-accept_queue_triple_t tcp_connection_accept_queue_dequeue(tcp_connection_t connection){
+// return popped triple -- null if error in dequeue
+accept_queue_data_t tcp_connection_accept_queue_dequeue(tcp_connection_t connection){
 	queue_t q = connection->accept_queue;
-	accept_queue_triple_t triple = (accept_queue_triple_t)queue_pop(q);
-	return triple;
+	accept_queue_triple_t data;
+	int ret = bqueue_dequeue(q, &data);
+	if(ret<0)
+		return NULL;
+	return data;
 }
 
 /************* End of Functions regarding the accept queue ************************/

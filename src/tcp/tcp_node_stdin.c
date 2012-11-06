@@ -35,7 +35,8 @@ void sockets_cmd(const char *line, tcp_node_t tcp_node){
 
 
 void v_socket(const char *line, tcp_node_t tcp_node){
-	tcp_api_socket(tcp_node);	
+	int ret = tcp_api_socket(tcp_node);	
+	printf("socket call returned value %d\n", ret);
 }
 
 
@@ -128,7 +129,8 @@ void v_connect(const char *line, tcp_node_t tcp_node){
 		return;
 	}
 	
-	tcp_api_connect(tcp_node, socket, sa.sin_addr, (uint16_t)port);
+	ret = tcp_api_connect(tcp_node, socket, sa.sin_addr, (uint16_t)port);
+	printf("connect call returned value %d\n", ret);
 }
 
 int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint32_t num_bytes){

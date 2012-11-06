@@ -19,17 +19,23 @@ typedef struct tcp_connection* tcp_connection_t;
 tcp_connection_t tcp_connection_init(int socket, bqueue_t *to_send);
 void tcp_connection_destroy(tcp_connection_t connection);
 
-/* NEIL TODO: Api function stuff for Neil to fill in */
-void tcp_connection_set_api_function(tcp_connection_t connection, action_f api_function);
-// api_arg will often be the connection itself
-void tcp_connection_set_api_arg(tcp_connection_t connection, void* api_arg); 
-void tcp_connection_api_lock(tcp_connection_t connection);
-void tcp_connection_api_unlock(tcp_connection_t connection);
-/*	int tcp_connection_api_finish
-		calls api_function(connection, return_value);
-		calls unlock on mutex*/
-void tcp_connection_api_finish(tcp_connection_t connection, int return_value);
+/* TODO: Start using this in our implemenation:
+give to tcp_connection:
 
+	tcp_connection	
+		int ret_value; // return value for the calling tcp_api function
+		pthread_mutex_t api_mutex
+		pthread_cond_t api_cond
+		// now when a tcp_api function calls, it will lock the mutex, and wait on the api_cond for the 
+		//tcp connection to finish its duties
+*/
+pthread_mutex_t tcp_connection_get_api_mutex(tcp_connection_t connection);
+pthread_cond_t tcp_connection_get_api_cond(tcp_connection_t connection);
+int tcp_connection_get_api_ret(tcp_connection_t connection);
+		
+// tcp_connection_api_signal calls pthread_cond_signal(api_cond) so that the waiting tcp_api function can stop waiting and take a look at the 
+// return value
+void tcp_connection_api_signal(tcp_connection_t connection, int ret);
 
 uint16_t tcp_connection_get_remote_port(tcp_connection_t connection);
 uint16_t tcp_connection_get_local_port(tcp_connection_t connection);
@@ -71,7 +77,7 @@ void *_handle_read_send(void *tcpconnection);
 void tcp_connection_accept_queue_init(tcp_connection_t connection);
 void tcp_connection_accept_queue_destroy(tcp_connection_t connection);
 //void tcp_connection_accept_queue_connect(tcp_connection_t connection, accept_queue_triple_t triple);
-//accept_queue_triple_t tcp_connection_accept_queue_dequeue(tcp_connection_t connection);
+accept_queue_data_t tcp_connection_accept_queue_dequeue(tcp_connection_t connection);
 
 
 /************* End of Functions regarding the accept queue ************************/
