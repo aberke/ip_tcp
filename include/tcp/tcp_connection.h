@@ -21,6 +21,8 @@ void tcp_connection_destroy(tcp_connection_t connection);
 
 /* NEIL TODO: Api function stuff for Neil to fill in */
 void tcp_connection_set_api_function(tcp_connection_t connection, action_f api_function);
+// api_arg will often be the connection itself
+void tcp_connection_set_api_arg(tcp_connection_t connection, void* api_arg); 
 void tcp_connection_api_lock(tcp_connection_t connection);
 void tcp_connection_api_unlock(tcp_connection_t connection);
 /*	int tcp_connection_api_finish
@@ -66,7 +68,6 @@ void *_handle_read_send(void *tcpconnection);
 		Destroyed when leaves LISTEN state 
 		Each time a syn is received, a new tcp_connection is created in the SYN_RECEIVED state and queued */
 
-
 void tcp_connection_accept_queue_init(tcp_connection_t connection);
 void tcp_connection_accept_queue_destroy(tcp_connection_t connection);
 //void tcp_connection_accept_queue_connect(tcp_connection_t connection, accept_queue_triple_t triple);
@@ -95,6 +96,14 @@ void tcp_connection_set_state(tcp_connection_t connection, state_e state);
 void tcp_connection_print_state(tcp_connection_t connection);
 
 /****** Receiving packets **********/
+
+
+/* Called when connection in LISTEN state receives a syn.  
+	Queues info necessary to create a new connection when accept called 
+	returns 0 on success, negative if failed -- ie queue destroyed */
+int tcp_connection_handle_syn(tcp_connection_t connection, 
+		uint32_t local_ip,uint32_t remote_ip, uint16_t remote_port, uint32_t seqnum);
+
 
 /* Function for tcp_node to call to place a packet on this connection's
 	my_to_read queue for this connection to handle in its _handle_read_send thread 

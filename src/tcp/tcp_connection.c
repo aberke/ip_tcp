@@ -41,10 +41,11 @@ struct tcp_connection{
 	send_window_t send_window;
 	recv_window_t receive_window;
 	
-	// owns accept queue to queue syns when listening
-	// if user already in accept state, connections handled right away
-	///queues connections when user in listen state and not yet accept state
-	queue_t accept_queue;  
+	// owns accept queue to queue new connections when listening and receive syn
+	// always queues -- if user called accept then we'll call out tcp_connection_api_finish
+	// which will be a call to finish v_accept with tcp_api_accept_finish <-- the blocking call
+	// and dequeue that new established connection
+	bqueue_t *accept_queue;  
 	
 	/* these really only need to be set when we send
 	   off the first seq, just to make sure that the 
@@ -68,10 +69,11 @@ struct tcp_connection{
 
 /* NEIL TODO: Api function stuff for Neil to fill in */
 void tcp_connection_set_api_function(tcp_connection_t connection, action_f api_function);
+void tcp_connection_set_api_arg(tcp_connection_t connection, void* api_arg){}
 void tcp_connection_api_lock(tcp_connection_t connection){}
 void tcp_connection_api_unlock(tcp_connection_t connection){}
 /*	int tcp_connection_api_finish
-		calls api_function(connection, return_value);
+		calls api_function(connection->api_arg, return_value);
 		calls unlock on mutex*/
 void tcp_connection_api_finish(tcp_connection_t connection, int return_value){}
 
@@ -188,7 +190,16 @@ int tcp_connection_queue_to_read(tcp_connection_t connection, tcp_packet_data_t 
 
 	return 1;
 }
+/* Called when connection in LISTEN state receives a syn.  
+	Queues info necessary to create a new connection when accept called 
+	returns 0 on success, negative if failed -- ie queue destroyed */
+int tcp_connection_handle_syn(tcp_connection_t connection, 
+		uint32_t local_ip,uint32_t remote_ip, uint16_t remote_port, uint32_t seqnum){ 
 	
+	/* create accept_queue_data to load up with necessary info and queue for accept call */
+	accept_queue_data_t data = accept_queue_data_init(local_ip, remote_ip, remote_port, seqnum);
+	return bqueue_enqueue(connection->accept_queue, data);
+}											
 
 /*
 tcp_connection_handle_receive_packet
@@ -273,14 +284,16 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 			state_machine_transition(connection->state_machine, receiveSYN);
 		}
 		else if(state_machine_get_state(connection->state_machine) == LISTEN){
-			/* queue triple to dequeue upon accept call.  It's upon the accept call that 
-				a new connection will be initiated with below triple and LISTEN state and then
-				go through the LISTEN_to_SYN_RECEIVED transition.  */
-			
-			accept_queue_triple_t triple = accept_queue_triple_init(tcp_packet_data->remote_virt_ip, 
-																		tcp_source_port(tcp_packet),
-																		tcp_seqnum(tcp_packet));
-			tcp_connection_accept_queue_connect(connection, triple);
+			/* create a new connection will be initiated with below triple and LISTEN state and then
+				go through the LISTEN_to_SYN_RECEIVED transition.  -- will queue that connection
+				and v_accept will call to dequeue it */
+		
+			// listening connection just reset its remote/local ip with where this packet came from
+			// so this is what the new connection should be initialized with
+			tcp_connection_handle_syn(tcp_connection_get_local_ip(connection),
+										tcp_connection_get_remote_ip(connection), 
+										tcp_source_port(tcp_packet), 
+										tcp_seqnum(tcp_packet));	
 			// anything else??		
 		}
 	}
@@ -586,18 +599,17 @@ void tcp_connection_accept_queue_init(tcp_connection_t connection){
 
 void tcp_connection_accept_queue_destroy(tcp_connection_t connection){
 
-	queue_t q = connection->accept_queue;
+	bqueue_t q = connection->accept_queue;
 	if(!q)
 		return;
 		
 	// need to destroy each connection on the accept queue before destroying queue
-	accept_queue_triple_t triple = NULL;
-	triple = (accept_queue_triple_t)queue_pop(q);
-	while(triple != NULL){
-		accept_queue_triple_destroy(triple);
-		triple = (accept_queue_triple_t)queue_pop(q);
+	tcp_connection_t connection = NULL;
+	while(!bqueue_trydequeue(q, connection){
+		tcp_state_machine_transition(connection, CLOSE); //connection will either be in SYN_RECEIVED or ESTABLISHED
+		tcp_connection_destroy(connection);
 	}
-	queue_destroy(&q);
+	bqueue_destroy(q);
 	connection->accept_queue = NULL;
 }
 

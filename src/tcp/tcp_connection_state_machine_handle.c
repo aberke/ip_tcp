@@ -55,8 +55,11 @@ tcp_connection_transition_passive_open
 	transition
 */
 int tcp_connection_CLOSED_to_LISTEN(tcp_connection_t connection){
-	//puts("CLOSED --> LISTEN");
-	tcp_connection_accept_queue_init(connection);
+	puts("CLOSED --> LISTEN");
+	// init accept_queue
+	bqueue_t *accept_queue = (bqueue_t*) malloc(sizeof(bqueue_t));
+	bqueue_init(accept_queue);
+	connection->accept_queue = accept_queue;
 	return 1;	
 }
 

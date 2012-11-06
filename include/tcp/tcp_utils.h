@@ -22,6 +22,18 @@
 #define DEFAULT_CHUNK_SIZE 100
 #define RAND_ISN() rand()
 
+/*// a tcp_connection in the listen state queues this triple on its accept_queue when
+// it receives a syn.  Nothing further happens until the user calls accept at which point
+// this triple is dequeued and a connection is initiated with this information
+// the connection should then set its state to listen and go through the LISTEN_to_SYN_RECEIVED transition
+struct accept_queue_data{
+	uint32_t local_ip;
+	uint32_t remote_ip;
+	uint16_t remote_port;
+	uint32_t last_seq_received;
+};*/
+typedef struct accept_queue_data* accept_queue_data_t;
+
 /* tcp_connection_tosend_data_t is what is loaded on and off each tcp_connection's my_to_send queue */
 typedef struct tcp_connection_tosend_data* tcp_connection_tosend_data_t;
 
