@@ -3,6 +3,7 @@
 #define __TCP_NODE_H__
 
 #include <inttypes.h>
+#include "tcp_utils.h"
 #include "tcp_connection.h"
 #include "ip_node.h"
 #include "list.h"
@@ -111,7 +112,7 @@ void tcp_node_invalid_port(tcp_node_t tcp_node, tcp_packet_data_t packet);
 // calls on the listening_connection to dequeue its triple and node creates new connection with information
 // returned int is the new socket assigned to that new connection.  The connection finishes its handshake to get to
 // 	established state
-int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_connection, struct in_addr *addr);
+tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_connection, struct in_addr *addr);
 
 /*********** For use by tcp_node to reach ip_node items ****************/
 // returns ip address of remote side of passed in remote ip

@@ -4,7 +4,6 @@
 #include <time.h>
 #include <sys/time.h>
 
-#include "tcp_utils.h"
 #include "tcp_node_stdin.h"
 #include "util/utils.h"
 #include "util/list.h"
@@ -33,15 +32,7 @@ static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t* tcp_stdin_thread)
 // returns number of connections in array
 static int _insert_connection_array(tcp_node_t tcp_node, tcp_connection_t connection);
 
-// a tcp_connection in the listen state queues this triple on its accept_queue when
-// it receives a syn.  Nothing further happens until the user calls accept at which point
-// this triple is dequeued and a connection is initiated with this information
-// the connection should then set its state to listen and go through the LISTEN_to_SYN_RECEIVED transition
-struct accept_queue_triple{
-	uint32_t remote_ip;
-	uint16_t remote_port;
-	uint32_t last_seq_received;
-};
+
 
 
 /*********************** Hash Table Maintenance ****************************/
@@ -244,47 +235,37 @@ void tcp_node_destroy(tcp_node_t tcp_node){
      returned int is the new socket assigned to that new connection.  
    - The connection finishes its handshake to get to established state
    - Fills addr with ip address information from dequeued triple*/
-int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_connection, struct in_addr *addr){
-	
-	if(tcp_connection_get_state(listening_connection) != LISTEN)
-		return -EINVAL; //Socket is not listening for connections, or addrlen is invalid (e.g., is negative).
+tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_connection, struct in_addr *addr){
 	
 	// dequeue from accept_queue of listening connection to get triple of information about new connection
-	accept_queue_triple_t triple = tcp_connection_accept_queue_dequeue(listening_connection);
-	if(triple == NULL)
-		return -1;
+	/* THIS CALL IS BLOCKING  -- since the accept queue is a bqueue_t */
+	accept_queue_data_t data = tcp_connection_accept_queue_dequeue(listening_connection);
+	if(data == NULL)
+		return NULL; // means there was an error in dequeueing -- was accept_queue destroyed?
 	
 	// fill struct in_addr
-	addr->s_addr = triple->remote_ip;
+	addr->s_addr = accept_queue_data_get_remote_ip(data);
 	
 	// create new connection which will be the accepted connection 
 	// -- function will insert it into kernal array and socket hashmap
 	tcp_connection_t new_connection = tcp_node_new_connection(tcp_node);
 	if(new_connection == NULL){
-		// reached limit MAX_FILE_DESCRIPTORS
-		accept_queue_triple_destroy(triple);
-		return -ENFILE; //The system limit on the total number of open files has been reached.
+		// reached limit MAX_FILE_DESCRIPTORS?
+		accept_queue_data_destroy(data);
+		return NULL; 
 	}
 	
-	// assign values from triple to that connection
-	tcp_connection_set_remote(new_connection, triple->remote_ip, triple->remote_port);
-	tcp_connection_set_last_seq_received(new_connection, triple->last_seq_received);
+	// assign values from triple to that connection (tcp_node_new_connection assigned it a unique port)
+	tcp_connection_set_local_ip(new_connection, accept_queue_data_get_local_ip(data));
+	tcp_connection_set_remote(new_connection, accept_queue_data_get_remote_ip(data), accept_queue_data_get_remote_port(data));
+	tcp_connection_set_last_seq_received(new_connection, accept_queue_data_get_seq(data));
 	
-	// assign new port to new_connection
-	int port = tcp_node_next_port(tcp_node);
-	tcp_node_assign_port(tcp_node, new_connection, port);
+	// destroy data -- all done with it
+	accept_queue_data_destroy(data);
 	
-	// set state of this new_connection to LISTEN so that we can send it through transition LISTEN_to_SYN_RECEIVED
-	tcp_connection_set_state(new_connection, LISTEN);
-	
-	// have connection transition from LISTEN to SYN_RECEIVED
-	if(tcp_connection_state_machine_transition(new_connection, receiveSYN)<0)
-		puts("Alex and Neil go debug: tcp_connection_state_machine_transition(new_connection, receiveSYN)) returned negative value in tcp_node_connection_accept");
-	// destroy triple
-	accept_queue_triple_destroy(triple);
-	
-	return tcp_connection_get_socket(new_connection);
+	return new_connection;
 }
+
 // creates a new tcp_connection and properly places it in kernal table -- ports initialized to unique value, ip to 0
 // returns NULL if reached limit MAX_FILE_DESCRIPTORS
 tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
@@ -295,12 +276,12 @@ tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 		
 	// init new tcp_connection
 	tcp_connection_t connection = tcp_connection_init(socket, tcp_node->to_send);
-	tcp_connection_set_local_port(connection, tcp_node_next_port(tcp_node));
-
 	// place connection in array
 	_insert_connection_array(tcp_node, connection);
-	
 	// place connection in hashmaps
+	int port = tcp_node_next_port(tcp_node);
+	tcp_node_assign_port(tcp_node, connection, port);
+
 	connection_virt_socket_keyed_t socket_keyed = connection_virt_socket_keyed_init(connection);
 	HASH_ADD_INT(tcp_node->virt_socketToConnection, virt_socket, socket_keyed);
 
@@ -611,17 +592,6 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 		return;
 	}
 
-	/* validating the checksum happens in handle_receive_packet in tcp_connection,
-		because it's dependent on the ip of the sender/receiver, and why does the
-		node care if its gonna get discarded 
-	
-	if(tcp_utils_validate_checksum(tcp_packet->packet) < 0){
-		puts("Bad checksum -- discarding packet");
-		free(tcp_packet);
-		return;
-	}
-	*/
-		
 	uint16_t dest_port   = tcp_dest_port(tcp_packet->packet);
 
 	tcp_connection_t connection = tcp_node_get_connection_by_port(tcp_node, dest_port);
@@ -630,8 +600,8 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 		free(tcp_packet);
 		return;
 	}
-
-	tcp_connection_handle_receive_packet(connection, tcp_packet);
+	// put it on that connection's my_to_read queue
+	tcp_connection_queue_to_read(connection, tcp_packet);
 }
 
 

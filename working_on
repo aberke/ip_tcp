@@ -7,6 +7,21 @@ void tcp_connection_signal_wait(tcp_connection_t connection);
 
 I'll also write the mutex for the send window
 
+give to tcp_connection:
+
+	tcp_connection	
+		int ret_value; // return value for the calling tcp_api function
+		pthread_mutex_t api_mutex
+		pthread_cond_t api_cond
+		// now when a tcp_api function calls, it will lock the mutex, and wait on the api_cond for the 
+		//tcp connection to finish its duties
+		
+// calls pthread_cond_signal(api_cond) so that the waiting tcp_api function can stop waiting and take a look at the 
+// return value		
+tcp_connection_api_signal(connection); 
+
+
+Thread-heavy solution
 
 TCP_NODE
 -----------------------------
@@ -28,6 +43,9 @@ be known about anywhere
 TCP_CONNECTION
 ------------------------------
 #include <sys/time.h>
+
+
+
 
 int syn_count=0;
 time_t connect_accept_timer;

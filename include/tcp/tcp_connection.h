@@ -13,24 +13,29 @@
 #include "tcp_utils.h"
 #include "queue.h"
 
- // a tcp_connection in the listen state queues this triple on its accept_queue when
-// it receives a syn.  Nothing further happens until the user calls accept at which point
-// this triple is dequeued and a connection is initiated with this information
-// the connection should then set its state to listen and go through the LISTEN_to_SYN_RECEIVED transition
-/*struct accept_queue_triple{
-	uint32_t remote_ip;
-	uint16_t remote_port;
-	uint32_t last_seq_received;
-};*/
-typedef struct accept_queue_triple* accept_queue_triple_t;
-accept_queue_triple_t accept_queue_triple_init(uint32_t remote_ip, uint16_t remote_port, uint32_t last_seq_received);
-void accept_queue_triple_destroy(accept_queue_triple_t triple);
-
 
 typedef struct tcp_connection* tcp_connection_t;  
 
 tcp_connection_t tcp_connection_init(int socket, bqueue_t *to_send);
 void tcp_connection_destroy(tcp_connection_t connection);
+
+/* TODO: Start using this in our implemenation:
+give to tcp_connection:
+
+	tcp_connection	
+		int ret_value; // return value for the calling tcp_api function
+		pthread_mutex_t api_mutex
+		pthread_cond_t api_cond
+		// now when a tcp_api function calls, it will lock the mutex, and wait on the api_cond for the 
+		//tcp connection to finish its duties
+*/
+pthread_mutex_t tcp_connection_get_api_mutex(tcp_connection_t connection);
+pthread_cond_t tcp_connection_get_api_cond(tcp_connection_t connection);
+int tcp_connection_get_api_ret(tcp_connection_t connection);
+		
+// tcp_connection_api_signal calls pthread_cond_signal(api_cond) so that the waiting tcp_api function can stop waiting and take a look at the 
+// return value
+void tcp_connection_api_signal(tcp_connection_t connection, int ret);
 
 uint16_t tcp_connection_get_remote_port(tcp_connection_t connection);
 uint16_t tcp_connection_get_local_port(tcp_connection_t connection);
@@ -69,11 +74,10 @@ void *_handle_read_send(void *tcpconnection);
 		Destroyed when leaves LISTEN state 
 		Each time a syn is received, a new tcp_connection is created in the SYN_RECEIVED state and queued */
 
-
 void tcp_connection_accept_queue_init(tcp_connection_t connection);
 void tcp_connection_accept_queue_destroy(tcp_connection_t connection);
-void tcp_connection_accept_queue_connect(tcp_connection_t connection, accept_queue_triple_t triple);
-accept_queue_triple_t tcp_connection_accept_queue_dequeue(tcp_connection_t connection);
+//void tcp_connection_accept_queue_connect(tcp_connection_t connection, accept_queue_triple_t triple);
+accept_queue_data_t tcp_connection_accept_queue_dequeue(tcp_connection_t connection);
 
 
 /************* End of Functions regarding the accept queue ************************/
@@ -98,6 +102,20 @@ void tcp_connection_set_state(tcp_connection_t connection, state_e state);
 void tcp_connection_print_state(tcp_connection_t connection);
 
 /****** Receiving packets **********/
+
+
+/* Called when connection in LISTEN state receives a syn.  
+	Queues info necessary to create a new connection when accept called 
+	returns 0 on success, negative if failed -- ie queue destroyed */
+int tcp_connection_handle_syn(tcp_connection_t connection, 
+		uint32_t local_ip,uint32_t remote_ip, uint16_t remote_port, uint32_t seqnum);
+
+
+/* Function for tcp_node to call to place a packet on this connection's
+	my_to_read queue for this connection to handle in its _handle_read_send thread 
+	returns 1 on success, 0 on failure */
+int tcp_connection_queue_to_read(tcp_connection_t connection, tcp_packet_data_t tcp_packet);
+
 void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t packet);
 /****** End of Receiving Packets **********/
 //////////////////////////////////////////////////////////////////////////////////////

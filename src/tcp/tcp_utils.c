@@ -15,6 +15,49 @@
 
 #define NO_OPTIONS_HEADER_LENGTH 5
 
+
+// a tcp_connection in the listen state queues this triple on its accept_queue when
+// it receives a syn.  Nothing further happens until the user calls accept at which point
+// this triple is dequeued and a connection is initiated with this information
+// the connection should then set its state to listen and go through the LISTEN_to_SYN_RECEIVED transition
+struct accept_queue_data{
+	uint32_t local_ip;
+	uint32_t remote_ip;
+	uint16_t remote_port;
+	uint32_t last_seq_received;
+};
+
+accept_queue_data_t accept_queue_data_init(uint32_t local_ip,uint32_t remote_ip,uint16_t remote_port,uint32_t last_seq_received){
+	 accept_queue_data_t data = (accept_queue_data_t)malloc(sizeof(struct accept_queue_data));
+	 data->local_ip = local_ip;
+	 data->remote_ip = remote_ip;
+	 data->remote_port = remote_port;
+	 data->last_seq_received = last_seq_received;
+	return data;
+}
+
+uint32_t accept_queue_data_get_local_ip(accept_queue_data_t data){
+	return data->local_ip;
+}
+
+uint32_t accept_queue_data_get_remote_ip(accept_queue_data_t data){
+	return data->remote_ip;
+}
+
+uint16_t accept_queue_data_get_remote_port(accept_queue_data_t data){
+	return data->remote_port;
+}
+
+uint32_t accept_queue_data_get_seq(accept_queue_data_t data){
+	return data->last_seq_received;
+}
+
+void accept_queue_data_destroy(accept_queue_data_t* data){
+	free(*data);
+	*data = NULL;
+}
+
+
 /* struct that tcp_node handles up with raw data for tcp_connection to handle sending
 	tcp_node creates a tcp_connection_to_send_data and queues it to tcp_connection's my_to_send queue 
 	tcp_connection reads these structures off its queue */

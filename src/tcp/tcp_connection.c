@@ -15,42 +15,28 @@
 #include <netinet/tcp.h>
 #include <inttypes.h>
 #include <sys/time.h>
+#include <time.h>
+#include <pthread.h>
 
 #include "tcp_connection.h"
 #include "tcp_utils.h"
 #include "tcp_connection_state_machine_handle.h"
 
 #define SYN_TIMEOUT 2 //2 seconds at first, and doubles each time next syn_sent
+#define CRASH_AND_BURN 4567829
 
-
-// a tcp_connection in the listen state queues this triple on its accept_queue when
-// it receives a syn.  Nothing further happens until the user calls accept at which point
-// this triple is dequeued and a connection is initiated with this information
-// the connection should then set its state to listen and go through the LISTEN_to_SYN_RECEIVED transition
-struct accept_queue_triple{
-	uint32_t remote_ip;
-	uint16_t remote_port;
-	uint32_t last_seq_received;
-};
-
-accept_queue_triple_t accept_queue_triple_init(uint32_t remote_ip, uint16_t remote_port, uint32_t last_seq_received){
-	accept_queue_triple_t triple = (accept_queue_triple_t)malloc(sizeof(struct accept_queue_triple));
-	triple->remote_ip = remote_ip;
-	triple->remote_port = remote_port;
-	triple->last_seq_received = last_seq_received;
-	
-	return triple;
-}
-
-void accept_queue_triple_destroy(accept_queue_triple_t triple){
-	free(triple);
-}
 
 // all those fancy things we defined here are now located in tcp_utils so they can also 
 // be shared with tcp_connection_state_handle
 
 struct tcp_connection{
 	int socket_id;	// also serves as index of tcp_connection in tcp_node's tcp_connections array
+	
+	/* Needs mutex and signaling mechanism to interact with tcp_api as well as return value for tcp_api to read off*/
+	pthread_mutex_t api_mutex;
+	pthread_cond_t api_cond;
+	int api_ret;
+	
 	tcp_socket_address_t local_addr;
 	tcp_socket_address_t remote_addr;
 	// owns state machine
@@ -60,10 +46,11 @@ struct tcp_connection{
 	send_window_t send_window;
 	recv_window_t receive_window;
 	
-	// owns accept queue to queue syns when listening
-	// if user already in accept state, connections handled right away
-	///queues connections when user in listen state and not yet accept state
-	queue_t accept_queue;  
+	// owns accept queue to queue new connections when listening and receive syn
+	// always queues -- if user called accept then we'll call out tcp_connection_api_finish
+	// which will be a call to finish v_accept with tcp_api_accept_finish <-- the blocking call
+	// and dequeue that new established connection
+	bqueue_t *accept_queue;  
 	
 	/* these really only need to be set when we send
 	   off the first seq, just to make sure that the 
@@ -73,27 +60,63 @@ struct tcp_connection{
 	
 	// keeping track of if need to fail connect attempt or retry
 	int syn_count;
-	time_t connect_accept_timer;
+	struct timeval connect_accept_timer;
 	
 	// needs reference to the to_send queue in order to queue its packets
 	bqueue_t *to_send;	//--- tcp data for ip to send
 	// when tcp_node demultiplexes packets, gives packet to tcp_connection by placing packet on its my_to_read queue
 	bqueue_t *my_to_read; // holds tcp_packet_data_t's 
-	/* when tcp_node gets a send command, needs to give that command to correct tcp connection for connection
-		to handle appropriately, package, and send off to the shared to_send queue */
-	bqueue_t *my_to_send; // holds tcp_connection_tosend_data_t's that it needs to handle, package, and put on its to_send queue
-	
+
 	pthread_t read_send_thread; //has thread that handles the my_to_read queue and window timeouts in a loop
 
 	int running; //are we running still?  1 for true, 0 for false -- indicates to thread to shut down
 };
+
+/* TODO: Start using this in our implemenation:
+give to tcp_connection:
+
+	tcp_connection	
+		int ret_value; // return value for the calling tcp_api function
+		pthread_mutex_t api_mutex
+		pthread_cond_t api_cond
+		// now when a tcp_api function calls, it will lock the mutex, and wait on the api_cond for the 
+		//tcp connection to finish its duties
+*/
+pthread_mutex_t tcp_connection_get_api_mutex(tcp_connection_t connection){
+	return connection->api_mutex;
+}
+
+pthread_cond_t tcp_connection_get_api_cond(tcp_connection_t connection){
+	return connection->api_cond;
+}
+
+int tcp_connection_get_api_ret(tcp_connection_t connection){
+	return connection->api_ret;
+}
+		
+/* calls pthread_cond_signal(api_cond) so that the waiting tcp_api function can stop waiting and take a look at the return value		
+tcp_connection_api_signal(connection); 
+*/
+void tcp_connection_api_signal(tcp_connection_t connection, int ret){
+	/* set return value and signal that tcp_api function finished on the connection's part */
+	connection->api_ret = ret;
+	
+	pthread_cond_t api_cond = connection->api_cond;
+	pthread_cond_signal(&api_cond);
+}
 
 tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	// init state machine
 	state_machine_t state_machine = state_machine_init();
 
 	tcp_connection_t connection = (tcp_connection_t)malloc(sizeof(struct tcp_connection));
-
+	
+	/* Set what it needs in order to interact with tcp_api */
+	pthread_mutex_init(&(connection->api_mutex), NULL);
+	pthread_cond_init(&(connection->api_cond), NULL);
+	
+	connection->api_ret = CRASH_AND_BURN;
+	
 	// let's do this the first time we send the SYN, just so if we try to send before that
 	// we'll crash and burn because it's null
 
@@ -124,10 +147,6 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	bqueue_t *my_to_read = (bqueue_t*) malloc(sizeof(bqueue_t));
 	bqueue_init(my_to_read);
 	connection->my_to_read = my_to_read;
-	// init my_to_send queue
-	bqueue_t *my_to_send = (bqueue_t*)malloc(sizeof(bqueue_t));
-	bqueue_init(my_to_send);
-	connection->my_to_send = my_to_send;
 	
 	connection->running = 1;
 	
@@ -150,6 +169,10 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 void tcp_connection_destroy(tcp_connection_t connection){
 	
 	connection->running = 0;
+	
+	/* Destroy mutex and signal */
+	pthread_mutex_destroy(&(connection->api_mutex));
+	pthread_cond_destroy(&(connection->api_cond));
 	
 	// destroy windows
 	if(connection->send_window)
@@ -174,14 +197,7 @@ void tcp_connection_destroy(tcp_connection_t connection){
 		tcp_packet_data_destroy(tcp_packet_data);	
 	
 	bqueue_destroy(connection->my_to_read);
-		
-	// take all packets off my_to_send queue and destroys queue
-	tcp_connection_tosend_data_t to_send_data;
-	while(!bqueue_trydequeue(connection->my_to_send, (void**)&to_send_data))
-		tcp_connection_tosend_data_destroy(to_send_data);	
-	
-	bqueue_destroy(connection->my_to_send);
-					
+						
 	free(connection);
 	connection = NULL;
 }
@@ -201,6 +217,26 @@ int _validate_ack(tcp_connection_t connection, uint32_t ack){
 
 	return 0;
 }
+/* Function for tcp_node to call to place a packet on this connection's
+	my_to_read queue for this connection to handle in its _handle_read_send thread 
+	returns 1 on success, 0 on failure */
+int tcp_connection_queue_to_read(tcp_connection_t connection, tcp_packet_data_t tcp_packet){
+	
+	if(bqueue_enqueue(connection->my_to_read, tcp_packet))
+		return 0;
+
+	return 1;
+}
+/* Called when connection in LISTEN state receives a syn.  
+	Queues info necessary to create a new connection when accept called 
+	returns 0 on success, negative if failed -- ie queue destroyed */
+int tcp_connection_handle_syn(tcp_connection_t connection, 
+		uint32_t local_ip,uint32_t remote_ip, uint16_t remote_port, uint32_t seqnum){ 
+	
+	/* create accept_queue_data to load up with necessary info and queue for accept call */
+	accept_queue_data_t data = accept_queue_data_init(local_ip, remote_ip, remote_port, seqnum);
+	return bqueue_enqueue(connection->accept_queue, data);
+}											
 
 /*
 tcp_connection_handle_receive_packet
@@ -212,7 +248,7 @@ tcp_connection_handle_receive_packet
 */
 
 void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
-	//puts("tcp_connection_receive_packet: received packet");
+	puts("tcp_connection_receive_packet: received packet");
 	/* RFC 793: 
 		Although these examples do not show connection synchronization using data
 		-carrying segments, this is perfectly legitimate, so long as the receiving TCP
@@ -225,10 +261,13 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	void* tcp_packet = tcp_packet_data->packet;
 	
 	//TODO: FIGURE OUT WHEN ITS NOT APPROPRIATE TO RESET REMOTE ADDRESSES -- we don't want our connection sabotaged 
-	//reset remote ip/port in case it has changed + so that we can correctly calculate checksum
-	tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
-	tcp_connection_set_local_ip(connection, tcp_packet_data->local_virt_ip);
-
+	//reset remote ip/port in case it has changed + so that we can correctly calculate checksum	
+	if(tcp_connection_get_state(connection) == LISTEN){
+		/* since listen binds to all interfaces, must be able to reset its ip addresses to receive connect requests */
+		tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
+		tcp_connection_set_local_ip(connection, tcp_packet_data->local_virt_ip);
+	}
+	
 	/* ensure the integrity */
 	int checksum_result = tcp_utils_validate_checksum(tcp_packet, 
 											tcp_packet_data->packet_size, 
@@ -236,8 +275,8 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 											connection->local_addr.virt_ip,  // so the pseudo header will match this order
 											TCP_DATA);
 	if(checksum_result < 0){
-		//puts("Bad checksum! what happened? not discarding");
-		//return;
+		puts("Bad checksum! what happened? not discarding");
+		return;
 	}
 	
 	//TODO: ONLY PUSH DATA TO RECEIVE WINDOW WHEN OK TO DO SO
@@ -265,8 +304,8 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 			that the ACK you received is correct */
 		connection->last_seq_received = tcp_seqnum(tcp_packet);
 		
-		state_machine_transition(connection->state_machine, receiveSYN_ACK);
-
+		// this function calls tcp_connection_api_finish if in SYN_SENT
+		state_machine_transition(connection->state_machine, receiveSYN_ACK); 
 	}
 
 	else if(tcp_syn_bit(tcp_packet)){
@@ -282,14 +321,16 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 			state_machine_transition(connection->state_machine, receiveSYN);
 		}
 		else if(state_machine_get_state(connection->state_machine) == LISTEN){
-			/* queue triple to dequeue upon accept call.  It's upon the accept call that 
-				a new connection will be initiated with below triple and LISTEN state and then
-				go through the LISTEN_to_SYN_RECEIVED transition.  */
-			
-			accept_queue_triple_t triple = accept_queue_triple_init(tcp_packet_data->remote_virt_ip, 
-																		tcp_source_port(tcp_packet),
-																		tcp_seqnum(tcp_packet));
-			tcp_connection_accept_queue_connect(connection, triple);
+			/* create a new connection will be initiated with below triple and LISTEN state and then
+				go through the LISTEN_to_SYN_RECEIVED transition.  -- will queue that connection
+				and v_accept will call to dequeue it */
+		
+			// listening connection just reset its remote/local ip with where this packet came from
+			// so this is what the new connection should be initialized with
+			tcp_connection_handle_syn(connection, tcp_connection_get_local_ip(connection),
+										tcp_connection_get_remote_ip(connection), 
+										tcp_source_port(tcp_packet), 
+										tcp_seqnum(tcp_packet));	
 			// anything else??		
 		}
 	}
@@ -535,34 +576,48 @@ void tcp_connection_recv_window_destroy(tcp_connection_t connection){
 void *_handle_read_send(void *tcpconnection){
 	
 	tcp_connection_t connection = (tcp_connection_t)tcpconnection;
-	time_t now; // keep track of time to compare to window timeouts and connections' connect_accept_timer
 
-	//runs the following thread:
-	while(connection->running){
-		//bqueue_dequeue(connection->my_to_read, .01);
+	struct timespec wait_cond;	
+	struct timeval now;	// keep track of time to compare to window timeouts and connections' connect_accept_timer
+	void* packet;
+	int ret;
 
-		gettimeofday(&now, NULL);
+	while(connection->running){	
+		gettimeofday(&now, NULL);	
+		wait_cond.tv_sec = now.tv_sec+PTHREAD_COND_TIMEOUT_SEC;
+		wait_cond.tv_nsec = 1000*now.tv_usec+PTHREAD_COND_TIMEOUT_NSEC;
+		
+		ret = bqueue_timed_dequeue_abs(connection->my_to_read, &packet, &wait_cond);
+		if (ret != 0) 
+			/* should probably check at this point WHY we failed (for instance perhaps the queue
+				was destroyed */
+			continue;
+		
+		//handle to read packet
+		tcp_connection_handle_receive_packet(connection, packet);
+		
 		if(tcp_connection_get_state(connection)==SYN_SENT){	
-			//if(difftime(now, connection->connect_accept_timer) > 2**((connection->syn_count)-1)*SYN_TIMEOUT){
+			if(difftime(now, connection->connect_accept_timer) > (1 << ((connection->syn_count)-1))*SYN_TIMEOUT){
 				// we timeout connect or resend
 				if((connection->syn_count)>2){
 					// timeout connection attempt
 					connection->syn_count = 0;
 					tcp_connection_state_machine_transition(connection, CLOSE);
-					
-				// resend syn
-				//tcp_connection
-				//my syn ++;
+				}
+				else{	
+					// resend syn
+					tcp_connection_send_syn(connection);
+					connection->syn_count = connection->syn_count+1;
+				}
 			}
 		}/*
-		if(established){
+		else if(tcp_connection_get_state(connection)==ESTABLISHED){
 			check_timers(my to_send);
 			chunk_t chunk;
 			while(chunk = get_next(my to_send)){
 				send(chunk);
 			}
 		}*/
-		// dequeue off my_to_send queue to send stuff
 	}
 	pthread_exit(NULL);
 }
@@ -572,39 +627,34 @@ void *_handle_read_send(void *tcpconnection){
 		Destroyed when leaves LISTEN state 
 		Each time a syn is received, a new tcp_connection is created in the SYN_RECEIVED state and queued */
 
-void tcp_connection_accept_queue_init(tcp_connection_t connection){
-	queue_t accept_queue = queue_init();
-	queue_set_size(accept_queue, ACCEPT_QUEUE_DEFAULT_SIZE);
-	connection->accept_queue = accept_queue;
-}
 
 void tcp_connection_accept_queue_destroy(tcp_connection_t connection){
-
-	queue_t q = connection->accept_queue;
-	if(!q)
+	bqueue_t *q = connection->accept_queue;
+	if(q==NULL)
 		return;
 		
 	// need to destroy each connection on the accept queue before destroying queue
-	accept_queue_triple_t triple = NULL;
-	triple = (accept_queue_triple_t)queue_pop(q);
-	while(triple != NULL){
-		accept_queue_triple_destroy(triple);
-		triple = (accept_queue_triple_t)queue_pop(q);
+	tcp_accept_data_t data = NULL;
+	while(!bqueue_trydequeue(q, (void**)&data)){
+		tcp_accept_data_destroy(&data);
 	}
-	queue_destroy(&q);
+	bqueue_destroy(q);
 	connection->accept_queue = NULL;
 }
 
-void tcp_connection_accept_queue_connect(tcp_connection_t connection, accept_queue_triple_t triple){
-	queue_t q = connection->accept_queue;
-	queue_push(q, (void*)triple);
-}
 
-// return popped triple
-accept_queue_triple_t tcp_connection_accept_queue_dequeue(tcp_connection_t connection){
-	queue_t q = connection->accept_queue;
-	accept_queue_triple_t triple = (accept_queue_triple_t)queue_pop(q);
-	return triple;
+// return popped triple -- null if error in dequeue
+accept_queue_data_t tcp_connection_accept_queue_dequeue(tcp_connection_t connection){
+	bqueue_t *q = connection->accept_queue;
+	if(q==NULL){
+		puts("Error in tcp_connection_accept_queue_dequeue: SEE CODE");
+		return NULL;
+	}
+	accept_queue_data_t data;
+	int ret = bqueue_dequeue(q, (void**)&data);
+	if(ret<0)
+		return NULL;
+	return data;
 }
 
 /************* End of Functions regarding the accept queue ************************/

@@ -19,7 +19,7 @@ UTHASH_INC=$(UTHASH_DIR)/src #not a mistake
 
 _IP_OBJS=ip_node.o routing_table.o forwarding_table.o ip_utils.o link_interface.o 
 
-_TCP_OBJS=main.o tcp_node.o tcp_utils.o tcp_node_stdin.o tcp_connection.o  tcp_states.o send_window.o recv_window.o #tcp_connection_state_machine_handle.o
+_TCP_OBJS=main.o tcp_node.o tcp_utils.o tcp_node_stdin.o tcp_api.o tcp_connection.o tcp_states.o send_window.o recv_window.o #tcp_connection_state_machine_handle.o
 _UTIL_OBJS=ipsum.o parselinks.o utils.o list.o bqueue.o queue.o ext_array.o state_machine.o ##Could use dbg.o but for now I commented out references to it in bqueue.c
 
 

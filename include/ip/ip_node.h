@@ -13,8 +13,6 @@
 //// some helpful static globals
 #define STDIN fileno(stdin)
 #define SELECT_TIMEOUT 1
-#define PTHREAD_COND_TIMEOUT_NSEC 5000000
-#define PTHREAD_COND_TIMEOUT_SEC 1 //WAY TOO LONG RIGHT??
 
 typedef struct ip_node* ip_node_t; 
 

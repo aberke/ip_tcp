@@ -55,8 +55,11 @@ tcp_connection_transition_passive_open
 	transition
 */
 int tcp_connection_CLOSED_to_LISTEN(tcp_connection_t connection){
-	//puts("CLOSED --> LISTEN");
-	tcp_connection_accept_queue_init(connection);
+	puts("CLOSED --> LISTEN");
+	// init accept_queue
+	bqueue_t *accept_queue = (bqueue_t*) malloc(sizeof(bqueue_t));
+	bqueue_init(accept_queue);
+	connection->accept_queue = accept_queue;
 	return 1;	
 }
 
@@ -116,30 +119,42 @@ int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, ui
 
 	return 1;
 }
-/*
-tcp_connection_CLOSED_to_SYN_SENT 
-	should handle sending the SYN when a connection is actively opened, ie trying
-	to actively connect to someone. 
-*/
-int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection){
-	//puts("CLOSED --> SYN_SENT");
+/* helper to CLOSED_to_SYN_SENT as well as in the _handle_read_write thread for resending syn */
+int tcp_connection_send_syn(tcp_connection_t connection){
 
-	/* first pick a syn to send */
-	uint32_t ISN = rand(); // only up to RAND_MAX, don't know what that is, but probably < SEQNUM_MAX
-
-	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
+	//Note: Window already initialized with connection->last_seq_sent when we transitioned from CLOSED_to_SYN_SENT
 
 	/* now init the packet */
 	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0);
 	
 	/* fill the syn, and set the seqnum */
 	tcp_set_syn_bit(header);
-	tcp_set_seq(header, ISN);
-	connection->last_seq_sent = ISN;
-
+	tcp_set_seq(header, connection->last_seq_sent);
+	
+	// set time of when we're sending off syn
+	gettimeofday(&(connection->connect_accept_timer), NULL);
+	
 	/*  that should be good? send it off. Note: NULL because I'm assuming there's
 		to send when initializing a connection, but that's not necessarily true */
 	tcp_wrap_packet_send(connection, header, NULL, 0);
+	return 1;
+}	
+
+
+/*
+tcp_connection_CLOSED_to_SYN_SENT 
+	should handle sending the SYN when a connection is actively opened, ie trying
+	to actively connect to someone. 
+*/
+int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection){
+	
+	/* first pick a syn to send */
+	uint32_t ISN = rand(); // only up to RAND_MAX, don't know what that is, but probably < SEQNUM_MAX	
+	connection->last_seq_sent = ISN; //seq for syn about to be sent
+	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
+
+	connection->syn_count = 1;
+	tcp_connection_send_syn(connection);
 
 	return 1;
 }
@@ -175,6 +190,7 @@ int tcp_connection_LISTEN_to_SYN_SENT(tcp_connection_t connection){
 	
 	return 1;
 }
+
 int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection){
 	puts("SYN_SENT --> SYN_RECEIVED");
 
@@ -205,7 +221,7 @@ int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection){
 	return 1;
 }
 int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
-	//puts("SYN_SENT --> ESTABLISHED");
+	puts("SYN_SENT --> ESTABLISHED");
 
 	/* just got a SYN/ACK, so send back a ACK, and that's it */
 
@@ -231,12 +247,16 @@ int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
 	// send it off 
 	tcp_wrap_packet_send(connection, header, NULL, 0);
 	
+	/* We can return from connect with success! */
+	tcp_connection_api_signal(connection, 0); //sets api_ret to 0 for success
+	
 	return 1;
 }
 
 int tcp_connection_SYN_RECEIVED_to_ESTABLISHED(tcp_connection_t connection){
-
-	
+	puts("SYN_RECEIVED->ESTABLISHED");
+	//signal successfully tcp_api_accept to successfully return
+	tcp_connection_api_signal(connection, tcp_connection_get_socket(connection)); 
 
 	return 1;
 }
@@ -322,6 +342,9 @@ int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection){
 	puts("SYN_SENT --> CLOSED");
 	send_window_destroy(&(connection->send_window));
 	recv_window_destroy(&(connection->receive_window));
+	
+	tcp_connection_api_signal(connection, -ETIMEDOUT); // return from connect() api call with timeout error
+	
 	/* you're just closing up, there's nothing to do */
 	return 1;
 }

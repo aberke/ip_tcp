@@ -14,7 +14,7 @@
 #include "util/parselinks.h"
 #include "tcp_node.h"
 #include "tcp_connection.h"
-#include "tcp_connection_state_machine_handle.h"
+#include "tcp_api.h"
 
 #include "ip_node.h" 
 
@@ -33,40 +33,13 @@ void sockets_cmd(const char *line, tcp_node_t tcp_node){
 	tcp_node_print(tcp_node);
 }
 
-int v_socket(tcp_node_t tcp_node){
-	tcp_connection_t connection = tcp_node_new_connection(tcp_node);
-	if(connection == NULL)
-		return -ENFILE; //The system limit on the total number of open files has been reached.
-	int socket = tcp_connection_get_socket(connection);
-	return socket;
+
+void v_socket(const char *line, tcp_node_t tcp_node){
+	int ret = tcp_api_socket(tcp_node);	
+	printf("socket call returned value %d\n", ret);
 }
 
-void vv_socket(const char *line, tcp_node_t tcp_node){
-	int socket = v_socket(tcp_node);
-	printf("v_socket returned: %d\n", socket);	
-}
 
-/* binds a socket to a port
-always bind to all interfaces - which means addr is unused.
-returns 0 on success or negative number on failure */
-int v_bind(tcp_node_t tcp_node, int socket, char* addr, uint16_t port){
-
-	// check if port already in use
-	if(!tcp_node_port_unused(tcp_node, port))		
-		return -EADDRINUSE;	//The given address is already in use.
-
-	// get corresponding tcp_connection
-	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
-	if(connection == NULL)
-		return -EBADF; 	//socket is not a valid descriptor
-
-	if(tcp_connection_get_local_port(connection))
-		return -EINVAL; 	// The socket is already bound to an address.
-
-	tcp_node_assign_port(tcp_node, connection, port);
-
-	return 0;
-}
 
 void vv_bind(const char *line, tcp_node_t tcp_node){
 	
@@ -80,37 +53,14 @@ void vv_bind(const char *line, tcp_node_t tcp_node){
 		free(addr);
 		return;
 	} 	
-	ret = v_bind(tcp_node, socket, addr, port);
-	printf("bind result: %d\n", ret);
+	ret = tcp_api_bind(tcp_node, socket, addr, port);
+	printf("v_bind returned: %d\n", ret);
 	free(addr);
 }
 
-// returns port that connection is listening on, negative number on failure
-int v_listen(tcp_node_t tcp_node, int socket){
 
-	int port;
 
-	// get corresponding tcp_connection
-	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
-	if(connection == NULL)
-		return -EBADF; 	//socket is not a valid descriptor
-
-	if(!tcp_connection_get_local_port(connection)){
-		// port not already set -- must bind to random port	
-		port = tcp_node_next_port(tcp_node);
-		tcp_node_assign_port(tcp_node, connection, port);
-	}
-	
-	if(tcp_connection_passive_open(connection) < 0){ // returns -1 on failure
-		return -1;
-	}
-	
-	port = (int)tcp_connection_get_local_port(connection);
-	
-	return port; // returns 0 on success
-}
-
-void vv_listen(const char *line, tcp_node_t tcp_node){
+void v_listen(const char *line, tcp_node_t tcp_node){
 	
 	int socket;
 	int ret = sscanf(line, "v_listen %d", &socket);
@@ -118,30 +68,15 @@ void vv_listen(const char *line, tcp_node_t tcp_node){
 		fprintf(stderr, "syntax error (usage: v_listen [socket])\n");
 		return;
 	}
-	ret = v_listen(tcp_node, socket);
+	ret = tcp_api_listen(tcp_node, socket);
 	printf("listen result: %d\n", ret);
 }
-/* accept a requested connection (behave like unix socket’s accept)
-returns new socket handle on success or negative number on failure 
-int v accept(int socket, struct in addr *node); */
-int v_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
-	//NEED TO CHANGE TO CORRESPOND TO SPECS BUT FOR NOW just using normal api
 
-	tcp_connection_t listening_connection = tcp_node_get_connection_by_socket(tcp_node, socket);
-	if(listening_connection == NULL)
-		return -EBADF;
-	
-	// calls on the listening_connection to dequeue its triple and node creates new connection with information
-	// new socket is the socket assigned to that new connection.  The connection finishes its handshake to get to
-	// 	established state
-	int new_socket = tcp_node_connection_accept(tcp_node, listening_connection, addr);
-	return new_socket; 
-}
 /*
 accept/a port Open a socket, bind it to the given port, and start accepting connections on that
 port. Your driver must continute to accept other commands.
 */
-void vv_accept(const char *line, tcp_node_t tcp_node){
+void v_accept(const char *line, tcp_node_t tcp_node){
 	//NEED TO CHANGE TO CORRESPOND TO SPECS BUT FOR NOW just working like normal api
 	int ret, socket;
 	// int port;
@@ -155,7 +90,7 @@ void vv_accept(const char *line, tcp_node_t tcp_node){
 	struct in_addr addr;
 	char remote_buffer[INET_ADDRSTRLEN];
 	
-	ret = v_accept(tcp_node, socket, &addr);
+	ret = tcp_api_accept(tcp_node, socket, &addr);
 	if(ret<0){
 		printf("Accept Error %d\n", ret);
 		return;
@@ -171,39 +106,13 @@ void vv_accept(const char *line, tcp_node_t tcp_node){
 		return;
 	}*/
 }
-/* connects a socket to an address (active OPEN in the RFC)
-returns 0 on success or a negative number on failure */
-int v_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t port){
-	
-	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
-	if(connection == NULL)	
-		return -EBADF; 	 // = The file descriptor is not a valid index in the descriptor table.
-	
-	/* Make sure connection has a unique port before sending anything so that node can multiplex response */
-	if(!tcp_connection_get_local_port(connection))
-		tcp_node_assign_port(tcp_node, connection, tcp_node_next_port(tcp_node));
-	
-	//connection needs to know both its local and remote ip before sending
-	uint32_t local_ip = tcp_node_get_local_ip(tcp_node, (addr.s_addr));
-	
-	if(!local_ip)
-		return -ENETUNREACH;
-	
-	tcp_connection_set_remote_ip(connection, addr.s_addr);
-	tcp_connection_set_local_ip(connection, local_ip);
-	
-	int ret = tcp_connection_active_open(connection, tcp_connection_get_remote_ip(connection), port);
-	if(ret < 0)
-		return ret;	
-		
-	return 0;
-}
+
 /*	connect/c ip port Attempt to connect to the given ip address, in dot notation, on the given port.
 	Example: c 10.13.15.24 1056.
 	// CONFUSED: Why doesn't this take in a socket??? Should it print out the socket it connects with??
 	// For now I'm saying you need to include a socket.  Just deal with it for now.  It's the first argument for now.
 */
-void vv_connect(const char *line, tcp_node_t tcp_node){
+void v_connect(const char *line, tcp_node_t tcp_node){
 	
 	struct sockaddr_in sa;
 	char addr_buffer[INET_ADDRSTRLEN];
@@ -220,9 +129,8 @@ void vv_connect(const char *line, tcp_node_t tcp_node){
 		return;
 	}
 	
-	ret = v_connect(tcp_node, socket, sa.sin_addr, (uint16_t)port);
-
-	printf("v_connect call returned value: %d\n", ret);
+	ret = tcp_api_connect(tcp_node, socket, sa.sin_addr, (uint16_t)port);
+	printf("connect call returned value %d\n", ret);
 }
 
 int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint32_t num_bytes){
@@ -255,10 +163,7 @@ void vv_write(const char* line, tcp_node_t tcp_node){
 
 	free(to_write);
 }
-// NO LONGER NEED
-void vv_set_addrByInterface(const char* line, tcp_node_t tcp_node){
-	puts("Whatup Neil you can now just call connect with the ip address -- we're not using this anymore");
-}
+
 
 /*
 struct sendrecvfile_arg {
@@ -850,13 +755,12 @@ struct {
   {"quit", quit_cmd},	// last two quit commands added by alex -- is this how we want to deal with quitting?
   {"q", quit_cmd},
   /*Also to directly test our api: */
-  {"v_socket", vv_socket}, // calls v_socket
+  {"v_socket", v_socket}, // calls v_socket
   {"v_bind", vv_bind}, // calls v_bind
-  {"v_listen", vv_listen}, // calls v_listen
-  {"v_connect", vv_connect}, // calls v_connect
-  {"v_accept", vv_accept}, // calls v_accept
-  {"v_write", vv_write},  // calls v_write
-  {"v_set_addrByInterface", vv_set_addrByInterface}
+  {"v_listen", v_listen}, // calls v_listen
+  {"v_connect", v_connect}, // calls v_connect
+  {"v_accept", v_accept}, // calls v_accept
+  {"v_write", vv_write}  // calls v_write
 };
 
 
