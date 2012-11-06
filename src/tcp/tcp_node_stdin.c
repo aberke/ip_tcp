@@ -15,6 +15,7 @@
 #include "tcp_node.h"
 #include "tcp_connection.h"
 #include "tcp_connection_state_machine_handle.h"
+#include "tcp_api.h"
 
 #include "ip_node.h" 
 
@@ -171,33 +172,7 @@ void vv_accept(const char *line, tcp_node_t tcp_node){
 		return;
 	}*/
 }
-/* connects a socket to an address (active OPEN in the RFC)
-returns 0 on success or a negative number on failure */
-int v_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t port){
-	
-	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
-	if(connection == NULL)	
-		return -EBADF; 	 // = The file descriptor is not a valid index in the descriptor table.
-	
-	/* Make sure connection has a unique port before sending anything so that node can multiplex response */
-	if(!tcp_connection_get_local_port(connection))
-		tcp_node_assign_port(tcp_node, connection, tcp_node_next_port(tcp_node));
-	
-	//connection needs to know both its local and remote ip before sending
-	uint32_t local_ip = tcp_node_get_local_ip(tcp_node, (addr.s_addr));
-	
-	if(!local_ip)
-		return -ENETUNREACH;
-	
-	tcp_connection_set_remote_ip(connection, addr.s_addr);
-	tcp_connection_set_local_ip(connection, local_ip);
-	
-	int ret = tcp_connection_active_open(connection, tcp_connection_get_remote_ip(connection), port);
-	if(ret < 0)
-		return ret;	
-		
-	return 0;
-}
+
 /*	connect/c ip port Attempt to connect to the given ip address, in dot notation, on the given port.
 	Example: c 10.13.15.24 1056.
 	// CONFUSED: Why doesn't this take in a socket??? Should it print out the socket it connects with??
@@ -220,9 +195,7 @@ void vv_connect(const char *line, tcp_node_t tcp_node){
 		return;
 	}
 	
-	ret = v_connect(tcp_node, socket, sa.sin_addr, (uint16_t)port);
-
-	printf("v_connect call returned value: %d\n", ret);
+	tcp_api_connect(tcp_node, socket, sa.sin_addr, (uint16_t)port);
 }
 
 int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint32_t num_bytes){

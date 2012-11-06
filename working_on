@@ -7,8 +7,8 @@ give to tcp_connection:
 tcp_connection_set_api_function(connection, action_f);
 tcp_connection_api_lock(connection);
 tcp_connection_api_unlock(connection);
-tcp_connection_api_finish(connection);
-	calls api_function
+tcp_connection_api_finish(connection, int return_value);
+	calls api_function(connection, return_value);
 	calls unlock on mutex
 
 
