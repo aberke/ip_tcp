@@ -33,13 +33,13 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *to_send);
 void tcp_connection_destroy(tcp_connection_t connection);
 
 /* NEIL TODO: Api function stuff for Neil to fill in */
-int tcp_connection_set_api_function(connection_t connection, action_f api_function);
-int tcp_connection_api_lock(connection_t connection);
-int tcp_connection_api_unlock(connection_t connection);
+void tcp_connection_set_api_function(tcp_connection_t connection, action_f api_function);
+void tcp_connection_api_lock(tcp_connection_t connection);
+void tcp_connection_api_unlock(tcp_connection_t connection);
 /*	int tcp_connection_api_finish
 		calls api_function(connection, return_value);
 		calls unlock on mutex*/
-int tcp_connection_api_finish(connection, int return_value);
+void tcp_connection_api_finish(tcp_connection_t connection, int return_value);
 
 
 uint16_t tcp_connection_get_remote_port(tcp_connection_t connection);
