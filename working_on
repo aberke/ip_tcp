@@ -4,10 +4,10 @@ give to tcp_connection:
 		api_mutex
 		action_f api_function
 		
-
+tcp_connection_set_api_function(connection, action_f);
 tcp_connection_api_lock(connection);
 tcp_connection_api_unlock(connection);
-tcp_connection_api_finish(connection)
+tcp_connection_api_finish(connection);
 	calls api_function
 	calls unlock on mutex
 
