@@ -217,7 +217,7 @@ int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection){
 	return 1;
 }
 int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
-	//puts("SYN_SENT --> ESTABLISHED");
+	puts("SYN_SENT --> ESTABLISHED");
 
 	/* just got a SYN/ACK, so send back a ACK, and that's it */
 
@@ -242,6 +242,9 @@ int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
 		
 	// send it off 
 	tcp_wrap_packet_send(connection, header, NULL, 0);
+	
+	/* We can return from connect with success! */
+	tcp_connection_api_finish(connection, 0); // returns 0 on success
 	
 	return 1;
 }
@@ -334,6 +337,9 @@ int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection){
 	puts("SYN_SENT --> CLOSED");
 	send_window_destroy(&(connection->send_window));
 	recv_window_destroy(&(connection->receive_window));
+	
+	tcp_connection_api_finish(conneciton, -ETIMEDOUT); // return from connect() api call with timeout error
+	
 	/* you're just closing up, there's nothing to do */
 	return 1;
 }

@@ -250,12 +250,12 @@ int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_c
 		return -EINVAL; //Socket is not listening for connections, or addrlen is invalid (e.g., is negative).
 	
 	// dequeue from accept_queue of listening connection to get triple of information about new connection
-	accept_queue_triple_t triple = tcp_connection_accept_queue_dequeue(listening_connection);
-	if(triple == NULL)
+	tcp_connection_t new_connection = tcp_connection_accept_queue_dequeue(listening_connection);
+	if(new_connection == NULL)
 		return -1;
 	
 	// fill struct in_addr
-	addr->s_addr = triple->remote_ip;
+	addr->s_addr = tcp_connection_get_remote_ip(connection);
 	
 	// create new connection which will be the accepted connection 
 	// -- function will insert it into kernal array and socket hashmap

@@ -69,8 +69,8 @@ void *_handle_read_send(void *tcpconnection);
 
 void tcp_connection_accept_queue_init(tcp_connection_t connection);
 void tcp_connection_accept_queue_destroy(tcp_connection_t connection);
-void tcp_connection_accept_queue_connect(tcp_connection_t connection, accept_queue_triple_t triple);
-accept_queue_triple_t tcp_connection_accept_queue_dequeue(tcp_connection_t connection);
+//void tcp_connection_accept_queue_connect(tcp_connection_t connection, accept_queue_triple_t triple);
+//accept_queue_triple_t tcp_connection_accept_queue_dequeue(tcp_connection_t connection);
 
 
 /************* End of Functions regarding the accept queue ************************/

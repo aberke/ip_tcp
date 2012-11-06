@@ -112,10 +112,6 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	bqueue_t *my_to_read = (bqueue_t*) malloc(sizeof(bqueue_t));
 	bqueue_init(my_to_read);
 	connection->my_to_read = my_to_read;
-	// init my_to_send queue
-	bqueue_t *my_to_send = (bqueue_t*)malloc(sizeof(bqueue_t));
-	bqueue_init(my_to_send);
-	connection->my_to_send = my_to_send;
 	
 	connection->running = 1;
 	
@@ -162,14 +158,7 @@ void tcp_connection_destroy(tcp_connection_t connection){
 		tcp_packet_data_destroy(tcp_packet_data);	
 	
 	bqueue_destroy(connection->my_to_read);
-		
-	// take all packets off my_to_send queue and destroys queue
-	tcp_connection_tosend_data_t to_send_data;
-	while(!bqueue_trydequeue(connection->my_to_send, (void**)&to_send_data))
-		tcp_connection_tosend_data_destroy(to_send_data);	
-	
-	bqueue_destroy(connection->my_to_send);
-					
+						
 	free(connection);
 	connection = NULL;
 }
@@ -224,10 +213,13 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	void* tcp_packet = tcp_packet_data->packet;
 	
 	//TODO: FIGURE OUT WHEN ITS NOT APPROPRIATE TO RESET REMOTE ADDRESSES -- we don't want our connection sabotaged 
-	//reset remote ip/port in case it has changed + so that we can correctly calculate checksum
-	tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
-	tcp_connection_set_local_ip(connection, tcp_packet_data->local_virt_ip);
-
+	//reset remote ip/port in case it has changed + so that we can correctly calculate checksum	
+	if(tcp_connection_get_state(connection) == LISTEN){
+		/* since listen binds to all interfaces, must be able to reset its ip addresses to receive connect requests */
+		tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
+		tcp_connection_set_local_ip(connection, tcp_packet_data->local_virt_ip);
+	}
+	
 	/* ensure the integrity */
 	int checksum_result = tcp_utils_validate_checksum(tcp_packet, 
 											tcp_packet_data->packet_size, 
@@ -235,8 +227,8 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 											connection->local_addr.virt_ip,  // so the pseudo header will match this order
 											TCP_DATA);
 	if(checksum_result < 0){
-		//puts("Bad checksum! what happened? not discarding");
-		//return;
+		puts("Bad checksum! what happened? not discarding");
+		return;
 	}
 	
 	//TODO: ONLY PUSH DATA TO RECEIVE WINDOW WHEN OK TO DO SO
@@ -264,8 +256,8 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 			that the ACK you received is correct */
 		connection->last_seq_received = tcp_seqnum(tcp_packet);
 		
-		state_machine_transition(connection->state_machine, receiveSYN_ACK);
-
+		// this function calls tcp_connection_api_finish if in SYN_SENT
+		state_machine_transition(connection->state_machine, receiveSYN_ACK); 
 	}
 
 	else if(tcp_syn_bit(tcp_packet)){
@@ -552,7 +544,7 @@ void *_handle_read_send(void *tcpconnection){
 			continue;
 		
 		//handle to read packet
-		
+		tcp_connection_handle_receive_packet(connection, packet);
 		
 		if(tcp_connection_get_state(connection)==SYN_SENT){	
 			if(difftime(now, connection->connect_accept_timer) > (1 << ((connection->syn_count)-1))*SYN_TIMEOUT){
@@ -560,6 +552,7 @@ void *_handle_read_send(void *tcpconnection){
 				if((connection->syn_count)>2){
 					// timeout connection attempt
 					connection->syn_count = 0;
+					// transition SYN_SENT_to_CLOSED handles called tcp_connection_api_finish
 					tcp_connection_state_machine_transition(connection, CLOSE);
 				}
 				else{	
