@@ -634,7 +634,7 @@ void tcp_connection_accept_queue_destroy(tcp_connection_t connection){
 		return;
 		
 	// need to destroy each connection on the accept queue before destroying queue
-	tcp_accept_data_t data = NULL;
+	accept_queue_data_t data;
 	while(!bqueue_trydequeue(q, (void**)&data)){
 		tcp_accept_data_destroy(&data);
 	}

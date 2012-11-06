@@ -90,7 +90,16 @@ void v_accept(const char *line, tcp_node_t tcp_node){
 	struct in_addr addr;
 	char remote_buffer[INET_ADDRSTRLEN];
 	
-	ret = tcp_api_accept(tcp_node, socket, &addr);
+	pthread_t accept_thread;
+	//tcp_node_add_blocking_thread(&accept_thread);
+	ret = pthread_create(&accept_thread, NULL, tcp_api_accept, (void*)socket);
+    if (ret){
+         printf("ERROR; return code from pthread_create() for v_accept is %d\n", ret);
+         return;
+    }
+	//ret = tcp_api_accept(tcp_node, socket, &addr);
+
+	
 	if(ret<0){
 		printf("Accept Error %d\n", ret);
 		return;
