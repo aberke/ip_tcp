@@ -33,7 +33,7 @@ struct accept_queue_data{
 };*/
 typedef struct accept_queue_data* accept_queue_data_t;
 accept_queue_data_t accept_queue_data_init(uint32_t local_ip,uint32_t remote_ip,uint16_t remote_port,uint32_t last_seq_received);
-void accept_queue_data_destroy(accept_queue_data_t data);
+void accept_queue_data_destroy(accept_queue_data_t* data);
 /* Getting functions for accept_queue_data_t */
 uint32_t accept_queue_data_get_local_ip(accept_queue_data_t data);
 uint32_t accept_queue_data_get_remote_ip(accept_queue_data_t data);

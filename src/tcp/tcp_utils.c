@@ -35,22 +35,26 @@ accept_queue_data_t accept_queue_data_init(uint32_t local_ip,uint32_t remote_ip,
 	 data->last_seq_received = last_seq_received;
 	return data;
 }
+
 uint32_t accept_queue_data_get_local_ip(accept_queue_data_t data){
 	return data->local_ip;
 }
+
 uint32_t accept_queue_data_get_remote_ip(accept_queue_data_t data){
 	return data->remote_ip;
 }
+
 uint16_t accept_queue_data_get_remote_port(accept_queue_data_t data){
 	return data->remote_port;
 }
+
 uint32_t accept_queue_data_get_seq(accept_queue_data_t data){
 	return data->last_seq_received;
 }
 
-void accept_queue_data_destroy(accept_queue_data_t data){
-	free(data);
-	data = NULL;
+void accept_queue_data_destroy(accept_queue_data_t* data){
+	free(*data);
+	*data = NULL;
 }
 
 

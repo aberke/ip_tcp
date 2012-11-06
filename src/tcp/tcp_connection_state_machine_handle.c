@@ -190,6 +190,7 @@ int tcp_connection_LISTEN_to_SYN_SENT(tcp_connection_t connection){
 	
 	return 1;
 }
+
 int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection){
 	puts("SYN_SENT --> SYN_RECEIVED");
 

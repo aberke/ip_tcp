@@ -23,14 +23,11 @@
 #include "tcp_connection_state_machine_handle.h"
 
 #define SYN_TIMEOUT 2 //2 seconds at first, and doubles each time next syn_sent
-
-
+#define CRASH_AND_BURN 4567829
 
 
 // all those fancy things we defined here are now located in tcp_utils so they can also 
 // be shared with tcp_connection_state_handle
-
-
 
 struct tcp_connection{
 	int socket_id;	// also serves as index of tcp_connection in tcp_node's tcp_connections array
@@ -88,9 +85,11 @@ give to tcp_connection:
 pthread_mutex_t tcp_connection_get_api_mutex(tcp_connection_t connection){
 	return connection->api_mutex;
 }
+
 pthread_cond_t tcp_connection_get_api_cond(tcp_connection_t connection){
 	return connection->api_cond;
 }
+
 int tcp_connection_get_api_ret(tcp_connection_t connection){
 	return connection->api_ret;
 }
@@ -102,7 +101,7 @@ void tcp_connection_api_signal(tcp_connection_t connection, int ret){
 	/* set return value and signal that tcp_api function finished on the connection's part */
 	connection->api_ret = ret;
 	
-	pthread_cond_t api_cond= connection->api_cond;
+	pthread_cond_t api_cond = connection->api_cond;
 	pthread_cond_signal(&api_cond);
 }
 
@@ -113,14 +112,10 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	tcp_connection_t connection = (tcp_connection_t)malloc(sizeof(struct tcp_connection));
 	
 	/* Set what it needs in order to interact with tcp_api */
-	pthread_mutex_t api_mutex;
-	pthread_mutex_init(&api_mutex, NULL);
-	pthread_cond_t api_cond;
-	pthread_cond_init(&api_cond, NULL);
+	pthread_mutex_init(&(connection->api_mutex), NULL);
+	pthread_cond_init(&(connection->api_cond), NULL);
 	
-	connection->api_mutex = api_mutex;
-	connection->api_cond = api_cond;
-	connection->api_ret = 0;
+	connection->api_ret = CRASH_AND_BURN;
 	
 	// let's do this the first time we send the SYN, just so if we try to send before that
 	// we'll crash and burn because it's null
@@ -607,7 +602,6 @@ void *_handle_read_send(void *tcpconnection){
 				if((connection->syn_count)>2){
 					// timeout connection attempt
 					connection->syn_count = 0;
-					// transition SYN_SENT_to_CLOSED handles called tcp_connection_api_finish
 					tcp_connection_state_machine_transition(connection, CLOSE);
 				}
 				else{	
@@ -635,16 +629,14 @@ void *_handle_read_send(void *tcpconnection){
 
 
 void tcp_connection_accept_queue_destroy(tcp_connection_t connection){
-
 	bqueue_t *q = connection->accept_queue;
 	if(q==NULL)
 		return;
 		
 	// need to destroy each connection on the accept queue before destroying queue
-	tcp_connection_t c = NULL;
-	while(!bqueue_trydequeue(q, (void**)&c)){
-		tcp_connection_state_machine_transition(c, CLOSE); //connection will either be in SYN_RECEIVED or ESTABLISHED
-		tcp_connection_destroy(c);
+	tcp_accept_data_t data = NULL;
+	while(!bqueue_trydequeue(q, (void**)&data)){
+		tcp_accept_data_destroy(&data);
 	}
 	bqueue_destroy(q);
 	connection->accept_queue = NULL;

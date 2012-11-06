@@ -42,6 +42,7 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16
 	
 	/* Now wait until connection ESTABLISHED or timed out -- ret value will indicate */
 	pthread_cond_wait(&cond, &mtx);
+
 	/* After we return from that get ret value and return */
 	int ret = tcp_connection_get_api_ret(connection); // should be 0 if successful
 	
@@ -50,6 +51,7 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16
 	
 	return ret;
 }
+
 // called by v_socket	
 int tcp_api_socket(tcp_node_t tcp_node){
 
@@ -59,6 +61,7 @@ int tcp_api_socket(tcp_node_t tcp_node){
 	int socket = tcp_connection_get_socket(connection);
 	return socket;
 }
+
 /* binds a socket to a port
 always bind to all interfaces - which means addr is unused.
 returns 0 on success or negative number on failure */
@@ -151,13 +154,16 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 	tcp_connection_set_state(new_connection, LISTEN);
 	
 	// have connection transition from LISTEN to SYN_RECEIVED
-	if(tcp_connection_state_machine_transition(new_connection, receiveSYN)<0)
+	if(tcp_connection_state_machine_transition(new_connection, receiveSYN)<0){
 		puts("Alex and Neil go debug: tcp_connection_state_machine_transition(new_connection, receiveSYN)) returned negative value in tcp_node_connection_accept");
+		exit(1); // CRASH AND BURN
+	}
 	
 	/* Now wait until connection ESTABLISHED 
 		when established connection should call tcp_api_accept_help which will signal the accept_cond */
 	pthread_cond_wait( &cond_connecting, &mtx_connecting);
 	int ret = tcp_connection_get_api_ret(new_connection); // if successful = new_connection->socket_id;
+
 	/* Our connection has been established! 
 	TODO:HANDLE bad ret value */
 	pthread_mutex_unlock(&mtx_connecting);

@@ -1,3 +1,12 @@
+functions written by 
+
+void tcp_connection_broadcast(tcp_connection_t connection);
+void tcp_connection_api_lock(tcp_connection_t connection);
+void tcp_connection_api_unlock(tcp_connection_t connection);
+void tcp_connection_signal_wait(tcp_connection_t connection);
+
+I'll also write the mutex for the send window
+
 give to tcp_connection:
 
 	tcp_connection	
