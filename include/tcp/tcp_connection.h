@@ -29,25 +29,23 @@ give to tcp_connection:
 		// now when a tcp_api function calls, it will lock the mutex, and wait on the api_cond for the 
 		//tcp connection to finish its duties
 */
-pthread_mutex_t tcp_connection_get_api_mutex(tcp_connection_t connection);
-pthread_cond_t tcp_connection_get_api_cond(tcp_connection_t connection);
 int tcp_connection_get_api_ret(tcp_connection_t connection);
 		
-// tcp_connection_api_signal calls pthread_cond_signal(api_cond) so that the waiting tcp_api function can stop waiting and take a look at the 
-// return value
-void tcp_connection_api_signal(tcp_connection_t connection, int ret);
-
+/* port/ip getters/setters */
 uint16_t tcp_connection_get_remote_port(tcp_connection_t connection);
 uint16_t tcp_connection_get_local_port(tcp_connection_t connection);
-
 void tcp_connection_set_local_port(tcp_connection_t connection, uint16_t port);
 void tcp_connection_set_local_ip(tcp_connection_t connection, uint32_t ip);
-
 void tcp_connection_set_remote(tcp_connection_t connection, uint32_t remote_ip, uint16_t remote_port);
 void tcp_connection_set_remote_ip(tcp_connection_t connection, uint32_t remote_ip);
-
 uint32_t tcp_connection_get_remote_ip(tcp_connection_t connection);
 uint32_t tcp_connection_get_local_ip(tcp_connection_t connection);
+
+/* signaling */
+void tcp_connection_api_signal(tcp_connection_t connection, int ret);
+void tcp_connection_api_lock(tcp_connection_t connection);
+void tcp_connection_api_unlock(tcp_connection_t connection);
+int tcp_connection_api_result(tcp_connection_t connection);
 
 int tcp_connection_get_socket(tcp_connection_t connection);
 
