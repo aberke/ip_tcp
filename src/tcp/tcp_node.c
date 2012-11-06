@@ -159,11 +159,11 @@ tcp_node_t tcp_node_init(iplist_t* links){
 	queue_set_size(sockets_available_queue, MAX_FILE_DESCRIPTORS);
 	queue_set_size(ports_available_queue, MAX_FILE_DESCRIPTORS);
 	
-	uint32_t i;
-	for(i=0; i<MAX_FILE_DESCRIPTORS; i++){		
+	void* i;
+	for(i=0; i<(void*)MAX_FILE_DESCRIPTORS; i++){		
 		/* We're just queueing the integers we want to use as sockets/ports */
-		queue_push(sockets_available_queue, (void*)i);
-		queue_push(ports_available_queue, (void*)(i+1)); // tcp_connection with port = 0 signifies that port hasn't been set	
+		queue_push(sockets_available_queue, i);
+		queue_push(ports_available_queue, (i+1)); // tcp_connection with port = 0 signifies that port hasn't been set	
 	}
 	
 	tcp_node->sockets_available_queue = sockets_available_queue;
@@ -251,7 +251,7 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 	tcp_connection_t new_connection = tcp_node_new_connection(tcp_node);
 	if(new_connection == NULL){
 		// reached limit MAX_FILE_DESCRIPTORS?
-		accept_queue_data_destroy(data);
+		accept_queue_data_destroy(&data);
 		return NULL; 
 	}
 	
@@ -261,7 +261,7 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 	tcp_connection_set_last_seq_received(new_connection, accept_queue_data_get_seq(data));
 	
 	// destroy data -- all done with it
-	accept_queue_data_destroy(data);
+	accept_queue_data_destroy(&data);
 	
 	return new_connection;
 }
@@ -291,7 +291,7 @@ tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 void tcp_node_return_socket_to_kernal(tcp_node_t tcp_node, int socket){
 	
 	// return socket to available queue
-	queue_push_front(tcp_node->sockets_available_queue, (void*)socket);
+	queue_push_front(tcp_node->sockets_available_queue, (void*)((uint64_t)socket));
 	
 	connection_virt_socket_keyed_t socket_keyed;
 	HASH_FIND_INT(tcp_node->virt_socketToConnection, &socket, socket_keyed);
@@ -313,7 +313,7 @@ void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, int port){
 		
 	// return port to available queue
 	if(port<=MAX_FILE_DESCRIPTORS)
-		queue_push_front(tcp_node->ports_available_queue, (void*)port);
+		queue_push_front(tcp_node->ports_available_queue, (void*)((uint64_t)port));
 	
 	connection_port_keyed_t port_keyed;
 	HASH_FIND_INT(tcp_node->portToConnection, &port, port_keyed);
@@ -404,18 +404,18 @@ int tcp_node_port_unused(tcp_node_t tcp_node, int port){
 
 // returns next available, currently unused, port to bind or connect/accept a new tcp_connection with
 int tcp_node_next_port(tcp_node_t tcp_node){
-	int next_port = (int)queue_pop(tcp_node->ports_available_queue);
+	int next_port = (uint64_t)queue_pop(tcp_node->ports_available_queue);
 	
 	// check that next_port not already in use -- not already in hashmap	
 	while(!tcp_node_port_unused(tcp_node, next_port)){
-		next_port = (int)queue_pop(tcp_node->ports_available_queue);
+		next_port = (uint64_t)queue_pop(tcp_node->ports_available_queue);
 	}
 	return next_port;
 }
 
 // returns next available, currently unused, virtual socket file descriptor to initiate a new tcp_connection with
 int tcp_node_next_virt_socket(tcp_node_t tcp_node){
-	int next_socket = (int)queue_pop(tcp_node->sockets_available_queue);
+	int next_socket = (uint64_t)queue_pop(tcp_node->sockets_available_queue);
 	return next_socket;
 }
 /**************** End of functions that deal with Kernal Table *******************/
