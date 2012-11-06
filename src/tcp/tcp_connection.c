@@ -92,6 +92,16 @@ struct tcp_connection{
 	int running; //are we running still?  1 for true, 0 for false -- indicates to thread to shut down
 };
 
+/* NEIL TODO: Api function stuff for Neil to fill in */
+int tcp_connection_set_api_function(connection_t connection, action_f api_function);
+int tcp_connection_api_lock(connection_t connection);
+int tcp_connection_api_unlock(connection_t connection);
+/*	int tcp_connection_api_finish
+		calls api_function(connection, return_value);
+		calls unlock on mutex*/
+int tcp_connection_api_finish(connection, int return_value);
+
+
 tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	// init state machine
 	state_machine_t state_machine = state_machine_init();

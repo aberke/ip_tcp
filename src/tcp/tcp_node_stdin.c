@@ -14,7 +14,6 @@
 #include "util/parselinks.h"
 #include "tcp_node.h"
 #include "tcp_connection.h"
-#include "tcp_connection_state_machine_handle.h"
 #include "tcp_api.h"
 
 #include "ip_node.h" 
@@ -34,40 +33,12 @@ void sockets_cmd(const char *line, tcp_node_t tcp_node){
 	tcp_node_print(tcp_node);
 }
 
-int v_socket(tcp_node_t tcp_node){
-	tcp_connection_t connection = tcp_node_new_connection(tcp_node);
-	if(connection == NULL)
-		return -ENFILE; //The system limit on the total number of open files has been reached.
-	int socket = tcp_connection_get_socket(connection);
-	return socket;
+
+void v_socket(const char *line, tcp_node_t tcp_node){
+	tcp_api_socket(tcp_node);	
 }
 
-void vv_socket(const char *line, tcp_node_t tcp_node){
-	int socket = v_socket(tcp_node);
-	printf("v_socket returned: %d\n", socket);	
-}
 
-/* binds a socket to a port
-always bind to all interfaces - which means addr is unused.
-returns 0 on success or negative number on failure */
-int v_bind(tcp_node_t tcp_node, int socket, char* addr, uint16_t port){
-
-	// check if port already in use
-	if(!tcp_node_port_unused(tcp_node, port))		
-		return -EADDRINUSE;	//The given address is already in use.
-
-	// get corresponding tcp_connection
-	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
-	if(connection == NULL)
-		return -EBADF; 	//socket is not a valid descriptor
-
-	if(tcp_connection_get_local_port(connection))
-		return -EINVAL; 	// The socket is already bound to an address.
-
-	tcp_node_assign_port(tcp_node, connection, port);
-
-	return 0;
-}
 
 void vv_bind(const char *line, tcp_node_t tcp_node){
 	
@@ -81,8 +52,8 @@ void vv_bind(const char *line, tcp_node_t tcp_node){
 		free(addr);
 		return;
 	} 	
-	ret = v_bind(tcp_node, socket, addr, port);
-	printf("bind result: %d\n", ret);
+	ret = tcp_api_bind(tcp_node, socket, addr, port);
+	printf("v_bind returned: %d\n", ret);
 	free(addr);
 }
 
@@ -178,7 +149,7 @@ void vv_accept(const char *line, tcp_node_t tcp_node){
 	// CONFUSED: Why doesn't this take in a socket??? Should it print out the socket it connects with??
 	// For now I'm saying you need to include a socket.  Just deal with it for now.  It's the first argument for now.
 */
-void vv_connect(const char *line, tcp_node_t tcp_node){
+void v_connect(const char *line, tcp_node_t tcp_node){
 	
 	struct sockaddr_in sa;
 	char addr_buffer[INET_ADDRSTRLEN];
@@ -228,10 +199,7 @@ void vv_write(const char* line, tcp_node_t tcp_node){
 
 	free(to_write);
 }
-// NO LONGER NEED
-void vv_set_addrByInterface(const char* line, tcp_node_t tcp_node){
-	puts("Whatup Neil you can now just call connect with the ip address -- we're not using this anymore");
-}
+
 
 /*
 struct sendrecvfile_arg {
@@ -823,13 +791,12 @@ struct {
   {"quit", quit_cmd},	// last two quit commands added by alex -- is this how we want to deal with quitting?
   {"q", quit_cmd},
   /*Also to directly test our api: */
-  {"v_socket", vv_socket}, // calls v_socket
+  {"v_socket", v_socket}, // calls v_socket
   {"v_bind", vv_bind}, // calls v_bind
   {"v_listen", vv_listen}, // calls v_listen
-  {"v_connect", vv_connect}, // calls v_connect
+  {"v_connect", v_connect}, // calls v_connect
   {"v_accept", vv_accept}, // calls v_accept
-  {"v_write", vv_write},  // calls v_write
-  {"v_set_addrByInterface", vv_set_addrByInterface}
+  {"v_write", vv_write}  // calls v_write
 };
 
 

@@ -1,6 +1,7 @@
 //api file
 
 #include "tcp_api.h"
+#include "tcp_connection_state_machine_handle.h"
 
 
 
@@ -41,7 +42,43 @@ void tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint1
 	tcp_connection_set_local_ip(connection, local_ip);
 	
 	int ret = tcp_connection_active_open(connection, tcp_connection_get_remote_ip(connection), port);
-}	
+}
+// called by v_socket	
+void tcp_api_socket(tcp_node_t tcp_node){
+	printf("v_socket returned: ");	
+	tcp_connection_t connection = tcp_node_new_connection(tcp_node);
+	if(connection == NULL)
+		printf("%d\n", -ENFILE); //The system limit on the total number of open files has been reached.
+		return;
+	int socket = tcp_connection_get_socket(connection);
+	printf("%d\n",socket);
+}
+/* binds a socket to a port
+always bind to all interfaces - which means addr is unused.
+returns 0 on success or negative number on failure */
+int tcp_api_bind(tcp_node_t tcp_node, int socket, char* addr, uint16_t port){
 
+	// check if port already in use
+	if(!tcp_node_port_unused(tcp_node, port))		
+		return -EADDRINUSE;	//The given address is already in use.
+
+	// get corresponding tcp_connection
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(connection == NULL)
+		return -EBADF; 	//socket is not a valid descriptor
+	/* Lock up api on this connection -- BLOCK  -- really we don't want to 
+		be able to call this if another api call in process */
+	tcp_connection_api_lock(connection);
+	
+	if(tcp_connection_get_local_port(connection))
+		return -EINVAL; 	// The socket is already bound to an address.
+
+	tcp_node_assign_port(tcp_node, connection, port);
+	
+	/* All done so unlock */
+	tcp_connection_api_unlock(connection);
+	
+	return 0;
+}
 
 
