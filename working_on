@@ -1,3 +1,32 @@
+
+STDIN thread
+
+linked_list<thread> threads;
+while(1){
+	
+	select(STDIN, .01 seconds);
+	command = get_command(input);
+	if(command == "accept"){
+		tcp_node_accept(command_line, node);
+	}
+	
+	whenever you call a blocking call (api call)
+	thread = new thread()
+	thread.call(blocking_call)
+	threads.append(thread);
+
+	for each thread_waiting:
+		int result;
+		try:
+			thread.join(thread, &result);
+		except:	
+
+		if thread is done
+			do something with result
+			threads.remove(thread)
+
+}
+
 functions written by 
 
 void tcp_connection_broadcast(tcp_connection_t connection);
