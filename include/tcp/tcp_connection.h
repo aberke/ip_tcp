@@ -13,6 +13,8 @@
 #include "tcp_utils.h"
 #include "queue.h"
 
+#define SIGNAL_CRASH_AND_BURN -777
+#define SIGNAL_DESTROYING -666
 
 typedef struct tcp_connection* tcp_connection_t;  
 
@@ -131,8 +133,7 @@ void tcp_connection_push_data(tcp_connection_t connection, void* to_write, int n
 //##TODO##
 // queues chunks off from send_window and handles sending them for as long as send_window wants to send more chunks
 int tcp_connection_send_next(tcp_connection_t connection);
-
-
+void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_data_t data);
 
 // called by v_write
 int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* to_write, int num_bytes);
@@ -141,10 +142,5 @@ int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* t
 
 // to print when user calls 'sockets'
 void tcp_connection_print_sockets(tcp_connection_t connection);
-
-
-/* for testing */
-void tcp_connection_print(tcp_connection_t connection);
-
 
 #endif //__TCP_CONNECTION_H__

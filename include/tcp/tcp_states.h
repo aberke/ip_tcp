@@ -29,12 +29,13 @@ enum transition{
 	receiveSYN_ACK,  //receive SYN+ACK at same time
 	receiveACK,
 
+	receiveRST,
 	CLOSE,
 	TIME_ELAPSED,
 	receiveFIN,
 	SEND
 };
-#define NUM_TRANSITIONS 9  //TODO: ADD MORE ONCE HAVE CORNER CASES/TEARDOWN ETC
+#define NUM_TRANSITIONS 10  //TODO: ADD MORE ONCE HAVE CORNER CASES/TEARDOWN ETC
 
 struct transitioning {
 	state_e next_state;

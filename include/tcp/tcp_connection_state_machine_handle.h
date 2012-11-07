@@ -30,6 +30,7 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection);
 int tcp_connection_send_syn(tcp_connection_t connection);
 
 int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection);
+int tcp_connection_SYN_SENT_to_CLOSED_by_RST(tcp_connection_t connection);
 int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection);
 int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection);
 ///##TODO##

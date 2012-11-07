@@ -2,9 +2,10 @@
 #define __UTILS_H__
 
 #include <stdio.h>
+#include <time.h>
+#include <sys/select.h>
 
 #define DEBUG 1
-//#define TEST_STATES_ON
 #define DEBUG_PUTS(msg) if(DEBUG){ puts(msg); }
 
 #define STDIN fileno(stdin)
@@ -21,11 +22,11 @@
 #define WRAP_DIFF(x,y,length) ((y) >= (x) ? (y) - (x) : (length) - (x) + (y)) 
 #define WRAP_ADD(x,y,mod) (((x) + (y)) % (mod))
 
-#define CRASH_AND_BURN(msg) \
-do{							\
-	puts(msg);				\
-	exit(1);				\
-}							\
+#define CRASH_AND_BURN(msg) 						\
+do{													\
+	printf("%s: %s,%d\n", msg, __FILE__, __LINE__);	\
+	exit(1);										\
+}													\
 while(0)
 
 #define LOG(msg) printf msg
@@ -72,5 +73,6 @@ void rtrim(char* s, const char* delim);
 int utils_startswith(const char* s, const char* starts);
 void util_free(void** ptr);
 
+int fd_fgets(fd_set* fd, char* buffer, int size_of_buffer, FILE* file, struct timeval* tv);
 
 #endif // __UTILS_H__
