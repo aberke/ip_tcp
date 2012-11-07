@@ -419,7 +419,7 @@ void* _handle_tcp_node_stdin(void* node){
 				list element */
 
 			plain_list_t list = tcp_node_thread_list(tcp_node);
-			PLAIN_LIST_ITER(list, el)
+			PLAIN_LIST_ITER(list, el) //in utils.h
 				args = (tcp_api_args_t)el->data;
 				if(args->done){
 					if(args->result < 0){	
