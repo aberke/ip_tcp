@@ -11,7 +11,7 @@
 
 /* connects a socket to an address (active OPEN in the RFC)
 returns 0 on success or a negative number on failure */
-void* tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t port){
+int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t port){
 	
 	pthread_mutex_t mtx;
 	pthread_cond_t cond;
@@ -117,7 +117,7 @@ int tcp_api_listen(tcp_node_t tcp_node, int socket){
 /* accept a requested connection (behave like unix socket’s accept)
 returns new socket handle on success or negative number on failure 
 int v accept(int socket, struct in addr *node); */
-void* tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
+int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 	
 	pthread_mutex_t mtx_listening; //mutex of the connection that accept was called on -- the listening connection
 	pthread_mutex_t mtx_connecting; //mutex of the newly created connection that goes on to accept connection
