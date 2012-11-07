@@ -23,7 +23,7 @@
 #include "tcp_connection_state_machine_handle.h"
 
 #define SYN_TIMEOUT 2 //2 seconds at first, and doubles each time next syn_sent
-#define CRASH_AND_BURN_SIGNIFIER 4567829
+#define SYN_COUNT_MAX 3 // how many syns we send before timing out
 
 
 // all those fancy things we defined here are now located in tcp_utils so they can also 
@@ -60,7 +60,8 @@ struct tcp_connection{
 	
 	// keeping track of if need to fail connect attempt or retry
 	int syn_count;
-	struct timeval connect_accept_timer;
+	struct timeval syn_timer;
+	//struct timeval connect_accept_timer; was this for something else? cause I'm renaming it
 	
 	// needs reference to the to_send queue in order to queue its packets
 	bqueue_t *to_send;	//--- tcp data for ip to send
@@ -95,16 +96,14 @@ int tcp_connection_get_api_ret(tcp_connection_t connection){
 }
 	
 tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
-	// init state machine
-	state_machine_t state_machine = state_machine_init();
-
 	tcp_connection_t connection = (tcp_connection_t)malloc(sizeof(struct tcp_connection));
+	connection->running = 1;
 	
 	/* Set what it needs in order to interact with tcp_api */
 	pthread_mutex_init(&(connection->api_mutex), NULL);
 	pthread_cond_init(&(connection->api_cond), NULL);
 	
-	connection->api_ret = CRASH_AND_BURN_SIGNIFIER;
+	connection->api_ret = SIGNAL_CRASH_AND_BURN;
 	
 	// let's do this the first time we send the SYN, just so if we try to send before that
 	// we'll crash and burn because it's null
@@ -119,7 +118,9 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	connection->remote_addr.virt_ip = 0;
 	connection->remote_addr.virt_port = 0;
 	
-	connection->state_machine = state_machine;
+	connection->state_machine = state_machine_init();
+	state_machine_set_argument(connection->state_machine, connection);		
+
 	connection->accept_queue = NULL;  //initialized when connection goes to LISTEN state
 	connection->to_send = tosend;
 	
@@ -129,15 +130,11 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 		before we hand the logic off to the state machine */	
 	connection->last_seq_received = -1;
 	connection->last_seq_sent 	  = -1;
-
-	state_machine_set_argument(state_machine, connection);		
 	
 	// init my_to_read queue
 	bqueue_t *my_to_read = (bqueue_t*) malloc(sizeof(bqueue_t));
 	bqueue_init(my_to_read);
 	connection->my_to_read = my_to_read;
-	
-	connection->running = 1;
 	
 	//start read_thread
 	/* Initialize and set thread detached attribute */
@@ -158,7 +155,19 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 void tcp_connection_destroy(tcp_connection_t connection){
 	
 	connection->running = 0;
-	
+
+	// >> do this immediately! because it depends on the things you're destroying! <<
+	// cancel read_thread
+	int rc = pthread_join(connection->read_send_thread, NULL);
+	if (rc) {
+		printf("ERROR; return code from pthread_cancel() for tcp_connection of socket %d is %d\n", connection->socket_id, rc);
+		exit(-1);
+	}
+
+	// tell everyone who is waiting on this thread that
+	// the connection is being destroyed
+	tcp_connection_api_signal(connection, SIGNAL_DESTROYING);
+
 	/* Destroy mutex and signal */
 	pthread_mutex_destroy(&(connection->api_mutex));
 	pthread_cond_destroy(&(connection->api_cond));
@@ -173,12 +182,7 @@ void tcp_connection_destroy(tcp_connection_t connection){
 	state_machine_destroy(&(connection->state_machine));
 	tcp_connection_accept_queue_destroy(connection);
 	
-	// cancel read_thread
-	int rc = pthread_join(connection->read_send_thread, NULL);
-	if (rc) {
-		printf("ERROR; return code from pthread_cancel() for tcp_connection of socket %d is %d\n", connection->socket_id, rc);
-		exit(-1);
-	}
+	
 	
 	// take all packets off my_to_read queue and destroys queue
 	tcp_packet_data_t tcp_packet_data;
@@ -201,8 +205,10 @@ establishing the connection
 int _validate_ack(tcp_connection_t connection, uint32_t ack){
 	/* the ACK is valid if it is equal to one more than the 
 		last sequence number sent */
-	if (ack != (connection->last_seq_sent + 1) % MAX_SEQNUM)
+	if (ack != (connection->last_seq_sent + 1) % MAX_SEQNUM){
+		printf("invalid ack: expecting %u, got %u\n", connection->last_seq_sent + 1, ack);
 		return -1;
+	}
 
 	return 0;
 }
@@ -237,7 +243,7 @@ tcp_connection_handle_receive_packet
 */
 
 void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
-	puts("tcp_connection_receive_packet: received packet");
+	printf("received: ");
 	/* RFC 793: 
 		Although these examples do not show connection synchronization using data
 		-carrying segments, this is perfectly legitimate, so long as the receiving TCP
@@ -260,8 +266,9 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	/* ensure the integrity */
 	int checksum_result = tcp_utils_validate_checksum(tcp_packet, 
 											tcp_packet_data->packet_size, 
-											connection->remote_addr.virt_ip, // this is the local IP of the sender, 
-											connection->local_addr.virt_ip,  // so the pseudo header will match this order
+											tcp_packet_data->remote_virt_ip, // because we might not know
+											tcp_packet_data->local_virt_ip,// our address right now, 
+																			// and this is still valid?
 											TCP_DATA);
 	if(checksum_result < 0){
 		puts("Bad checksum! what happened? not discarding");
@@ -276,10 +283,14 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	if(data){ 
 		printf("tcp_connection_receive_packet: received packet with data: \n %s\n", (char*)data->data);
 		uint32_t seqnum = tcp_seqnum(tcp_packet);	
+		puts("blah");
 		recv_window_receive(connection->receive_window, data->data, data->length, seqnum);
+		puts("blah2");
 	}	
 	/* now check the bits */
 	if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
+		puts("syn/ack");
+
 		//puts("received packet with syn_bit and ack_bit set");
 		if(_validate_ack(connection, tcp_ack(tcp_packet)) < 0){
 			/* then you sent a syn with a seqnum that wasn't faithfully returned. 
@@ -287,8 +298,14 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 			puts("Received invalid ack with SYN/ACK. Discarding.");
 			return;
 		}
+	
+/* >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< */
+		/* we need to reset the port that we're using on the remote 
+			machine in order to match the connection that accepted us */
+		connection->remote_addr.virt_port = tcp_source_port(tcp_packet_data->packet);
+/* >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< */
 
-		
+
 		/* received a SYN/ACK, record the seq you got, and validate
 			that the ACK you received is correct */
 		connection->last_seq_received = tcp_seqnum(tcp_packet);
@@ -298,13 +315,15 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	}
 
 	else if(tcp_syn_bit(tcp_packet)){
+		puts("syn");
+
 		//puts("received packet with syn_bit set");
 		/* got a SYN -- only valid changes are LISTEN_to_SYN_RECEIVED or SYN_SENT_to_SYN_RECEIVED */ 
 		
 		if(state_machine_get_state(connection->state_machine) == SYN_SENT){		
 		
 			tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
-			
+		
 			/* set the last_seq_received, then pass off to state machine to make transition SYN_SENT_to_SYN_RECEIVED */	
 			connection->last_seq_received = tcp_seqnum(tcp_packet);
 			state_machine_transition(connection->state_machine, receiveSYN);
@@ -322,19 +341,25 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 										tcp_seqnum(tcp_packet));	
 			// anything else??		
 		}
+		else
+			// otherwise refuse the connection 
+			tcp_connection_refuse_connection(connection, tcp_packet_data);
+	
 	}
 	/* this will almost universally be true. */
 	else if(tcp_ack_bit(tcp_packet)){
+		puts("ack.");
+
 		if(_validate_ack(connection, tcp_ack(tcp_packet)) < 0){
 			// should we drop the packet here?
-			puts("Received invalid ack with SYN/ACK. Discarding.");
+			puts("Received invalid ack with ACK. Discarding.");
 			return;
 		}
 		
 		//reset remote ip/port in case it has changed
 		tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
 		
-		//TODO: ***************todo *********************
+		//TODO: *************** todo *********************
 		
 		/* careful, this might be NULL -- shouldn't we actually do this in the state_machine transition?*/
 		//send_window_ack(connection->send_window, tcp_ack(tcp_packet));
@@ -342,6 +367,13 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		// should we give this ack to the receive window?
 		
 		state_machine_transition(connection->state_machine, receiveACK);
+	}
+	else if(tcp_rst_bit(tcp_packet)){
+		puts("rst");
+		state_machine_transition(connection->state_machine, receiveRST);	
+	}
+	else{
+		puts("else");
 	}
 			
 	/* Umm, anything else ? */	
@@ -424,7 +456,7 @@ void tcp_connection_send_next_chunk(tcp_connection_t connection, send_window_chu
 	/* the seqnum should be the seqnum in the next_chunk */
 	tcp_set_seq(header, next_chunk->seqnum);
 	
-	/* send it off!  */
+	/* send it off! */
 	tcp_wrap_packet_send(connection, header, next_chunk->data, next_chunk->length);
 }
 
@@ -435,9 +467,9 @@ tcp_connection_push_data
 void tcp_connection_push_data(tcp_connection_t connection, void* data, int data_len){
 	/* if the window doesn't exist, you can't write because you haven't 
 		passed through the right states */
-	if(connection->send_window == NULL) 
-		return;
-
+	if(connection->send_window == NULL)
+		CRASH_AND_BURN("Sending window null when trying to push data");
+	
 	send_window_push(connection->send_window, data, data_len);
 }
 
@@ -464,6 +496,11 @@ int tcp_connection_send_next(tcp_connection_t connection){
 }
 
 int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* to_write, int num_bytes){
+	if(tcp_connection_get_state(connection) != ESTABLISHED){
+		puts("Trying to send data on a non-established connection.");
+		return -EINVAL; // whats the correct error code here?
+	}
+
 	// push data to window and then send as much as we can
 	tcp_connection_push_data(connection, (void*)to_write, num_bytes);	
 
@@ -474,90 +511,24 @@ int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* t
 
 
 /********************* End of Sending Packets ********************/
+  
+uint16_t
+tcp_connection_get_local_port(tcp_connection_t connection){ return connection->local_addr.virt_port; }
 
-uint16_t tcp_connection_get_local_port(tcp_connection_t connection){
-	/*  given the frequency of this call (whenever we send a chunk), 
-		we should make it as efficient as possible, which includes
-		pushing as little onto the stack as necessary */
-	return connection->local_addr.virt_port;
-/*	tcp_socket_address_t addr;
-	addr = connection->local_addr;	
-	uint16_t virt_port = addr.virt_port;
-	return virt_port;
-*/
-}
-uint16_t tcp_connection_get_remote_port(tcp_connection_t connection){
-	/* see note above */
-	return connection->remote_addr.virt_port;
-/*	
-	tcp_socket_address_t addr = connection->remote_addr;	
-	uint16_t virt_port = addr.virt_port;
-	return virt_port;
-*/
-}
+uint16_t
+tcp_connection_get_remote_port(tcp_connection_t connection){ return connection->remote_addr.virt_port; }
 
-void tcp_connection_set_local_port(tcp_connection_t connection, uint16_t port){
-	connection->local_addr.virt_port = port;
-}
+void
+tcp_connection_set_local_port(tcp_connection_t connection, uint16_t port){ connection->local_addr.virt_port = port; }
 
-uint32_t tcp_connection_get_local_ip(tcp_connection_t connection){
-	tcp_socket_address_t addr = connection->local_addr;
-	uint32_t virt_ip = addr.virt_ip;
-	return virt_ip;
-}
-uint32_t tcp_connection_get_remote_ip(tcp_connection_t connection){
-	tcp_socket_address_t addr = connection->remote_addr;
-	uint32_t virt_ip = addr.virt_ip;
-	return virt_ip;
-}
-int tcp_connection_get_socket(tcp_connection_t connection){
-	return connection->socket_id;
-}
-/******************* Window getting and setting and destroying functions ****************************/
-/******************* Window getting and setting and destroying functions ****************************/
-	
-/************** Sending Window *********************/
-// what's the point of these helper functions?
-/*
- send_window_t tcp_connection_send_window_init(tcp_connection_t connection, double timeout, int send_window_size, int send_size, int ISN){
-	connection->send_window = send_window_init(timeout, send_window_size, send_size, ISN);
-	return connection->send_window;
-}
+uint32_t
+tcp_connection_get_local_ip(tcp_connection_t connection){ return connection->local_addr.virt_ip; }
 
-send_window_t tcp_connection_get_send_window(tcp_connection_t connection){
-	return connection->send_window;
-}
+uint32_t 
+tcp_connection_get_remote_ip(tcp_connection_t connection){ return connection->remote_addr.virt_ip; }
 
-// we should destroy the window when we close connections
-void tcp_connection_send_window_destroy(tcp_connection_t connection){	
-	if(connection->send_window)
-		send_window_destroy(&(connection->send_window));	
-	connection->send_window = NULL;
-}
-*/
-/************** End of Sending Window *********************/
-
-/************** Receiving Window *********************/
-/*
-recv_window_t tcp_connection_recv_window_init(tcp_connection_t connection, uint32_t window_size, uint32_t ISN){
-	connection->receive_window = recv_window_init(window_size, ISN);
-	return connection->receive_window;
-}
-recv_window_t tcp_connection_get_recv_window(tcp_connection_t connection){
-	return connection->receive_window;
-}
-// we should destroy the window when we close connections
-void tcp_connection_recv_window_destroy(tcp_connection_t connection){	
-	if(connection->receive_window)
-		recv_window_destroy(&(connection->receive_window));	
-	connection->receive_window = NULL;
-}
-*/
-/************** End of Receiving Window *********************/
-
-/******************* End of Window getting and setting functions *****************************************/
-/******************* End of Window getting and setting functions *****************************************/
-
+int 
+tcp_connection_get_socket(tcp_connection_t connection){ 		return connection->socket_id; }
 
 /*0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0 to_read Thread o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0*/
 
@@ -567,7 +538,7 @@ void *_handle_read_send(void *tcpconnection){
 	tcp_connection_t connection = (tcp_connection_t)tcpconnection;
 
 	struct timespec wait_cond;	
-	struct timeval now;	// keep track of time to compare to window timeouts and connections' connect_accept_timer
+	struct timeval now;	// keep track of time to compare to window timeouts and connections' syn_timer 
 	float time_elapsed;
 	void* packet;
 	int ret;
@@ -578,21 +549,16 @@ void *_handle_read_send(void *tcpconnection){
 		wait_cond.tv_nsec = 1000*now.tv_usec+PTHREAD_COND_TIMEOUT_NSEC;
 		
 		ret = bqueue_timed_dequeue_abs(connection->my_to_read, &packet, &wait_cond);
-		if (ret != 0) 
-			/* should probably check at this point WHY we failed (for instance perhaps the queue
-				was destroyed */
-			continue;
 		
-		//handle to read packet
-		tcp_connection_handle_receive_packet(connection, packet);
-		
+		/* check if you're waiting for an ACK to come back */
 		if(tcp_connection_get_state(connection)==SYN_SENT){	
 			// delta seconds + delta milliseconds/1000
-			time_elapsed = now.tv_usec - connection->connect_accept_timer.tv_usec;
-			time_elapsed += (now.tv_usec - connection->connect_accept_timer.tv_usec)/1000.0;
+			time_elapsed = now.tv_sec - connection->syn_timer.tv_sec;
+			time_elapsed += now.tv_usec/1000000.0 - connection->syn_timer.tv_usec/1000000.0;
+			//printf("time elapsed: %f\n", time_elapsed);
 			if(time_elapsed > (1 << ((connection->syn_count)-1))*SYN_TIMEOUT){
 				// we timeout connect or resend
-				if((connection->syn_count)>2){
+				if((connection->syn_count)==SYN_COUNT_MAX){
 					// timeout connection attempt
 					connection->syn_count = 0;
 					tcp_connection_state_machine_transition(connection, CLOSE);
@@ -603,14 +569,16 @@ void *_handle_read_send(void *tcpconnection){
 					connection->syn_count = connection->syn_count+1;
 				}
 			}
-		}/*
-		else if(tcp_connection_get_state(connection)==ESTABLISHED){
-			check_timers(my to_send);
-			chunk_t chunk;
-			while(chunk = get_next(my to_send)){
-				send(chunk);
-			}
-		}*/
+		}
+
+		/* now check if there's something to read */
+		if (ret != 0) 
+			/* should probably check at this point WHY we failed (for instance perhaps the queue
+				was destroyed */
+			continue;
+
+		//handle to read packet
+		tcp_connection_handle_receive_packet(connection, packet);
 	}
 	pthread_exit(NULL);
 }
@@ -668,9 +636,9 @@ uint32_t tcp_connection_get_last_seq_sent(tcp_connection_t connection){
 
 
 int tcp_connection_state_machine_transition(tcp_connection_t connection, transition_e transition){
-	tcp_connection_print_state(connection);
+	//tcp_connection_print_state(connection);
 	int ret = state_machine_transition(connection->state_machine, transition);
-	tcp_connection_print_state(connection);
+	//tcp_connection_print_state(connection);
 	return ret;
 }
 
@@ -720,11 +688,6 @@ void tcp_connection_print_sockets(tcp_connection_t connection){
 
 }
 
-/* FOR TESTING */
-void tcp_connection_print(tcp_connection_t connection){
-	puts( "IT WORKS!!" );
-}
-	
 void tcp_connection_set_remote(tcp_connection_t connection, uint32_t remote, uint16_t port){
 	connection->remote_addr.virt_ip = remote;
 	connection->remote_addr.virt_port = port;
@@ -756,11 +719,61 @@ void tcp_connection_api_unlock(tcp_connection_t connection){
 }
 
 int tcp_connection_api_result(tcp_connection_t connection){
-	pthread_cond_wait(&(connection->api_cond), &(connection->api_mutex));
+	int wait = 1;
+	
+	struct timespec ts;
+	struct timeval tv;
+
+	while(1){
+		//puts("waiting on condition");
+
+		gettimeofday(&tv, NULL);	
+		ts.tv_sec = tv.tv_sec + wait;
+		ts.tv_nsec = tv.tv_usec*1000;
+
+	 	int result = pthread_cond_timedwait(&(connection->api_cond), &(connection->api_mutex), &ts);
+		if(result==0)
+			break;
+		if(result<0 && result!=ETIMEDOUT){
+			printf("%d\n", result);
+			CRASH_AND_BURN("cond_wait failed for api_result");
+		}
+		// otherwise you timedout, keep waiting
+	}
+
+	/* log success */
 	tcp_connection_api_unlock(connection); // make sure someone else can use it now
-	return connection->api_ret;
+	
+	int ret = connection->api_ret;
+	if(ret == SIGNAL_CRASH_AND_BURN)
+		CRASH_AND_BURN("Received crash_and_burn from the connection result");
+	
+	else if(ret == SIGNAL_DESTROYING)
+		return SIGNAL_DESTROYING;
+		
+	else 
+		return ret;
 }
 
+/* refuse the connection (send a RST) */
+void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_data_t packet){
+/* 
+	RFC 793: pg 35
+    In particular, SYNs addressed to a non-existent connection are rejected
+    by this means.
+*/
+	struct tcphdr* incoming_header = (struct tcphdr*)packet->packet;
+
+	// create the outgoing packet
+	struct tcphdr* outgoing_header = tcp_header_init(tcp_dest_port(incoming_header), tcp_source_port(incoming_header), 0);
+	tcp_set_rst_bit(outgoing_header);
+	tcp_utils_add_checksum(outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip, TCP_DATA);
+
+	tcp_packet_data_t rst_packet = tcp_packet_data_init((char*)outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip);
+	free(outgoing_header);
+	
+	tcp_connection_queue_ip_send(connection, rst_packet);
+}
 
 /* hacky? */  //<-- yeah kinda
 #include "tcp_connection_state_machine_handle.c"

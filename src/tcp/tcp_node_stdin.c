@@ -341,6 +341,12 @@ void command_3(const char* line, tcp_node_t tcp_node){
 	v_listen(cmd, tcp_node);
 }
 
+void command_4(const char* line, tcp_node_t tcp_node){
+	char cmd[256];
+	strcpy(cmd, "v_write 0 hello 5");
+	vv_write(cmd, tcp_node);
+}
+
 struct {
   const char *command;
   void (*handler)(const char *, tcp_node_t);
@@ -375,7 +381,8 @@ struct {
   // custom commands 
   {"1", command_1}, // performs command 'v_connect 0 10.10.168.73 12'
   {"2", command_2},
-  {"3", command_3}
+  {"3", command_3},
+  {"4", command_4}
 };
 
 
