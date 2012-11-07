@@ -21,6 +21,13 @@
 #define WRAP_DIFF(x,y,length) ((y) >= (x) ? (y) - (x) : (length) - (x) + (y)) 
 #define WRAP_ADD(x,y,mod) (((x) + (y)) % (mod))
 
+#define CRASH_AND_BURN(msg) \
+do{							\
+	puts(msg);				\
+	exit(1);				\
+}							\
+while(0)
+
 #define LOG(msg) printf msg
 
 typedef int boolean;

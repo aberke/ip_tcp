@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#include <pthread.h>
 
 #include "recv_window.h"
 #include "queue.h"
@@ -76,6 +77,7 @@ struct recv_window {
 	uint32_t size;
 	uint32_t left;
 	recv_window_chunk_t* slider;
+	pthread_mutex_t mutex;
 };
 
 recv_window_t recv_window_init(uint32_t window_size, uint32_t ISN){
@@ -89,6 +91,10 @@ recv_window_t recv_window_init(uint32_t window_size, uint32_t ISN){
 	recv_window->slider = malloc(sizeof(recv_window_chunk_t)*(window_size+1));	
 	memset(recv_window->slider, 0, sizeof(recv_window_chunk_t)*(window_size+1));
 	recv_window->to_read = queue_init();
+
+	/* initialize your mutex */
+	pthread_mutex_init(&(recv_window->mutex), NULL);
+
 	return recv_window;
 }
 
@@ -101,7 +107,7 @@ returns
 	>0 if successful (offset at which the first byte from data should be read)
 	-1 otherwise
 */
-static int _validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t length){
+static int _validate_seqnum_synchronized(recv_window_t recv_window, uint32_t seqnum, uint32_t length){
 	uint32_t window_min = recv_window->left,
 		window_max = (recv_window->left+recv_window->size) % MAX_SEQNUM;
 		
@@ -146,9 +152,23 @@ static int _validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t
 	}
 }
 
+static int _validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t length){
+	pthread_mutex_lock(&(recv_window->mutex));
+	int ret = _validate_seqnum_synchronized(recv_window, seqnum, length);
+	pthread_mutex_unlock(&(recv_window->mutex));
+	return ret;
+}
+
 /* we've received data up until the left of the window */
-uint32_t recv_window_get_ack(recv_window_t recv_window){
+uint32_t recv_window_get_ack_synchronized(recv_window_t recv_window){
 	return recv_window->left;
+}
+
+uint32_t recv_window_get_ack(recv_window_t recv_window){
+	pthread_mutex_lock(&(recv_window->mutex));
+	uint32_t ret = recv_window_get_ack_synchronized(recv_window);
+	pthread_mutex_unlock(&(recv_window->mutex));
+	return ret;
 }
 
 /* returns the current size of the window, which is currently
@@ -165,7 +185,7 @@ recv_window_receive
 	the ACK number to send back. If there is no such number (ie the window didn't slide at all, 
 	it will return -1.
 */
-void recv_window_receive(recv_window_t recv_window, void* data, uint32_t length, uint32_t seqnum){
+void recv_window_receive_synchronized(recv_window_t recv_window, void* data, uint32_t length, uint32_t seqnum){
 	int offset = _validate_seqnum(recv_window, seqnum, length);
 	if(offset<0){
 		LOG(("seqnum %d not accepted. left: %d\n", seqnum, recv_window->left)); 
@@ -246,6 +266,12 @@ void recv_window_receive(recv_window_t recv_window, void* data, uint32_t length,
 	}
 }
 
+void recv_window_receive(recv_window_t recv_window, void* data, uint32_t length, uint32_t seqnum){
+	pthread_mutex_lock(&(recv_window->mutex));
+	recv_window_receive_synchronized(recv_window, data, length, seqnum);
+	pthread_mutex_unlock(&(recv_window->mutex));
+}
+
 /*
 recv_window_get_next
 	gets the next recv_window_chunk_t from the to_read queue. 
@@ -258,8 +284,15 @@ recv_window_get_next
 		
 		NULL if there is nothing
 */
-recv_window_chunk_t recv_window_get_next(recv_window_t recv_window){
+recv_window_chunk_t recv_window_get_next_synchronized(recv_window_t recv_window){
 	return (recv_window_chunk_t)queue_pop(recv_window->to_read);
+}
+
+recv_window_chunk_t recv_window_get_next(recv_window_t recv_window){
+	pthread_mutex_lock(&(recv_window->mutex));
+	recv_window_chunk_t rwc = recv_window_get_next_synchronized(recv_window);
+	pthread_mutex_unlock(&(recv_window->mutex));
+	return rwc;
 }
 
 /*
@@ -278,10 +311,9 @@ void recv_window_destroy(recv_window_t* recv_window){
 			recv_window_chunk_destroy_total(&((*recv_window)->slider[i]), util_free);
 	}
 	
+	pthread_mutex_destroy(&((*recv_window)->mutex));
 	free((*recv_window)->slider);
 
 	free(*(recv_window));
 	*recv_window = NULL;
 }
-
-

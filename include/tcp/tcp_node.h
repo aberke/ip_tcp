@@ -107,8 +107,7 @@ void tcp_node_send(tcp_node_t tcp_node, char* to_write, int socket, uint32_t num
 /* ADDED BY NEIL : informs a remote connection of invalid port */
 void tcp_node_invalid_port(tcp_node_t tcp_node, tcp_packet_data_t packet);
 
-
-/* For accept */
+/*********** For accept ************************************************/
 // calls on the listening_connection to dequeue its triple and node creates new connection with information
 // returned int is the new socket assigned to that new connection.  The connection finishes its handshake to get to
 // 	established state
@@ -119,8 +118,14 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 // returns 0 if remote ip unreachable
 uint32_t tcp_node_get_local_ip(tcp_node_t tcp_node, uint32_t remote_ip);
 
+/*********** for threading *********************************************/
+void tcp_node_thread(tcp_node_t node, void *(*start_routine)(void*), void* args);
+
+
+
 /**** FOR TESTING *****/
 uint32_t tcp_node_get_interface_remote_ip(tcp_node_t tcp_node, int interface_num);
 uint32_t tcp_node_get_interface_local_ip(tcp_node_t tcp_node, int interface_num);
+
 
 #endif //__TCP_NODE_H__

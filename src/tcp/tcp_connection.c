@@ -23,7 +23,7 @@
 #include "tcp_connection_state_machine_handle.h"
 
 #define SYN_TIMEOUT 2 //2 seconds at first, and doubles each time next syn_sent
-#define CRASH_AND_BURN 4567829
+#define CRASH_AND_BURN_SIGNIFIER 4567829
 
 
 // all those fancy things we defined here are now located in tcp_utils so they can also 
@@ -104,7 +104,7 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	pthread_mutex_init(&(connection->api_mutex), NULL);
 	pthread_cond_init(&(connection->api_cond), NULL);
 	
-	connection->api_ret = CRASH_AND_BURN;
+	connection->api_ret = CRASH_AND_BURN_SIGNIFIER;
 	
 	// let's do this the first time we send the SYN, just so if we try to send before that
 	// we'll crash and burn because it's null

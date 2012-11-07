@@ -87,33 +87,51 @@ void v_accept(const char *line, tcp_node_t tcp_node){
 		return;
 	}
 	
-	struct in_addr addr;
-	char remote_buffer[INET_ADDRSTRLEN];
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	struct in_addr* addr = malloc(sizeof(struct in_addr));
 	
+	/* pack the args */
+	tcp_api_args_t args = tcp_api_args_init();
+	args->connection = connection;
+	args->socket  	 = socket;
+	args->addr 		 = addr;
+
+	tcp_node_thread(tcp_node, tcp_api_accept_entry, args);
+
+	/*
+	 call the entry function for accept() 
+	 NOTE:
+		I think done like this we will have issues,
+		because pthread_t is pushed onto the stack, 
+		so when this function returns it comes off 
+		the stack, which will probably cause some 
+		issues, but to be honest, I don't know 
 	pthread_t accept_thread;
-	//tcp_node_add_blocking_thread(&accept_thread);
-	ret = pthread_create(&accept_thread, NULL, tcp_api_accept, (void*)socket);
+	ret = pthread_create(&accept_thread, NULL, tcp_api_accept_entry, args);
     if (ret){
          printf("ERROR; return code from pthread_create() for v_accept is %d\n", ret);
          return;
     }
-	//ret = tcp_api_accept(tcp_node, socket, &addr);
-
+	*/
 	
+	/* it hasn't finished yet! */
+	/*
 	if(ret<0){
 		printf("Accept Error %d\n", ret);
 		return;
 	}
-	inet_ntop(AF_INET, &addr, remote_buffer, INET_ADDRSTRLEN);
+
+
+	char remote_buffer[INET_ADDRSTRLEN];
+	inet_ntop(AF_INET, addr, remote_buffer, INET_ADDRSTRLEN);
 	
 	printf("v_accept returned socket %d addr %s\n", ret, remote_buffer);
-		
-	/*
-	ret = sscanf(line, "v_accept %d", &port);
-	if(ret != 1){
-		fprintf(stderr, "syntax error (usage: v_accept [port])\n");
-		return;
-	}*/
+	
+	// clean up
+	tcp_api_args_destroy(&args);
+	*/
+	
+	return;
 }
 
 /*	connect/c ip port Attempt to connect to the given ip address, in dot notation, on the given port.
@@ -123,7 +141,7 @@ void v_accept(const char *line, tcp_node_t tcp_node){
 */
 void v_connect(const char *line, tcp_node_t tcp_node){
 	
-	struct sockaddr_in sa;
+	struct in_addr* addr = malloc(sizeof(struct in_addr));
 	char addr_buffer[INET_ADDRSTRLEN];
 	int socket, port, ret;
 	
@@ -133,13 +151,23 @@ void v_connect(const char *line, tcp_node_t tcp_node){
 		return;
 	}	
 	//convert string ip address to real ip address
-	if(inet_pton(AF_INET, addr_buffer, &(sa.sin_addr)) <= 0){ // IPv4
+	if(inet_pton(AF_INET, addr_buffer, addr) <= 0){ // IPv4
 		fprintf(stderr, "syntax error - could not parse ip address (usage: v_conect [socket] [ip address] [port])\n");
 		return;
 	}
-	
+
+	tcp_api_args_t args = tcp_api_args_init();
+	args->node = tcp_node;
+	args->socket = socket;
+	args->addr = addr;
+	args->port = port;
+
+	tcp_node_thread(tcp_node, tcp_api_accept_entry, args);
+
+	/*
 	ret = tcp_api_connect(tcp_node, socket, sa.sin_addr, (uint16_t)port);
 	printf("connect call returned value %d\n", ret);
+	*/
 }
 
 int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint32_t num_bytes){

@@ -7,10 +7,42 @@
 #include "tcp_api.h"
 #include "tcp_connection_state_machine_handle.h"
 
+/* args */
+
+tcp_api_args_t tcp_api_args_init(){
+	tcp_api_args_t args = malloc(sizeof(struct tcp_api_args));
+	memset(args, 0, sizeof(struct tcp_api_args));
+	return args;
+}
+
+void tcp_api_args_destroy(tcp_api_args_t* args){
+	/* for now just free it, but should probably also destroy the struct in_addr* */
+	free(*args);
+	*args = NULL;
+}
+
+//// these verify that the desired field is present and valid in arguments
+//// just FYI, crash_and_burn() is defined in utils/utils.h and it does the
+//// required crashing and/or burning (ie exit)
+#define _verify_node(args) if((args)->node == NULL) {CRASH_AND_BURN("INVALID NODE");}
+#define _verify_socket(args) if((args)->socket < 0) {CRASH_AND_BURN("INVALID SOCKET");}
+#define _verify_addr(args) if((args)->addr == NULL) {CRASH_AND_BURN("INVALID ADDR");}
+#define _verify_port(args) // always true
+
+//// _thread_return returns the argument given as a void*.
+//// this is slow, but seldom called (only every time a blocking
+//// call is made, so the efficiency is unimportant 
+#define _thread_return(type, value)			\
+do{											\
+	void* result = malloc(sizeof(type));	\
+	memcpy(result, &value, sizeof(type));	\
+	pthread_exit(result);					\
+}											\
+while(0)
 
 /* connects a socket to an address (active OPEN in the RFC)
 returns 0 on success or a negative number on failure */
-int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t port){
+int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint16_t port){
 
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(connection == NULL)	
@@ -23,12 +55,12 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16
 		tcp_node_assign_port(tcp_node, connection, tcp_node_next_port(tcp_node));
 	
 	//connection needs to know both its local and remote ip before sending
-	uint32_t local_ip = tcp_node_get_local_ip(tcp_node, (addr.s_addr));
+	uint32_t local_ip = tcp_node_get_local_ip(tcp_node, (*addr).s_addr);
 	
 	if(!local_ip)
 		return -ENETUNREACH;
 	
-	tcp_connection_set_remote_ip(connection, addr.s_addr);
+	tcp_connection_set_remote_ip(connection, (*addr).s_addr);
 	tcp_connection_set_local_ip(connection, local_ip);
 	
 	tcp_connection_active_open(connection, tcp_connection_get_remote_ip(connection), port);
@@ -37,9 +69,32 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16
 	return tcp_connection_api_result(connection); // will block until it gets the result
 }
 
-// called by v_socket	
-int tcp_api_socket(tcp_node_t tcp_node){
+/* entry function for letting the above function be called by a thread
 
+	design defense: this way tcp_api_connect doesn't need to know that 
+					it is being called in a new thread, it is just a function, 
+					and we happen to be calling it in a thread that we spawned
+					for just this purpose
+*/
+void* tcp_api_connect_entry(void* _args){
+	tcp_api_args_t args = (tcp_api_args_t) _args;
+	
+	/* verify that the necessary args were set */
+	_verify_node(args);
+	_verify_socket(args);
+	_verify_addr(args);
+	_verify_port(args);
+
+	/* then get the result */
+	int ret = tcp_api_connect(args->node, args->socket, args->addr, args->port);
+
+	/* and use my macro to return it 
+		(first arg is size of retal) */
+	_thread_return(int, ret);
+}
+
+// called by v_socket 	
+int tcp_api_socket(tcp_node_t tcp_node){
 	tcp_connection_t connection = tcp_node_new_connection(tcp_node);
 	if(connection == NULL)
 		return -ENFILE;//The system limit on the total number of open files has been reached.
@@ -148,3 +203,17 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 	return ret;	
  
 }
+
+void* tcp_api_accept_entry(void* _args){
+	tcp_api_args_t args = (tcp_api_args_t)_args;
+
+	/* verifies that these fields are valid (node != NULL, socket >=0, ...) */
+	_verify_node(args);
+	_verify_socket(args);
+	_verify_addr(args);
+	
+	/* we'll use the macro thread_return in order to return a value */
+	int ret = tcp_api_accept(args->node, args->socket, args->addr);
+	_thread_return(int, ret);
+}
+

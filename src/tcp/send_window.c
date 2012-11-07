@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <pthread.h>
 
 #include "queue.h"
 #include "ext_array.h"
@@ -58,6 +59,10 @@ struct send_window{
 
 	timed_chunk_t* timed_chunks;
 	timed_chunk_t acked_chunk_placeholder;
+
+	/* for being thread safe,
+		synchronizes over all functions */
+	pthread_mutex_t mutex;
 };
 
 /////////////// AUXILIARY DATA STRUCTURES /////////////////////////
@@ -145,6 +150,8 @@ send_window_t send_window_init(double timeout, int send_window_size, int send_si
 	send_window->left = send_window->right = send_window->sent_left = ISN;
 	send_window->wrap_count = 0;
 
+	pthread_mutex_init(&(send_window->mutex), NULL);
+
 	return send_window;
 }
 
@@ -154,6 +161,7 @@ void send_window_destroy(send_window_t* send_window){
 	_free_timers(send_window);
 
 	queue_destroy_total(&((*send_window)->to_send), (destructor_f)send_window_chunk_destroy_free);
+	pthread_mutex_destroy(&((*send_window)->mutex));
 	free((*send_window)->acked_chunk_placeholder);
 	free((*send_window)->slider);
 	free((*send_window)->timed_chunks);
@@ -161,8 +169,7 @@ void send_window_destroy(send_window_t* send_window){
 	*send_window = NULL;
 }
 
-void send_window_push(send_window_t send_window, void* data, int length){
-
+void send_window_push_synchronized(send_window_t send_window, void* data, int length){
 	int left_in_send_window = send_window->size - WRAP_DIFF(send_window->left, send_window->right, MAX_SEQNUM);
 	int to_write       = MIN(left_in_send_window, length);
 	send_window_memcpy(send_window, data, to_write);
@@ -171,13 +178,27 @@ void send_window_push(send_window_t send_window, void* data, int length){
 	
 }
 
+void send_window_push(send_window_t sw, void* d, int l){
+	pthread_mutex_lock(&(sw->mutex));
+	send_window_push_synchronized(sw, d, l);
+	pthread_mutex_unlock(&(sw->mutex));
+}
+
 // just add a function for getting the next sequence number
 // that you're going to send 
-uint32_t send_window_get_next_seq(send_window_t send_window){
+uint32_t send_window_get_next_seq_synchronized(send_window_t send_window){
 	return send_window->left;
 }
 
-send_window_chunk_t send_window_get_next(send_window_t send_window){
+uint32_t send_window_get_next_seq(send_window_t send_window){
+	pthread_mutex_lock(&(send_window->mutex));
+	uint32_t ret = send_window_get_next_seq_synchronized(send_window);
+	pthread_mutex_unlock(&(send_window->mutex));
+	return ret;
+}
+
+
+send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window){
 	timed_chunk_t chunk;
 	if((chunk = (timed_chunk_t)queue_pop(send_window->to_send)) == NULL){
 		int left_to_send = WRAP_DIFF(send_window->sent_left, send_window->right, MAX_SEQNUM);
@@ -205,7 +226,16 @@ send_window_chunk_t send_window_get_next(send_window_t send_window){
 	return send_window_chunk_init(send_window, chunk->left, chunk->right);
 }
 
-void send_window_ack(send_window_t send_window, int seqnum){
+send_window_chunk_t send_window_get_next(send_window_t send_window){
+	pthread_mutex_lock(&(send_window->mutex));
+	send_window_chunk_t chunk = send_window_get_next_synchronized(send_window);
+	pthread_mutex_unlock(&(send_window->mutex));
+	return chunk;
+}
+
+
+
+void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 
 	int send_window_min = send_window->left,
 		send_window_max = send_window->right;
@@ -258,10 +288,19 @@ void send_window_ack(send_window_t send_window, int seqnum){
 	}
 }
 
+void send_window_ack(send_window_t sw, int seqnum){
+	pthread_mutex_lock(&(sw->mutex));
+	send_window_ack_synchronized(sw, seqnum);
+	pthread_mutex_unlock(&(sw->mutex));
+}
+
+
+
+
 /* Will handle going through all the timers and for the ones who have 
    timers that have elapsed time > timeout, adds these to the to_send
    queue and resets the timer. */
-void send_window_check_timers(send_window_t send_window){
+void send_window_check_timers_synchronized(send_window_t send_window){
 	timed_chunk_t timed_chunk = NULL;
 
 	/* get the time */
@@ -288,6 +327,12 @@ void send_window_check_timers(send_window_t send_window){
 		}
 	}
 }	
+void send_window_check_timers(send_window_t sw){
+	pthread_mutex_lock(&(sw->mutex));
+	send_window_check_timers_synchronized(sw);
+	pthread_mutex_unlock(&(sw->mutex));
+}
+
 
 void _free_timers(send_window_t* send_window){
 	

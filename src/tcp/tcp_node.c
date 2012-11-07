@@ -33,8 +33,6 @@ static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t* tcp_stdin_thread)
 static int _insert_connection_array(tcp_node_t tcp_node, tcp_connection_t connection);
 
 
-
-
 /*********************** Hash Table Maintenance ****************************/
 
 /* uthash works by keying on a field of a struct, and using that key as 
@@ -116,6 +114,7 @@ struct tcp_node{
 	// each time need new unique socket/port, call dequeue and item is pointer to int to use as socket/port
 	queue_t sockets_available_queue;
 	queue_t ports_available_queue;
+	queue_t thread_queue;
 };
 
 tcp_node_t tcp_node_init(iplist_t* links){
@@ -169,6 +168,9 @@ tcp_node_t tcp_node_init(iplist_t* links){
 	tcp_node->sockets_available_queue = sockets_available_queue;
 	tcp_node->ports_available_queue = ports_available_queue;
 	/************ Kernal Table Created ***********/
+
+	/* thread queue */
+	tcp_node->thread_queue = queue_init();
 	
 	//// you're still running right? right
 	tcp_node->running = 1;
@@ -674,28 +676,28 @@ static int _start_ip_threads(tcp_node_t tcp_node,
 	return 1;
 }
 
+/* for threading */
+void tcp_node_thread(tcp_node_t node, void *(*start_routine)(void*), void* arg){
+	pthread_t* thread = malloc(sizeof(pthread_t));
+	pthread_create(thread,NULL,start_routine,arg);
+	queue_push(node->thread_queue, thread);
+}	
+
 /*********** For use by tcp_node to reach ip_node items ****************/
 // returns ip address of remote side of passed in remote ip
 // returns 0 if remote ip unreachable
 uint32_t tcp_node_get_local_ip(tcp_node_t tcp_node, uint32_t remote_ip){
-	uint32_t local_ip = tcp_ip_node_get_local_ip(tcp_node->ip_node, remote_ip);
-	return local_ip;
+	return tcp_ip_node_get_local_ip(tcp_node->ip_node, remote_ip);
 }
-
-
 
 /***************** FOR TESTING *********************/
 
 uint32_t tcp_node_get_interface_remote_ip(tcp_node_t tcp_node, int interface_num){
-	uint32_t ip_addr;
-	ip_addr = ip_node_get_interface_remote_ip(tcp_node->ip_node, interface_num);
-	return ip_addr;
+	return ip_node_get_interface_remote_ip(tcp_node->ip_node, interface_num);
 }
 
 uint32_t tcp_node_get_interface_local_ip(tcp_node_t tcp_node, int interface_num){
-	uint32_t ip_addr;
-	ip_addr = ip_node_get_interface_local_ip(tcp_node->ip_node, interface_num);
-	return ip_addr;
+	return ip_node_get_interface_local_ip(tcp_node->ip_node, interface_num);
 }	
 
 
