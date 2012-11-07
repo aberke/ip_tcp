@@ -7,54 +7,105 @@
 #include "tcp_api.h"
 #include "tcp_connection_state_machine_handle.h"
 
+/* args */
+
+tcp_api_args_t tcp_api_args_init(){
+	tcp_api_args_t args = malloc(sizeof(struct tcp_api_args));
+	memset(args, 0, sizeof(struct tcp_api_args));
+	args->done = 0;
+	return args;
+}
+
+void tcp_api_args_destroy(tcp_api_args_t* args){
+	/* first join your thread. this will block
+		if you're not done yet */
+	pthread_join((*args)->thread, NULL);
+
+	/* for now just free it, but should probably also destroy the struct in_addr* */
+	free(*args);
+	*args = NULL;
+}
+
+//// these verify that the desired field is present and valid in arguments
+//// just FYI, crash_and_burn() is defined in utils/utils.h and it does the
+//// required crashing and/or burning (ie exit)
+#define _verify_node(args) if((args)->node == NULL) {CRASH_AND_BURN("INVALID NODE");}
+#define _verify_socket(args) if((args)->socket < 0) {CRASH_AND_BURN("INVALID SOCKET");}
+#define _verify_addr(args) if((args)->addr == NULL) {CRASH_AND_BURN("INVALID ADDR");}
+#define _verify_port(args) // always true
+
+static void* _return(tcp_api_args_t args, int ret){
+	//puts("thread queueing return");
+	args->done = 1;
+	args->result = ret;
+	pthread_exit(NULL);
+}
 
 
 /* connects a socket to an address (active OPEN in the RFC)
 returns 0 on success or a negative number on failure */
-int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t port){
-	
-	pthread_mutex_t mtx;
-	pthread_cond_t cond;
-	
+
+int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint16_t port){
+
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(connection == NULL)	
 		return -EBADF; 	 // = The file descriptor is not a valid index in the descriptor table.
 	
-	/* Lock up api on this connection -- BLOCK */
-	mtx = tcp_connection_get_api_mutex(connection);
-	cond = tcp_connection_get_api_cond(connection);
-	pthread_mutex_lock(&mtx);
-	
+	tcp_connection_api_lock(connection);// make sure no one else is messing with the socket/connection
+
 	/* Make sure connection has a unique port before sending anything so that node can multiplex response */
 	if(!tcp_connection_get_local_port(connection))
 		tcp_node_assign_port(tcp_node, connection, tcp_node_next_port(tcp_node));
 	
 	//connection needs to know both its local and remote ip before sending
-	uint32_t local_ip = tcp_node_get_local_ip(tcp_node, (addr.s_addr));
+	uint32_t local_ip = tcp_node_get_local_ip(tcp_node, (*addr).s_addr);
 	
-	if(!local_ip)
+	if(!local_ip){
 		return -ENETUNREACH;
+	}
 	
-	tcp_connection_set_remote_ip(connection, addr.s_addr);
+	tcp_connection_set_remote_ip(connection, (*addr).s_addr);
 	tcp_connection_set_local_ip(connection, local_ip);
 	
 	tcp_connection_active_open(connection, tcp_connection_get_remote_ip(connection), port);
 	
 	/* Now wait until connection ESTABLISHED or timed out -- ret value will indicate */
-	pthread_cond_wait(&cond, &mtx);
+	int ret = tcp_connection_api_result(connection); // will block until it gets the result
+	if(ret == SIGNAL_DESTROYING){
+		// is there anything else we should do here?
+		return SIGNAL_DESTROYING;
+	}
 
-	/* After we return from that get ret value and return */
-	int ret = tcp_connection_get_api_ret(connection); // should be 0 if successful
-	
-	/* Unlock for other api calls */
-	pthread_mutex_unlock(&mtx);
-	
 	return ret;
 }
 
-// called by v_socket	
-int tcp_api_socket(tcp_node_t tcp_node){
+/* entry function for letting the above function be called by a thread
 
+	design defense: this way tcp_api_connect doesn't need to know that 
+					it is being called in a new thread, it is just a function, 
+					and we happen to be calling it in a thread that we spawned
+					for just this purpose
+*/
+void* tcp_api_connect_entry(void* _args){
+	tcp_api_args_t args = (tcp_api_args_t) _args;
+	
+	/* verify that the necessary args were set */
+	_verify_node(args);
+	_verify_socket(args);
+	_verify_addr(args);
+	_verify_port(args);
+
+	/* then get the result */
+	int ret = tcp_api_connect(args->node, args->socket, args->addr, args->port);
+
+	/* and use my macro to return it 
+		(first arg is size of retal) */
+	_return(args, ret);
+	return NULL;
+}
+
+// called by v_socket 	
+int tcp_api_socket(tcp_node_t tcp_node){
 	tcp_connection_t connection = tcp_node_new_connection(tcp_node);
 	if(connection == NULL)
 		return -ENFILE;//The system limit on the total number of open files has been reached.
@@ -79,8 +130,10 @@ int tcp_api_bind(tcp_node_t tcp_node, int socket, char* addr, uint16_t port){
 		be able to call this if another api call in process */
 	///TODO
 	
-	if(tcp_connection_get_local_port(connection))
+	if(tcp_connection_get_local_port(connection)){
+		int port = tcp_connection_get_local_port(connection);
 		return -EINVAL; 	// The socket is already bound to an address.
+	}
 
 	tcp_node_assign_port(tcp_node, connection, port);
 	
@@ -89,6 +142,7 @@ int tcp_api_bind(tcp_node_t tcp_node, int socket, char* addr, uint16_t port){
 	
 	return 0;
 }
+
 // returns port that connection is listening on, negative number on failure
 int tcp_api_listen(tcp_node_t tcp_node, int socket){
 
@@ -118,57 +172,67 @@ int tcp_api_listen(tcp_node_t tcp_node, int socket){
 returns new socket handle on success or negative number on failure 
 int v accept(int socket, struct in addr *node); */
 int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
-	
-	pthread_mutex_t mtx_listening; //mutex of the connection that accept was called on -- the listening connection
-	pthread_mutex_t mtx_connecting; //mutex of the newly created connection that goes on to accept connection
-	pthread_cond_t cond_connecting; //pthread_cond_t of the newly created connecting connection
-	
+
 	tcp_connection_t listening_connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(listening_connection == NULL)
 		return -EBADF;
 
 	/* Lock up api on this connection -- BLOCK  -- really we don't want to 
 		be able to call this if another api call in process */
-	mtx_listening = tcp_connection_get_api_mutex(listening_connection);
-	pthread_mutex_lock(&mtx_listening);
+	tcp_connection_api_lock(listening_connection);
 	
 	/* listening connection must actually be listening */
 	if(tcp_connection_get_state(listening_connection) != LISTEN){
-		pthread_mutex_unlock(&mtx_listening);
+		tcp_connection_api_unlock(listening_connection);
 		return -EINVAL; //Socket is not listening for connections, or addrlen is invalid (e.g., is negative).
 	}	
+
 	/* calls on the listening_connection to dequeue its triple and node creates new connection with information
 	 new socket is the socket assigned to that new connection.  This connection will then go on to finish
 	 the three-way handshake to reach ESTABLISHED state */
 	/* THIS CALL IS BLOCKING -- because the accept_queue is a bqueue -- call returns when accept_data_t dequeued */
 	tcp_connection_t new_connection = tcp_node_connection_accept(tcp_node, listening_connection, addr);
 	if(new_connection == NULL){
-		pthread_mutex_unlock(&mtx_listening);
+		tcp_connection_api_unlock(listening_connection);
 		return -1; //TODO -- HANDLE BETTER -- WHICH ERROR CODE? WHAT HAPPENED?
 	}
-	/* We also need to lock up this new_connection */
-	mtx_connecting = tcp_connection_get_api_mutex(new_connection);
-	cond_connecting = tcp_connection_get_api_cond(new_connection);
-	
+
 	// set state of this new_connection to LISTEN so that we can send it through transition LISTEN_to_SYN_RECEIVED
 	tcp_connection_set_state(new_connection, LISTEN);
 	
 	// have connection transition from LISTEN to SYN_RECEIVED
-	if(tcp_connection_state_machine_transition(new_connection, receiveSYN)<0){
-		puts("Alex and Neil go debug: tcp_connection_state_machine_transition(new_connection, receiveSYN)) returned negative value in tcp_node_connection_accept");
-		exit(1); // CRASH AND BURN
-	}
+	if(tcp_connection_state_machine_transition(new_connection, receiveSYN)<0)
+		CRASH_AND_BURN("Alex and Neil go debug: tcp_connection_state_machine_transition(new_connection, receiveSYN)) returned negative value in tcp_node_connection_accept");
+	
 	
 	/* Now wait until connection ESTABLISHED 
 		when established connection should call tcp_api_accept_help which will signal the accept_cond */
-	pthread_cond_wait( &cond_connecting, &mtx_connecting);
-	int ret = tcp_connection_get_api_ret(new_connection); // if successful = new_connection->socket_id;
+	int ret = tcp_connection_api_result(new_connection); // if successful = new_connection->socket_id;
+	if(ret == SIGNAL_DESTROYING){
+		// is there anything else we can do here?
+		return SIGNAL_DESTROYING;
+	}
+
+	tcp_connection_api_unlock(listening_connection);
 
 	/* Our connection has been established! 
 	TODO:HANDLE bad ret value */
-	pthread_mutex_unlock(&mtx_connecting);
-	pthread_mutex_unlock(&mtx_listening);
 	
 	return ret;	
  
 }
+
+void* tcp_api_accept_entry(void* _args){
+	tcp_api_args_t args = (tcp_api_args_t)_args;
+
+	/* verifies that these fields are valid (node != NULL, socket >=0, ...) */
+	_verify_node(args);
+	_verify_socket(args);
+	_verify_addr(args);
+	
+	/* we'll use the macro thread_return in order to return a value */
+	int ret = tcp_api_accept(args->node, args->socket, args->addr);
+	_return(args, ret);
+	return NULL;
+}
+

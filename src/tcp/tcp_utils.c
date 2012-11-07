@@ -186,6 +186,14 @@ struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_por
 /* requires the packet with the header as 
 	well as information for the pseudo-header (see below) */
 uint16_t tcp_utils_calc_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t protocol){
+/*	
+	char src[INET_ADDRSTRLEN], dest[INET_ADDRSTRLEN];
+	inet_ntop(AF_INET, &src_ip, src, INET_ADDRSTRLEN);
+	inet_ntop(AF_INET, &dest_ip, dest, INET_ADDRSTRLEN);
+
+	printf("calculating checksum: [length %u] [src %s] [dest %s] [proto %d]\n", total_length, src, dest, protocol);
+*/
+
 	int i;
 	uint32_t sum = 0;
 	uint16_t word;

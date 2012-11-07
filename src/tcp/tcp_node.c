@@ -33,8 +33,6 @@ static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t* tcp_stdin_thread)
 static int _insert_connection_array(tcp_node_t tcp_node, tcp_connection_t connection);
 
 
-
-
 /*********************** Hash Table Maintenance ****************************/
 
 /* uthash works by keying on a field of a struct, and using that key as 
@@ -53,7 +51,7 @@ struct connection_virt_socket_keyed{
 
 struct connection_port_keyed{
 	tcp_connection_t connection;
-	int port;
+	uint16_t port;
 
 	UT_hash_handle hh;
 };
@@ -116,6 +114,8 @@ struct tcp_node{
 	// each time need new unique socket/port, call dequeue and item is pointer to int to use as socket/port
 	queue_t sockets_available_queue;
 	queue_t ports_available_queue;
+
+	plain_list_t thread_list;
 };
 
 tcp_node_t tcp_node_init(iplist_t* links){
@@ -169,6 +169,9 @@ tcp_node_t tcp_node_init(iplist_t* links){
 	tcp_node->sockets_available_queue = sockets_available_queue;
 	tcp_node->ports_available_queue = ports_available_queue;
 	/************ Kernal Table Created ***********/
+
+	/* thread queue */
+	tcp_node->thread_list = plain_list_init();
 	
 	//// you're still running right? right
 	tcp_node->running = 1;
@@ -214,6 +217,7 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	// destroy bqueues
 	bqueue_destroy(tcp_node->to_send);
 	free(tcp_node->to_send);
+
 	bqueue_destroy(tcp_node->to_read);
 	free(tcp_node->to_read);
 
@@ -223,6 +227,8 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	// destroy socket/port queues -- they just hold ints so i don't think we need to destroy each item inside
 	queue_destroy(&(tcp_node->sockets_available_queue));
 	queue_destroy(&(tcp_node->ports_available_queue));
+	
+	plain_list_destroy(&(tcp_node->thread_list));
 	
 	free(tcp_node);
 	tcp_node = NULL;
@@ -259,6 +265,9 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 	tcp_connection_set_local_ip(new_connection, accept_queue_data_get_local_ip(data));
 	tcp_connection_set_remote(new_connection, accept_queue_data_get_remote_ip(data), accept_queue_data_get_remote_port(data));
 	tcp_connection_set_last_seq_received(new_connection, accept_queue_data_get_seq(data));
+
+	// don't we need to set the local port? because it needs to receive data
+	tcp_node_assign_port(tcp_node, new_connection, -1); //-1 just assigns to next port
 	
 	// destroy data -- all done with it
 	accept_queue_data_destroy(&data);
@@ -276,11 +285,19 @@ tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 		
 	// init new tcp_connection
 	tcp_connection_t connection = tcp_connection_init(socket, tcp_node->to_send);
+
 	// place connection in array
 	_insert_connection_array(tcp_node, connection);
+
+	/*
+	commented out because if we call bind() on a new socket, an error
+	is given (correctly?) because the connection that we're trying to 
+	bind already has a port (because of the below)
+	
 	// place connection in hashmaps
 	int port = tcp_node_next_port(tcp_node);
 	tcp_node_assign_port(tcp_node, connection, port);
+	*/
 
 	connection_virt_socket_keyed_t socket_keyed = connection_virt_socket_keyed_init(connection);
 	HASH_ADD_INT(tcp_node->virt_socketToConnection, virt_socket, socket_keyed);
@@ -361,8 +378,12 @@ tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int sock
 
 // returns tcp_connection corresponding to port
 tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t port){
+	/* in order to be compatible with uthash's built in 
+	 	support for ports */
+	int int_port = (int)port; 
+
 	connection_port_keyed_t port_keyed;
-	HASH_FIND_INT(tcp_node->portToConnection, &port, port_keyed);
+	HASH_FIND_INT(tcp_node->portToConnection, &int_port, port_keyed);
 	if(!port_keyed)
 		return NULL;
 	else
@@ -371,10 +392,12 @@ tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t p
 
 // assigns port to tcp_connection and puts entry in hash table that hashes ports to tcp_connections
 // returns 1 if port successfully assigned, 0 otherwise
+
+/* just a note, I feel like 0 is traditional used to indicate success */
 int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int port){
 	
 	if(port<=0)
-		return 0; // 0 is not a valid port
+		port = tcp_node_next_port(tcp_node);
 		
 	if(tcp_node_port_unused(tcp_node, port)<0)
 		return 0; // port already in use
@@ -387,6 +410,20 @@ int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int p
 	connection_port_keyed_t port_keyed = connection_port_keyed_init(connection);
 	HASH_ADD_INT(tcp_node->portToConnection, port, port_keyed);	
 	
+	tcp_connection_t c = tcp_node_get_connection_by_port(tcp_node, uport);
+	if(!c)
+		CRASH_AND_BURN("!!!!!!!!!!!!!!!!!!!!");
+	else
+		puts("good!");
+
+	/*
+	connection_port_keyed_t get_port_keyed;
+	HASH_FIND_INT(tcp_node->portToConnection, &port, get_port_keyed);
+	if(!get_port_keyed)
+		CRASH_AND_BURN("added port to hash_map and then couldn't get it out");
+	puts("good.");
+	*/
+
 	return 1;
 }
 
@@ -524,8 +561,6 @@ int tcp_node_queue_ip_cmd(tcp_node_t tcp_node, char* buffered_cmd){
 	return 1;
 }
 
-
-
 // returns tcp_node->running
 int tcp_node_running(tcp_node_t tcp_node){
 	return tcp_node->running;
@@ -539,29 +574,34 @@ void tcp_node_command_ip(tcp_node_t tcp_node, const char* cmd){
 	ip_node_command(tcp_node->ip_node, cmd);
 }
 
-
-
-/* num_butes>0 indicates there is data and therefore to_write must be pushed to window 
-int tcp_node_send(tcp_node_t tcp_node, char* to_write, int socket, uint32_t num_bytes){
-
-	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
-	if(!connection)	
-		return -EBADF;
-	
-	int ret;
-	ret = tcp_connection_send(connection, to_write, num_bytes);
-	return ret;
-}*/
-
 /*
 tcp_node_invalid_port
 	handles the case where a packet is received to which there is no open 
 	port. Should inform the sender?
 */
 void tcp_node_invalid_port(tcp_node_t tcp_node, tcp_packet_data_t packet){
-	// let's just not do anything. That'll show em -- that's ridiculous
-	puts("tcp_node_invalid_port -- are we going to handle this?? TODO");
-	// this might be appropriate: ECONNREFUSED = No-one listening on the remote address.
+	/* anything else? */
+	tcp_node_refuse_connection(tcp_node, packet);
+	puts("invalid port. sent RST");
+}
+
+void tcp_node_refuse_connection(tcp_node_t tcp_node, tcp_packet_data_t packet){
+/*  
+	RFC 793: pg 35
+    In particular, SYNs addressed to a non-existent connection are rejected
+    by this means.
+*/
+	struct tcphdr* incoming_header = (struct tcphdr*)packet->packet;
+
+	// create the outgoing packet
+	struct tcphdr* outgoing_header = tcp_header_init(tcp_dest_port(incoming_header), tcp_source_port(incoming_header), 0);
+	tcp_set_rst_bit(outgoing_header);
+	tcp_utils_add_checksum(outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip, TCP_DATA);
+
+	tcp_packet_data_t rst_packet = tcp_packet_data_init((char*)outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip);
+	free(outgoing_header);
+	
+	ip_node_send_tcp(tcp_node->ip_node, rst_packet);
 }
 	
 
@@ -596,6 +636,7 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 
 	tcp_connection_t connection = tcp_node_get_connection_by_port(tcp_node, dest_port);
 	if(!connection){
+		printf("invalid port: %u\n", dest_port);
 		tcp_node_invalid_port(tcp_node, tcp_packet);
 		free(tcp_packet);
 		return;
@@ -674,28 +715,31 @@ static int _start_ip_threads(tcp_node_t tcp_node,
 	return 1;
 }
 
+/* for threading */
+void tcp_node_thread(tcp_node_t node, void *(*start_routine)(void*), tcp_api_args_t arg){
+	pthread_create(&(arg->thread),NULL,start_routine,arg);
+	plain_list_append(node->thread_list, arg);
+}	
+
+plain_list_t tcp_node_thread_list(tcp_node_t node){
+	return node->thread_list;
+}
+
 /*********** For use by tcp_node to reach ip_node items ****************/
 // returns ip address of remote side of passed in remote ip
 // returns 0 if remote ip unreachable
 uint32_t tcp_node_get_local_ip(tcp_node_t tcp_node, uint32_t remote_ip){
-	uint32_t local_ip = tcp_ip_node_get_local_ip(tcp_node->ip_node, remote_ip);
-	return local_ip;
+	return tcp_ip_node_get_local_ip(tcp_node->ip_node, remote_ip);
 }
-
-
 
 /***************** FOR TESTING *********************/
 
 uint32_t tcp_node_get_interface_remote_ip(tcp_node_t tcp_node, int interface_num){
-	uint32_t ip_addr;
-	ip_addr = ip_node_get_interface_remote_ip(tcp_node->ip_node, interface_num);
-	return ip_addr;
+	return ip_node_get_interface_remote_ip(tcp_node->ip_node, interface_num);
 }
 
 uint32_t tcp_node_get_interface_local_ip(tcp_node_t tcp_node, int interface_num){
-	uint32_t ip_addr;
-	ip_addr = ip_node_get_interface_local_ip(tcp_node->ip_node, interface_num);
-	return ip_addr;
+	return ip_node_get_interface_local_ip(tcp_node->ip_node, interface_num);
 }	
 
 

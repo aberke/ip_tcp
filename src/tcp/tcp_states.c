@@ -15,7 +15,7 @@ transitioning_t closed_next_state(transition_e t){
 		case activeOPEN:
 			/* create TCB and send SYN */
 			return transitioning_init(SYN_SENT, (action_f)tcp_connection_CLOSED_to_SYN_SENT);
-			
+
 		default:
 			return transitioning_init(CLOSED, NULL); //TODO: SUPPLY ACTION FOR BAD CALL
 	}
@@ -54,6 +54,10 @@ transitioning_t syn_sent_next_state(transition_e t){
 		case CLOSE:
 			/* delete TCB */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_SYN_SENT_to_CLOSED);
+
+		case receiveRST:
+			/* your connection was refused */
+			return transitioning_init(CLOSED, (action_f)tcp_connection_SYN_SENT_to_CLOSED_by_RST);	
 			
 		default:
 			return transitioning_init(SYN_SENT, NULL);

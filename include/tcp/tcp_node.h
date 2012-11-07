@@ -8,6 +8,8 @@
 #include "ip_node.h"
 #include "list.h"
 #include "tcp_states.h"
+#include "tcp_api.h"
+
 /* set artificially low right now so we can make sure have no segfaults if ever reach limit */
 #define MAX_FILE_DESCRIPTORS 5 // per process limit commonly set to 1024 on mac and linux machines
 
@@ -19,6 +21,9 @@
 
 
 typedef struct tcp_node* tcp_node_t; 
+
+// forward declare
+struct tcp_api_args;
 
 /*
 // following structs defined in ip_node.h
@@ -106,9 +111,9 @@ void tcp_node_send(tcp_node_t tcp_node, char* to_write, int socket, uint32_t num
 
 /* ADDED BY NEIL : informs a remote connection of invalid port */
 void tcp_node_invalid_port(tcp_node_t tcp_node, tcp_packet_data_t packet);
+void tcp_node_refuse_connection(tcp_node_t tcp_node, tcp_packet_data_t packet);
 
-
-/* For accept */
+/*********** For accept ************************************************/
 // calls on the listening_connection to dequeue its triple and node creates new connection with information
 // returned int is the new socket assigned to that new connection.  The connection finishes its handshake to get to
 // 	established state
@@ -119,8 +124,14 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 // returns 0 if remote ip unreachable
 uint32_t tcp_node_get_local_ip(tcp_node_t tcp_node, uint32_t remote_ip);
 
+/*********** for threading *********************************************/
+void tcp_node_thread(tcp_node_t node, void *(*start_routine)(void*), struct tcp_api_args* args);
+plain_list_t tcp_node_thread_list(tcp_node_t node);
+
+
 /**** FOR TESTING *****/
 uint32_t tcp_node_get_interface_remote_ip(tcp_node_t tcp_node, int interface_num);
 uint32_t tcp_node_get_interface_local_ip(tcp_node_t tcp_node, int interface_num);
+
 
 #endif //__TCP_NODE_H__

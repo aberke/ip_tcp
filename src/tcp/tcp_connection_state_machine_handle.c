@@ -79,8 +79,7 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 	    2. send your own SEQ number */
 
 	if(connection->send_window != NULL){
-		puts("sending window is not null when we're trying to send a SYN/ACK in tcp_connection_LISTEN_to_SYN_RECEIVED. why?");
-		exit(1); // CRASH AND BURN  <-- doesn't that seem a bit drastic?
+		CRASH_AND_BURN("sending window is not null when we're trying to send a SYN/ACK in tcp_connection_LISTEN_to_SYN_RECEIVED. why?");
 	}
 
 	uint32_t ISN = RAND_ISN();	
@@ -113,14 +112,17 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 /* this function should actually be called ONLY by tcp_node, because 
 	don't we need to first verify that this is a valid IP? */
 int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, uint16_t port){
-	tcp_connection_set_remote(connection, ip_addr, port);
 
+	/* set the remote and then transition */
+	tcp_connection_set_remote(connection, ip_addr, port);
 	state_machine_transition(connection->state_machine, activeOPEN);
 
 	return 1;
 }
+
 /* helper to CLOSED_to_SYN_SENT as well as in the _handle_read_write thread for resending syn */
 int tcp_connection_send_syn(tcp_connection_t connection){
+	puts("sending syn");
 
 	//Note: Window already initialized with connection->last_seq_sent when we transitioned from CLOSED_to_SYN_SENT
 
@@ -130,16 +132,17 @@ int tcp_connection_send_syn(tcp_connection_t connection){
 	/* fill the syn, and set the seqnum */
 	tcp_set_syn_bit(header);
 	tcp_set_seq(header, connection->last_seq_sent);
+	printf("sending syn with seq: %u\n", connection->last_seq_sent);
+	tcp_utils_add_checksum(header, sizeof(*header), connection->local_addr.virt_ip, connection->remote_addr.virt_ip, TCP_DATA);
 	
 	// set time of when we're sending off syn
-	gettimeofday(&(connection->connect_accept_timer), NULL);
-	
+	gettimeofday(&(connection->syn_timer), NULL);
+
 	/*  that should be good? send it off. Note: NULL because I'm assuming there's
 		to send when initializing a connection, but that's not necessarily true */
 	tcp_wrap_packet_send(connection, header, NULL, 0);
 	return 1;
 }	
-
 
 /*
 tcp_connection_CLOSED_to_SYN_SENT 
@@ -158,6 +161,7 @@ int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection){
 
 	return 1;
 }
+
 int tcp_connection_LISTEN_to_SYN_SENT(tcp_connection_t connection){
 	//puts("LISTEN --> SYN_SENT");
 
@@ -220,6 +224,7 @@ int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection){
 
 	return 1;
 }
+
 int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
 	puts("SYN_SENT --> ESTABLISHED");
 
@@ -338,21 +343,42 @@ int tcp_connection_LISTEN_to_CLOSED(tcp_connection_t connection){
 }
 										
 
+/* I don't think this is right, because I think you could close the 
+	connection after a syn sent without timing out (the user just 
+	decides to close it and not wait for a response). This is the 
+	function that should occur at THAT point */
 int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection){
 	puts("SYN_SENT --> CLOSED");
-	send_window_destroy(&(connection->send_window));
-	recv_window_destroy(&(connection->receive_window));
+	if(connection->send_window)
+		send_window_destroy(&(connection->send_window));
+	if(connection->receive_window)
+		recv_window_destroy(&(connection->receive_window));
 	
 	tcp_connection_api_signal(connection, -ETIMEDOUT); // return from connect() api call with timeout error
 	
 	/* you're just closing up, there's nothing to do */
 	return 1;
 }
+
 int tcp_connection_SYN_RECEIVED_to_FIN_WAIT_1(tcp_connection_t connection){
-	
 	return 1;
 }
 
+/* When we close the connection, we want to relinquish its resources, which
+	means we want to talk to the node (free its port for reuse, reset its
+	ip addresses) */
+int tcp_connection_SYN_SENT_to_CLOSED_by_RST(tcp_connection_t connection){
+	puts("SYN_SENT --> CLOSED by RST");
+	if(connection->send_window)
+		send_window_destroy(&(connection->send_window));
+	if(connection->receive_window)
+		recv_window_destroy(&(connection->receive_window));
+	
+	tcp_connection_api_signal(connection, -ECONNREFUSED);
+
+	/* just closing up, nothing to do */
+	return 1;
+}
 
 /********** End of State Changing Functions *******/
 

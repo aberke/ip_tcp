@@ -67,6 +67,41 @@ void error(const char* msg){
 	if (DEBUG) exit(1);
 }
 
+/*
+ used for reading from stdin without blocking (for long periods of time).
+	returns:
+		0  if nothing read
+		1  if something read
+		-1 if error (fgets returned NULL)
+*/
+int fd_fgets(fd_set* set, char* buff, int size_of_buff, FILE* file_stream, struct timeval* tv){
+															
+	/* set up for the call */									
+	FD_ZERO(set); 											
+	int fd = fileno(file_stream);								
+	FD_SET(fd, set);											
+															
+	/* get the result */										
+	int ret = select(fd+1, set, NULL, NULL, tv);						
+	if(ret < 0)
+		return ret;
+
+	else if(ret==0)
+		return 0;
+															
+	if(FD_ISSET(fd, set)){
+		char* ret = fgets(buff, size_of_buff, file_stream);					
+		if(!ret)
+			return -1;
+		else
+			return 1;
+	}
+	else{
+		CRASH_AND_BURN("how did execution get here!!");
+	}
+}
+
+
 /* takes in a string and a character and returns true
    only if the character is in the string (an empty string
    will return false */

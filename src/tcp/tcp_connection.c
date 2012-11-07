@@ -23,7 +23,7 @@
 #include "tcp_connection_state_machine_handle.h"
 
 #define SYN_TIMEOUT 2 //2 seconds at first, and doubles each time next syn_sent
-#define CRASH_AND_BURN 4567829
+#define CRASH_AND_BURN_SIGNIFIER 4567829
 
 
 // all those fancy things we defined here are now located in tcp_utils so they can also 
@@ -93,18 +93,7 @@ pthread_cond_t tcp_connection_get_api_cond(tcp_connection_t connection){
 int tcp_connection_get_api_ret(tcp_connection_t connection){
 	return connection->api_ret;
 }
-		
-/* calls pthread_cond_signal(api_cond) so that the waiting tcp_api function can stop waiting and take a look at the return value		
-tcp_connection_api_signal(connection); 
-*/
-void tcp_connection_api_signal(tcp_connection_t connection, int ret){
-	/* set return value and signal that tcp_api function finished on the connection's part */
-	connection->api_ret = ret;
 	
-	pthread_cond_t api_cond = connection->api_cond;
-	pthread_cond_signal(&api_cond);
-}
-
 tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	// init state machine
 	state_machine_t state_machine = state_machine_init();
@@ -115,7 +104,7 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	pthread_mutex_init(&(connection->api_mutex), NULL);
 	pthread_cond_init(&(connection->api_cond), NULL);
 	
-	connection->api_ret = CRASH_AND_BURN;
+	connection->api_ret = CRASH_AND_BURN_SIGNIFIER;
 	
 	// let's do this the first time we send the SYN, just so if we try to send before that
 	// we'll crash and burn because it's null
@@ -746,6 +735,32 @@ void tcp_connection_set_remote_ip(tcp_connection_t connection, uint32_t remote_i
 void tcp_connection_set_local_ip(tcp_connection_t connection, uint32_t ip){
 	connection->local_addr.virt_ip = ip;
 }
+
+/* signaling */
+	
+/* calls pthread_cond_signal(api_cond) so that the waiting tcp_api function can stop waiting and take a look at the return value		
+tcp_connection_api_signal(connection); 
+*/
+void tcp_connection_api_signal(tcp_connection_t connection, int ret){
+	/* set return value and signal that tcp_api function finished on the connection's part */
+	connection->api_ret = ret;
+	pthread_cond_signal(&(connection->api_cond));
+}
+
+void tcp_connection_api_lock(tcp_connection_t connection){
+	pthread_mutex_lock(&(connection->api_mutex));
+}
+
+void tcp_connection_api_unlock(tcp_connection_t connection){
+	pthread_mutex_unlock(&(connection->api_mutex));
+}
+
+int tcp_connection_api_result(tcp_connection_t connection){
+	pthread_cond_wait(&(connection->api_cond), &(connection->api_mutex));
+	tcp_connection_api_unlock(connection); // make sure someone else can use it now
+	return connection->api_ret;
+}
+
 
 /* hacky? */  //<-- yeah kinda
 #include "tcp_connection_state_machine_handle.c"

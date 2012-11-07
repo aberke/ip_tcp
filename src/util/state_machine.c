@@ -101,23 +101,7 @@ state_e state_machine_get_state(state_machine_t machine){
 void state_machine_set_state(state_machine_t machine, state_e state){
 	machine->current_state = state;
 }
-//// INTERNAL FUNCTIONS ////
-static void _print(state_machine_t machine){
-	int i,j;
-	transitioning_t transition;
-	for(i=0;i<1;i++){//NUM_STATES;i++){
-		for(j=0;j<NUM_TRANSITIONS;j++){
-			transition = ARRAY_GET(machine->transition_matrix, (state_e)i, (transition_e)j);
-			print_transition((transition_e)j);
-			printf(",");
-			print_state((state_e)i);
-			printf("-->");
-			print_state(transition->next_state);
-			printf("    ");
-		}
-		printf("\n");
-	}
-}
+
 /* set state iterates through the states/transitions and for each
 	calls the function get_next_state which will give the state that 
 	should be at TransitionMatrix<state,transition>. Again, 
