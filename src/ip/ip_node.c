@@ -386,13 +386,16 @@ void *ip_send_thread_run(void *ipdata){
 		
 		/* try to get the next thing on queue */
 		ret = bqueue_timed_dequeue_abs(to_send, &packet, &wait_cond);
-		if (ret != 0) 
-			/* should probably check at this point WHY we failed (for instance perhaps the queue
-				was destroyed */
+		if (ret==-ETIMEDOUT) 
 			continue;
+		else if(ret==-EINVAL)
+			print(("EINVAL returned from dequeueing"), IP_PRINT);
+		
 			
 		/* otherwise there's a packet waiting for you! */
+		print(("["), IP_PRINT);
 		_handle_to_send_queue(ip_node, packet);
+		print(("]"), IP_PRINT);
 
 	}
 	pthread_exit(NULL);
@@ -609,6 +612,7 @@ static void _handle_user_command_down(ip_node_t ip_node, char* buffer){
 		link_interface_bringdown(interface);
 	}		
 }
+
 /* _handle_user_command_up is a helper to _handle_user_command for handling 'up <interface>' command */
 static void _handle_user_command_up(ip_node_t ip_node, char* buffer){
 	char up[50];
@@ -627,6 +631,7 @@ static void _handle_user_command_up(ip_node_t ip_node, char* buffer){
 		link_interface_bringup(interface);
 	}		
 }
+
 /* _handle_user_command_send iterates through to_send queue to handle each packet that has been wrapped by tcp_node */
 static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 	
@@ -647,7 +652,6 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 	if(_is_local_ip(ip_node, send_to_vip)){
 		printf("We send a message to ourselves?  Look into how we should handle packet: %s\n", (char*)packet);
 		return;
-		//continue;
 	}
 		
 	// get next hop for sending message to send_to_vip
@@ -655,8 +659,8 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 	if(next_hop_addr == -1){
 		printf("Cannot reach address %d.\n", send_to_vip);
 		return;
-		//continue;
 	}
+
 	// get struct in_addr corresponding to next_hop_addr
 	send_from.s_addr = next_hop_addr;
 	// get interface to send out packet on -- interface corresponding to next_hop_addr

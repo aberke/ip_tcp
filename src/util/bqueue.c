@@ -12,19 +12,19 @@
 int pthread_mutex_timedlock(pthread_mutex_t* mutex, const struct timespec* abs_timeout){
 	int result;
 	struct timeval now;
-	struct timespec ts;
+	struct timespec ts, ts_remaining;
 	do
 	{
 		result = pthread_mutex_trylock(mutex);
 		if (result == EBUSY)
 		{
 			ts.tv_sec = 0;
-			ts.tv_sec = 10000000;
+			ts.tv_nsec = 10000000;
 
 			/* Sleep for 10,000,000 nanoseconds before trying again. */
 			int status = -1;
 			while (status == -1)
-			status = nanosleep(&ts, &ts);
+			status = nanosleep(&ts, &ts_remaining);
 		}
 		else
 			break;

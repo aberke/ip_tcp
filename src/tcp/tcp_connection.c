@@ -222,11 +222,13 @@ int _validate_ack(tcp_connection_t connection, uint32_t ack){
 	my_to_read queue for this connection to handle in its _handle_read_send thread 
 	returns 1 on success, 0 on failure */
 int tcp_connection_queue_to_read(tcp_connection_t connection, tcp_packet_data_t tcp_packet){
+	print(("queueing packet"), TCP_PRINT);
 	if(bqueue_enqueue(connection->my_to_read, tcp_packet))
 		return 0;
 	else
 		return 1;
 }
+
 /* Called when connection in LISTEN state receives a syn.  
 	Queues info necessary to create a new connection when accept called 
 	returns 0 on success, negative if failed -- ie queue destroyed */
@@ -290,7 +292,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		char buff[256];
 		memcpy(buff, data->data, data->length);
 		buff[data->length] = '\0';
-		printf("received: %s\n", buff);
+		printf("%s", buff);
 		/*                  	  */
 
 		recv_window_receive(connection->receive_window, data->data, data->length, tcp_seqnum(tcp_packet));
