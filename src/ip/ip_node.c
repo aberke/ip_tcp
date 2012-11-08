@@ -894,7 +894,7 @@ uint32_t tcp_ip_node_get_local_ip(ip_node_t ip_node, uint32_t remote_ip){
 	
 	uint32_t local_ip = link_interface_get_local_virt_ip(interface);
 	
-	printf("local_ip = %u\n", local_ip);
+	print(("local_ip = %u", local_ip), IP_PRINT);
 	
 	// just to double check:
 	if(!_is_local_ip(ip_node, local_ip))

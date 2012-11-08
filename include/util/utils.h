@@ -5,6 +5,9 @@
 #include <time.h>
 #include <sys/select.h>
 
+/* ALL THE TIMEOUTS */
+#define TCP_CONNECTION_DEQUEUE_TIMEOUT_NSECS 10000000
+
 /* for printing */
 #define IP_PRINT 			1
 #define TCP_PRINT 			2

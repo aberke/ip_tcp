@@ -293,6 +293,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		memcpy(buff, data->data, data->length);
 		buff[data->length] = '\0';
 		printf("%s", buff);
+		fflush(stdout);
 		/*                  	  */
 
 		recv_window_receive(connection->receive_window, data->data, data->length, tcp_seqnum(tcp_packet));
@@ -577,19 +578,19 @@ void *_handle_read_send(void *tcpconnection){
 
 	while(connection->running){	
 		gettimeofday(&now, NULL);	
-		wait_cond.tv_sec = now.tv_sec+PTHREAD_COND_TIMEOUT_SEC;
-		wait_cond.tv_nsec = 1000*now.tv_usec+PTHREAD_COND_TIMEOUT_NSEC;
+		wait_cond.tv_sec = now.tv_sec+0;
+		wait_cond.tv_nsec = 1000*now.tv_usec+TCP_CONNECTION_DEQUEUE_TIMEOUT_NSECS;
 		
 		ret = bqueue_timed_dequeue_abs(connection->my_to_read, &packet, &wait_cond);
 		
 		/* check if you're waiting for an ACK to come back */
 		if(tcp_connection_get_state(connection)==SYN_SENT){	
-			// delta seconds + delta milliseconds/1000
 			time_elapsed = now.tv_sec - connection->syn_timer.tv_sec;
 			time_elapsed += now.tv_usec/1000000.0 - connection->syn_timer.tv_usec/1000000.0;
-			//printf("time elapsed: %f\n", time_elapsed);
+
 			if(time_elapsed > (1 << ((connection->syn_count)-1))*SYN_TIMEOUT){
 				// we timeout connect or resend
+
 				if((connection->syn_count)==SYN_COUNT_MAX){
 					// timeout connection attempt
 					connection->syn_count = 0;
