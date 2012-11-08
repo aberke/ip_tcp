@@ -398,7 +398,8 @@ int tcp_connection_SYN_SENT_to_CLOSED_by_RST(tcp_connection_t connection){
 	/* just closing up, nothing to do */
 	return 1;
 }
-
+// there are times when the CLOSE call is illegal given the state - we should reflect this to user, yes? 
+// and not pthread_cond_wait indefinitely?
 int tcp_connection_CLOSING_error(tcp_connection_t connection){
 	/*RFC: Respond with "error:  connection closing". */
 	puts("TODO: make transition to handle: RFC: Respond with 'error:  connection closing'");

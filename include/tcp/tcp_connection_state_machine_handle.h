@@ -46,6 +46,10 @@ int tcp_connection_CLOSE_WAIT_to_LAST_ACK(tcp_connection_t connection);
 
 int tcp_connection_LAST_ACK_to_CLOSED(tcp_connection_t connection);
 
+// there are times when the CLOSE call is illegal given the state - we should reflect this to user, yes? 
+// and not pthread_cond_wait indefinitely?
+int tcp_connection_CLOSING_error(tcp_connection_t connection);
+
 /****** End of Functions called as actions by statemachine ******/
 
 

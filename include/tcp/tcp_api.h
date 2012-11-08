@@ -6,11 +6,14 @@
 #include "tcp_connection.h"
 #include "utils.h"
 
+//forward declaration:
+struct tcp_connection;
+
 /* for passing in to the spawned threads */
 struct tcp_api_args{
 
 	struct tcp_node* node;
-	tcp_connection_t connection;
+	struct tcp_connection* connection;
 	int socket;
 	struct in_addr* addr;
 	uint16_t port;

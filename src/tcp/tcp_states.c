@@ -174,8 +174,8 @@ transitioning_t closing_next_state(transition_e t){
 		
 		case CLOSE: 
 			/*RFC: Respond with "error:  connection closing". */
-			puts("TODO: make transition to handle: RFC: Respond with 'error:  connection closing'");
-			return;
+			return transitioning_init(TIME_WAIT, (action_f)tcp_connection_CLOSING_error);
+		
 			
 		default:
 			return transitioning_init(CLOSING, NULL);
