@@ -67,6 +67,14 @@ void error(const char* msg){
 	if (DEBUG) exit(1);
 }
 
+void inspect_bytes(const char* msg, int length){
+	int i;	
+	for(i=0;i<length;i++)
+		printf("[%d %d %c] ", i, (int)msg[i], msg[i]);		
+	
+	puts("");
+}
+
 /*
  used for reading from stdin without blocking (for long periods of time).
 	returns:

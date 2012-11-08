@@ -26,6 +26,7 @@ void send_window_destroy(send_window_t* send_window);
 
 void send_window_push(send_window_t send_window, void* data, int length);
 void send_window_check_timers(send_window_t send_window);
+int send_window_validate_ack(send_window_t send_window, uint32_t ack);
 void send_window_ack(send_window_t send_window, int index);
 void send_window_resize(send_window_t send_window, int size);
 uint32_t send_window_get_next_seq(send_window_t send_window);

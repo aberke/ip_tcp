@@ -358,6 +358,7 @@ void test_recv_window(){
 	got = recv_window_get_next(rw);
 	ASSERT(got!=NULL);
 	TEST_EQ(got->offset, 1, "");
+
 	memcpy(buffer, got->data+got->offset, got->length);
 	buffer[got->length] = '\0';
 	TEST_STR_EQ(buffer, "ello world", "");
@@ -792,13 +793,14 @@ int main(int argc, char** argv){
 	TEST(test_ext_array_scale);
 	
 	TEST(test_wrapping);
+	*/
 	
 	TEST(test_send_window);
-	TEST(test_send_window_scale);*/
+	TEST(test_send_window_scale);
 
-	TEST(test_recv_window);
+	//TEST(test_recv_window);
 
-	TEST(test_tcp_states);	
+	//TEST(test_tcp_states);	
 
 	//TEST(test_array);
 

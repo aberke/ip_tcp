@@ -323,6 +323,43 @@ void send_cmd(const char *line, tcp_node_t tcp_node){
   return;
 }
 
+/* 
+sendfile_cmd
+	parses the given command into a socket and a file to send, 
+	and then upon successful parsing of the arguments tries to
+	open the file and then sends it off 
+*/
+void sendfile_cmd(const char* line, tcp_node_t tcp_node){
+	int ret, socket;
+	char filename_buffer[BUFFER_SIZE];
+	
+	ret = sscanf(line, "sendfile %d %s", &socket, filename_buffer);
+	if(ret != 2){
+		fprintf(stderr, "syntax error (usage: sendfile [socket] [filename])\n");
+		return;
+	}
+
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(!connection){
+		fprintf(stderr, "Error: %s", strerror(EBADF));
+		return;
+	}	
+
+	FILE* f = fopen(filename_buffer, "r");
+	if(!f){
+		fprintf(stderr, "Unable to open given file: %s\n", filename_buffer);
+		return;
+	}
+
+	char input_line[BUFFER_SIZE];
+	while(fgets(input_line, BUFFER_SIZE-1, f)){
+		tcp_connection_send_data(connection, input_line, strlen(input_line));
+	}
+
+	fclose(f);
+	return;
+}
+
 void command_1(const char *line, tcp_node_t tcp_node){
 	char cmd[256];
 	strcpy(cmd, "v_connect 0 10.10.168.73 13");
@@ -363,9 +400,9 @@ struct {
 	
   /*{"accept", accept_cmd},
   {"connect", connect_cmd},
-  {"recv", recv_cmd},
+  {"recv", recv_cmd},*/
   {"sendfile", sendfile_cmd},
-  {"recvfile", recvfile_cmd},
+  /*{"recvfile", recvfile_cmd},
   {"shutdown", shutdown_cmd},
   {"close", close_cmd},*/
   {"quit", quit_cmd},	// last two quit commands added by alex -- is this how we want to deal with quitting?
@@ -470,6 +507,7 @@ void* _handle_tcp_node_stdin(void* node){
 			}
 		}
 	}
+	puts("exiting stdin thread");
 	pthread_exit(NULL);
 }
 

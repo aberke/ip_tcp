@@ -224,6 +224,7 @@ void ip_node_destroy(ip_node_t* ip_node){
 }
 
 void ip_node_stop(ip_node_t ip_node){	
+	print(("IP NODE STOPPED!"), IP_PRINT);
 	ip_node->running = 0;
 }
 /*
@@ -374,7 +375,11 @@ void *ip_send_thread_run(void *ipdata){
 	void* packet;
 	int ret;
 
+	int count=0,mod=10;
 	while(ip_node->running){	
+
+		if(count++%mod==0) print(("running %d", ip_node->running), IP_PRINT);
+
 		gettimeofday(&now, NULL);	
 		wait_cond.tv_sec = now.tv_sec+PTHREAD_COND_TIMEOUT_SEC;
 		wait_cond.tv_nsec = 1000*now.tv_usec+PTHREAD_COND_TIMEOUT_NSEC;
@@ -388,6 +393,7 @@ void *ip_send_thread_run(void *ipdata){
 			
 		/* otherwise there's a packet waiting for you! */
 		_handle_to_send_queue(ip_node, packet);
+
 	}
 	pthread_exit(NULL);
 }
@@ -666,6 +672,8 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 	// wrap and send IP packet
 	ip_wrap_send_packet(packet, packet_size, TCP_DATA, send_from, send_to, next_hop_interface);	
 	free(tcp_packet_data);
+
+	print(("ip packet sent"), IP_PRINT);
 }
 
 /* 

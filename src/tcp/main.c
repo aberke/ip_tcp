@@ -22,9 +22,13 @@ int main(int argc, char *argv[]){
 		puts("unable to init tcp_node");
 		return 1;
 	}
-
+	
+	// seed the random number generator 
+	srand(time(NULL));
+	
+	// start it up!
 	tcp_node_start(tcp_node);
 	tcp_node_destroy(tcp_node);
-	puts("tcp_node_destroyed");
+
 	return 0;
 }

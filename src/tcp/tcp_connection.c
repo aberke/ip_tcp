@@ -25,7 +25,6 @@
 #define SYN_TIMEOUT 2 //2 seconds at first, and doubles each time next syn_sent
 #define SYN_COUNT_MAX 3 // how many syns we send before timing out
 
-
 // all those fancy things we defined here are now located in tcp_utils so they can also 
 // be shared with tcp_connection_state_handle
 
@@ -207,8 +206,12 @@ validates an ACK when it's being received during
 establishing the connection 
 */
 int _validate_ack(tcp_connection_t connection, uint32_t ack){
-	/* the ACK is valid if it is equal to one more than the 
-		last sequence number sent */
+	return send_window_validate_ack(connection->send_window, ack);
+}	
+
+/* 
+		the ACK is valid if it is equal to one more than the 
+		last sequence number sent 
 	if (ack != (connection->last_seq_sent + 1) % MAX_SEQNUM){
 		printf("invalid ack: expecting %u, got %u\n", connection->last_seq_sent + 1, ack);
 		return -1;
@@ -216,15 +219,17 @@ int _validate_ack(tcp_connection_t connection, uint32_t ack){
 
 	return 0;
 }
+*/
+
+
 /* Function for tcp_node to call to place a packet on this connection's
 	my_to_read queue for this connection to handle in its _handle_read_send thread 
 	returns 1 on success, 0 on failure */
 int tcp_connection_queue_to_read(tcp_connection_t connection, tcp_packet_data_t tcp_packet){
-	
 	if(bqueue_enqueue(connection->my_to_read, tcp_packet))
 		return 0;
-
-	return 1;
+	else
+		return 1;
 }
 /* Called when connection in LISTEN state receives a syn.  
 	Queues info necessary to create a new connection when accept called 
@@ -247,7 +252,6 @@ tcp_connection_handle_receive_packet
 */
 
 void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
-	printf("received: ");
 	/* RFC 793: 
 		Although these examples do not show connection synchronization using data
 		-carrying segments, this is perfectly legitimate, so long as the receiving TCP
@@ -285,15 +289,28 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		but what does the seqnum even mean if the ACKs haven't been synchronized? */
 	memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
 	if(data){ 
-		printf("tcp_connection_receive_packet: received packet with data: \n %s\n", (char*)data->data);
-		uint32_t seqnum = tcp_seqnum(tcp_packet);	
-		puts("blah");
-		recv_window_receive(connection->receive_window, data->data, data->length, seqnum);
-		puts("blah2");
+		
+		/* print out what you got */
+		char buff[256];
+		memcpy(buff, data->data, data->length);
+		buff[data->length] = '\0';
+		printf("received: %s\n", buff);
+		/*                  	  */
+
+		recv_window_receive(connection->receive_window, data->data, data->length, tcp_seqnum(tcp_packet));
+	
+		/* send the ack back */
+		tcp_connection_ack(connection, recv_window_get_ack(connection->receive_window));
 	}	
+
+	/* ack data if you're in a position to do so */
+	if(tcp_ack_bit(tcp_packet) && connection->send_window != NULL){
+		send_window_ack(connection->send_window, tcp_ack(tcp_packet));
+	}
+
 	/* now check the bits */
 	if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
-		puts("syn/ack");
+		print(("syn/ack"),TCP_PRINT);
 
 		//puts("received packet with syn_bit and ack_bit set");
 		if(_validate_ack(connection, tcp_ack(tcp_packet)) < 0){
@@ -319,7 +336,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	}
 
 	else if(tcp_syn_bit(tcp_packet)){
-		puts("syn");
+		print(("syn"),TCP_PRINT);
 
 		//puts("received packet with syn_bit set");
 		/* got a SYN -- only valid changes are LISTEN_to_SYN_RECEIVED or SYN_SENT_to_SYN_RECEIVED */ 
@@ -352,7 +369,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	}
 	/* this will almost universally be true. */
 	else if(tcp_ack_bit(tcp_packet)){
-		puts("ack.");
+		print(("ack."),TCP_PRINT);
 
 		if(_validate_ack(connection, tcp_ack(tcp_packet)) < 0){
 			// should we drop the packet here?
@@ -373,11 +390,11 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		state_machine_transition(connection->state_machine, receiveACK);
 	}
 	else if(tcp_rst_bit(tcp_packet)){
-		puts("rst");
+		print(("rst"),TCP_PRINT);
 		state_machine_transition(connection->state_machine, receiveRST);	
 	}
 	else{
-		puts("else");
+		print(("else"),TCP_PRINT);
 	}
 			
 	/* Umm, anything else ? */	
@@ -390,6 +407,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 /* 
 tcp_connection_queue_ip_send
 	this is the reason that tcp_wrap_packet_send needs to be defined 
+
 	in tcp_connection.c, because otherwise tcp_utils would need to 
 	#include or somehow know about the queue which tcp_connection
 	is using. 
@@ -406,6 +424,18 @@ int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t 
 	return bqueue_enqueue(connection->to_send, packet);
 }
 	
+/* in order to ack a particular sequence number, this may become more
+	complicated because if we're sending data we should just add the ack 
+	onto the packet that we're sending, which would require some sort of 
+	acking queue that gets either sent by itself if there's nothing for
+	it to piggy back on (timeout?) */
+void tcp_connection_ack(tcp_connection_t connection, uint32_t ack){
+	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0);
+	tcp_set_ack_bit(header);
+	tcp_set_ack(header, ack);
+
+	tcp_wrap_packet_send(connection, header, NULL, 0);
+}
 
 /*
    NOTE should probably be here just because it's really would be a method 
@@ -420,9 +450,10 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 	// if we're sending data, concatenate header and data into one packet
 	if((data != NULL)&&(data_len)){
 		/* data_len had better be the same size as when you called tcp_header_init()!! */
-		memcpy(header+tcp_offset_in_bytes(header), data, data_len);
+		memcpy(((char*)header)+tcp_offset_in_bytes(header), data, data_len);
 		free(data);
 	}
+	
 	
 	
 	// tcp checksum calculated on BOTH header and data
@@ -477,11 +508,9 @@ void tcp_connection_push_data(tcp_connection_t connection, void* data, int data_
 	send_window_push(connection->send_window, data, data_len);
 }
 
-
 // queues chunks off from send_window and handles sending them for as long as send_window wants to send more chunks
 // NOTE: this presents the danger of one greedy connection that blocks all the other ones from sending
 int tcp_connection_send_next(tcp_connection_t connection){
-
 	int bytes_sent = 0;
 	send_window_chunk_t next_chunk;
 	send_window_t send_window = connection->send_window;
@@ -510,6 +539,7 @@ int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* t
 
 	// send as much data right now as send_window allows
 	int ret = tcp_connection_send_next(connection);
+	
 	return ret;
 }
 
@@ -573,6 +603,12 @@ void *_handle_read_send(void *tcpconnection){
 					connection->syn_count = connection->syn_count+1;
 				}
 			}
+		}
+
+		/* send whatever you're trying to send */
+		if(connection->send_window){
+			send_window_check_timers(connection->send_window);
+			tcp_connection_send_next(connection);
 		}
 
 		/* now check if there's something to read */

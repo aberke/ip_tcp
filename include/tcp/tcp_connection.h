@@ -138,6 +138,7 @@ void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_da
 
 // called by v_write
 int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* to_write, int num_bytes);
+void tcp_connection_ack(tcp_connection_t connection, uint32_t ack);
 /******* End of Sending Packets **************/
 //////////////////////////////////////////////////////////////////////////////////////
 

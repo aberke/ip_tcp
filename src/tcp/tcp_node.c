@@ -185,6 +185,7 @@ void tcp_node_stop(tcp_node_t tcp_node){
 }
 
 void tcp_node_destroy(tcp_node_t tcp_node){
+	puts("destroying node");
 
 	//// iterate through the hash maps and destroy all of the keys/values,
 	//// this will NOT destroy the connections
@@ -209,7 +210,31 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	}
 	// free the array itself
 	free(tcp_node->connections);
-	
+
+/*****************************/
+	plain_list_t list = tcp_node->thread_list;
+	plain_list_el_t el;
+	tcp_api_args_t args;
+	PLAIN_LIST_ITER(list, el)
+	args = (tcp_api_args_t)el->data;
+	if(args->done){
+		if(args->result < 0){	
+			char* error_string = strerror(-(args->result));
+			printf("Error: %s\n", error_string);
+		}
+		else if(args->result==0)
+			printf("successful.");
+		
+		else
+			printf("got result: %d!\n", args->result);
+		
+		puts("trying to destroy thread");
+		tcp_api_args_destroy(&args);
+		plain_list_remove(list, el);
+	}			
+	PLAIN_LIST_ITER_DONE(list);
+/*****************************/
+
 	// destroy ip_node and queues
 	ip_node_t ip_node = tcp_node->ip_node;
 	ip_node_destroy(&ip_node);
@@ -408,6 +433,9 @@ int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int p
 		
 	if(tcp_node_port_unused(tcp_node, port)<0)
 		return 0; // port already in use
+	
+	// return previous port to kernal
+	tcp_node_return_port_to_kernal(tcp_node, tcp_connection_get_local_port(connection));
 		
 	// set connection's port
 	uint16_t uport = (uint16_t)port;
@@ -416,18 +444,8 @@ int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int p
 	// put port to connection in kernal
 	connection_port_keyed_t port_keyed = connection_port_keyed_init(connection);
 	HASH_ADD_INT(tcp_node->portToConnection, port, port_keyed);	
-	
-	tcp_connection_t c = tcp_node_get_connection_by_port(tcp_node, uport);
-	if(!c)
-		CRASH_AND_BURN("!!!!!!!!!!!!!!!!!!!!");
 
-	/*
-	connection_port_keyed_t get_port_keyed;
-	HASH_FIND_INT(tcp_node->portToConnection, &port, get_port_keyed);
-	if(!get_port_keyed)
-		CRASH_AND_BURN("added port to hash_map and then couldn't get it out");
-	puts("good.");
-	*/
+
 
 	return 1;
 }
@@ -506,7 +524,10 @@ void tcp_node_start(tcp_node_t tcp_node){
 	struct timeval now;
 	void* packet;
 	int ret;
+	int i=0,mod=10;
 	while((tcp_node->running)&&(tcp_node_ip_running(tcp_node))){	
+		if(i++%mod==0)
+			print(("tcp_node still running"), TCP_PRINT);
 
 		/* get the time of the day so that we are passing in to bqueue_timed_dequeue_abs
 			the absolute time when we want the timeout to occur (the docs in bqueue.c say
@@ -526,25 +547,33 @@ void tcp_node_start(tcp_node_t tcp_node){
 		/* otherwise there's a packet waiting for you! */
 		_handle_packet(tcp_node, (tcp_packet_data_t)packet);
 	}
+	puts("broke tcp_node handling loop");
 	
 	ip_node_stop(tcp_node->ip_node);
 
 	int rc;
+	puts("joining link interface thread");
 	rc = pthread_join(ip_link_interface_thread, NULL);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
+
+	puts("joining send_thread");
 	rc = pthread_join(ip_send_thread, NULL);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
+
+	puts("joining ip_command thread");
 	rc = pthread_join(ip_command_thread, NULL);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
+
+	puts("stdin thread");
 	rc = pthread_cancel(tcp_stdin_thread);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);

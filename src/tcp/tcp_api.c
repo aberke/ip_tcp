@@ -61,6 +61,7 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint1
 	uint32_t local_ip = tcp_node_get_local_ip(tcp_node, (*addr).s_addr);
 	
 	if(!local_ip){
+		tcp_connection_api_unlock(connection);
 		return -ENETUNREACH;
 	}
 	
