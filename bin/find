@@ -1,0 +1,22 @@
+#! /bin/bash
+
+E_WRONGARGS=85
+
+
+if [ -n "$1" ]
+then
+	to_find=$1
+else
+	echo "Usage: $0 <string to search>" 
+	exit $E_WRONG_ARGS
+fi
+
+echo "in src/"
+grep -n "$1" `find src`
+echo ""
+
+echo "in include/"
+grep -n "$1" `find include`
+echo ""
+
+exit

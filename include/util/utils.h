@@ -5,6 +5,19 @@
 #include <time.h>
 #include <sys/select.h>
 
+/* for printing */
+#define IP_PRINT 			1
+#define TCP_PRINT 			2
+#define WINDOW_PRINT 		3
+#define SEND_WINDOW_PRINT 	4
+
+#define mask (  0									\
+		     | (1<<(IP_PRINT-1))					\
+		   /*| (1<<(TCP_PRINT-1)) 			*/		\
+		   /*| (1<<(WINDOW_PRINT-1)) 		*/		\
+	   	   /*| (1<<(SEND_WINDOW_PRINT-1)))  */		\
+			 )
+
 #define DEBUG 1
 #define DEBUG_PUTS(msg) if(DEBUG){ puts(msg); }
 
@@ -16,8 +29,8 @@
 
 #define MAX(x,y) ((x) > (y) ? (x) : (y))
 #define MIN(x,y) ((x) < (y) ? (x) : (y))
-#define BETWEEN(x,lo,hi) (((lo) <= (x)) && ((x) < (hi)))
-#define BETWEEN_WRAP(x,lo,hi) ((lo) > (hi) ? ((x) >= (lo) || (x) < (hi)) : BETWEEN((x),(lo),(hi)))
+#define BETWEEN(x,lo,hi) (((lo) <= (x)) && ((x) <= (hi)))
+#define BETWEEN_WRAP(x,lo,hi) ((lo) > (hi) ? ((x) >= (lo) || (x) <= (hi)) : BETWEEN((x),(lo),(hi)))
 #define CONGRUENT(a,b,mod) ((a) % (mod) == (b) % (mod))
 #define WRAP_DIFF(x,y,length) ((y) >= (x) ? (y) - (x) : (length) - (x) + (y)) 
 #define WRAP_ADD(x,y,mod) (((x) + (y)) % (mod))
@@ -30,6 +43,15 @@ do{													\
 while(0)
 
 #define LOG(msg) printf msg
+
+#define print(msg,flag)								\
+do{													\
+	if((flag & mask) > 0){							\
+		printf msg ;								\
+		puts("");									\
+	}												\
+}													\
+while(0)
 
 typedef int boolean;
 
@@ -72,6 +94,7 @@ void error(const char* msg);
 void rtrim(char* s, const char* delim);
 int utils_startswith(const char* s, const char* starts);
 void util_free(void** ptr);
+void inspect_bytes(const char* msg, int num_bytes);
 
 int fd_fgets(fd_set* fd, char* buffer, int size_of_buffer, FILE* file, struct timeval* tv);
 

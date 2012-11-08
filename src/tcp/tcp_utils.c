@@ -118,6 +118,7 @@ memchunk_t tcp_unwrap_data(void* packet, int length){
 		return NULL;
 
 	memchunk_t payload = memchunk_init(packet+data_offset, length-data_offset);
+
 	return payload;
 }
 

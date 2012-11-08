@@ -107,7 +107,7 @@ returns
 	>0 if successful (offset at which the first byte from data should be read)
 	-1 otherwise
 */
-static int _validate_seqnum_synchronized(recv_window_t recv_window, uint32_t seqnum, uint32_t length){
+static int _validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t length){
 	uint32_t window_min = recv_window->left,
 		window_max = (recv_window->left+recv_window->size) % MAX_SEQNUM;
 		
@@ -152,13 +152,6 @@ static int _validate_seqnum_synchronized(recv_window_t recv_window, uint32_t seq
 	}
 }
 
-static int _validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t length){
-	pthread_mutex_lock(&(recv_window->mutex));
-	int ret = _validate_seqnum_synchronized(recv_window, seqnum, length);
-	pthread_mutex_unlock(&(recv_window->mutex));
-	return ret;
-}
-
 /* we've received data up until the left of the window */
 uint32_t recv_window_get_ack_synchronized(recv_window_t recv_window){
 	return recv_window->left;
@@ -193,7 +186,7 @@ void recv_window_receive_synchronized(recv_window_t recv_window, void* data, uin
 	}
 	
 
-	uint32_t window_max = recv_window->left + recv_window->size;	
+	uint32_t window_max = (recv_window->left + recv_window->size) % MAX_SEQNUM;	
 
 	/* this will be what we store in the receiving buffer */
 	recv_window_chunk_t to_store = recv_window_chunk_init(data, length);
@@ -203,16 +196,17 @@ void recv_window_receive_synchronized(recv_window_t recv_window, void* data, uin
 	recv_window_chunk_t stored;
 	for(i=offset;i<length;i++){
 
-		index = (seqnum + i) % (recv_window->size+1);
+		index = (seqnum + i) % MAX_SEQNUM;
+	
 		if (index==window_max)
 			break;
 
-		stored = recv_window->slider[index];
+		stored = recv_window->slider[index%(recv_window->size+1)];
 		if(stored){
 			recv_window_chunk_decrement(&stored);
 		}
 
-		recv_window->slider[index] = to_store;
+		recv_window->slider[index%(recv_window->size+1)] = to_store;
 	}
 
 	/* if you didn't actually get placed into the array, then why
@@ -238,11 +232,11 @@ void recv_window_receive_synchronized(recv_window_t recv_window, void* data, uin
 
 		uint32_t j;
 		for(j=offset;j<recv_window->size;j++){
-			index = (seqnum+j) % (recv_window->size+1);
-			if((seqnum+j % MAX_SEQNUM)==window_max)
+			index = (seqnum+j) % MAX_SEQNUM;
+			if(index==window_max)
 				break;
 
-			stored = recv_window->slider[index];			
+			stored = recv_window->slider[index%(recv_window->size+1)];			
 	
 			/* a NULL pointer in the slider array indicates that we haven't
 				received that data yet, so we're done iterating through */
@@ -256,13 +250,13 @@ void recv_window_receive_synchronized(recv_window_t recv_window, void* data, uin
 				to NULL so the only access to that chunk will be from the 
 				queue. If this does not hold, then bad things could happen */
 			if(stored != just_pushed){
-				queue_push(recv_window->to_read, to_store);
+				queue_push(recv_window->to_read, stored);
 				just_pushed = stored;
 			}
 
-			recv_window->slider[index] = NULL;
+			recv_window->slider[index%(recv_window->size+1)] = NULL;
 		}
-		recv_window->left = (recv_window->left + j) % MAX_SEQNUM;
+		recv_window->left = (recv_window->left + j - offset) % MAX_SEQNUM;
 	}
 }
 
