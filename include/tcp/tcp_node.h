@@ -4,10 +4,12 @@
 
 #include <inttypes.h>
 #include "tcp_utils.h"
-#include "tcp_connection.h"
+
+// is this okay to do?  Since they're mutually dependent we had a circle going on...
+typedef struct tcp_node* tcp_node_t;
+
 #include "ip_node.h"
 #include "list.h"
-#include "tcp_states.h"
 #include "tcp_api.h"
 
 /* set artificially low right now so we can make sure have no segfaults if ever reach limit */
@@ -19,8 +21,7 @@
 #define STDIN fileno(stdin)
 #define MTU (UDP_PACKET_MAX_SIZE - IP_HEADER_SIZE)
 
-
-typedef struct tcp_node* tcp_node_t; 
+ 
 
 // forward declare
 struct tcp_api_args;
@@ -73,9 +74,12 @@ void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, int port);
 //###TODO: FINISH LOGIC ####
 // use in node destroy??? to close better?
 //needs to be called when close connection so that we can return port/socket to available queue for reuse
-// returns new number of connections in kernal
+// returns 0 for now? //new number of connections in kernal
 int tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection);
 
+// removes connection from kernal
+// returns number of connections still in kernal
+int tcp_node_remove_connection_kernal(tcp_node_t tcp_node, tcp_connection_t connection);
 // returns 1 if the port is available for use, 0 if already in use
 int tcp_node_port_unused(tcp_node_t tcp_node, int port);
 

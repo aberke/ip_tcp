@@ -131,7 +131,7 @@ int tcp_api_bind(tcp_node_t tcp_node, int socket, char* addr, uint16_t port){
 	///TODO
 	
 	if(tcp_connection_get_local_port(connection)){
-		int port = tcp_connection_get_local_port(connection);
+		//int port = tcp_connection_get_local_port(connection);
 		return -EINVAL; 	// The socket is already bound to an address.
 	}
 

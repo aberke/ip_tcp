@@ -8,9 +8,10 @@
 #include "recv_window.h"
 #include "state_machine.h"
 
-/* for tcp_packet_data_t HA! */
+/* for tcp_packet_data_t HA!
 #include "ip_utils.h"
-#include "tcp_utils.h"
+#include "tcp_utils.h" */
+#include "tcp_node.h"
 #include "queue.h"
 
 #define SIGNAL_CRASH_AND_BURN -777
@@ -18,7 +19,7 @@
 
 typedef struct tcp_connection* tcp_connection_t;  
 
-tcp_connection_t tcp_connection_init(int socket, bqueue_t *to_send);
+tcp_connection_t tcp_connection_init(tcp_node_t tcp_node, int socket, bqueue_t *to_send);
 void tcp_connection_destroy(tcp_connection_t connection);
 
 /* TODO: Start using this in our implemenation:

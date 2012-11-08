@@ -18,7 +18,7 @@
 #include <time.h>
 #include <pthread.h>
 
-#include "tcp_connection.h"
+#include "tcp_node.h" // in tcp_node.h #include "tcp_connection.h"
 #include "tcp_utils.h"
 #include "tcp_connection_state_machine_handle.h"
 
@@ -30,6 +30,9 @@
 // be shared with tcp_connection_state_handle
 
 struct tcp_connection{
+	
+	tcp_node_t tcp_node; // needs reference to node in order to properly take itself out of kernal on timeouts etc
+	
 	int socket_id;	// also serves as index of tcp_connection in tcp_node's tcp_connections array
 	
 	/* Needs mutex and signaling mechanism to interact with tcp_api as well as return value for tcp_api to read off*/
@@ -95,8 +98,10 @@ int tcp_connection_get_api_ret(tcp_connection_t connection){
 	return connection->api_ret;
 }
 	
-tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
+tcp_connection_t tcp_connection_init(tcp_node_t tcp_node, int socket, bqueue_t *tosend){
 	tcp_connection_t connection = (tcp_connection_t)malloc(sizeof(struct tcp_connection));
+	
+	connection->tcp_node = tcp_node;
 	connection->running = 1;
 	
 	/* Set what it needs in order to interact with tcp_api */
@@ -107,7 +112,6 @@ tcp_connection_t tcp_connection_init(int socket, bqueue_t *tosend){
 	
 	// let's do this the first time we send the SYN, just so if we try to send before that
 	// we'll crash and burn because it's null
-
 	connection->send_window = NULL;
 	connection->receive_window = NULL;
 
@@ -555,13 +559,13 @@ void *_handle_read_send(void *tcpconnection){
 			// delta seconds + delta milliseconds/1000
 			time_elapsed = now.tv_sec - connection->syn_timer.tv_sec;
 			time_elapsed += now.tv_usec/1000000.0 - connection->syn_timer.tv_usec/1000000.0;
-			//printf("time elapsed: %f\n", time_elapsed);
+			
 			if(time_elapsed > (1 << ((connection->syn_count)-1))*SYN_TIMEOUT){
 				// we timeout connect or resend
 				if((connection->syn_count)==SYN_COUNT_MAX){
 					// timeout connection attempt
 					connection->syn_count = 0;
-					tcp_connection_state_machine_transition(connection, CLOSE);
+					tcp_connection_state_machine_transition(connection, CLOSE); // calls tcp_node_remove_connection_kernal
 				}
 				else{	
 					// resend syn

@@ -234,6 +234,11 @@ ALEX:
 		
 	DEAL WITH ESTABLISHED STATE AND TEAR-DOWN	
 	fix states.c to deal with corner conditions
+	
+	TODO:
+		handle responsible closing
+		lock tcp_kernal whenever touching kernal
+		add macro to tcp_utils.h so that also have linux version of tcphdr commands
 
 SET BACK TO 1024: in tcp_node.h:	
 /* set artificially low right now so we can make sure have no segfaults if ever reach limit */

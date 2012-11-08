@@ -1,8 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
-#include "utils.h"
-#include "states.h"
-#include "tcp_states.h"
+
+
 #include "tcp_connection_state_machine_handle.h"
 
 // TODO: HANDLE TODO'S FOR ERROR HANDLING
@@ -113,6 +112,13 @@ transitioning_t fin_wait_2_next_state(transition_e t){
 			/* ACTION: send ACK */	
 			return transitioning_init(TIME_WAIT, NULL);
 		
+		case CLOSE:
+			/*RFC:       Strictly speaking, this is an error and should receive a "error:
+			  connection closing" response.  An "ok" response would be
+			  acceptable, too, as long as a second FIN is not emitted (the first
+			  FIN may be retransmitted though).*/
+		return transitioning_init(TIME_WAIT, (action_f)tcp_connection_CLOSING_error);
+		
 		default:
 			return transitioning_init(FIN_WAIT_2, NULL);
 	}
@@ -121,6 +127,8 @@ transitioning_t fin_wait_2_next_state(transition_e t){
 transitioning_t close_wait_next_state(transition_e t){
 	switch(t){
 		case CLOSE:
+			/* RFC seems to contradict diagram :   Queue this request until all preceding SENDs have been
+      		segmentized; then send a FIN segment, enter CLOSING state. */
 			/* send FIN */
 			return transitioning_init(LAST_ACK, (action_f)tcp_connection_CLOSE_WAIT_to_LAST_ACK);
 
@@ -135,6 +143,10 @@ transitioning_t last_ack_next_state(transition_e t){
 			/* must be ACK of your FIN */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_LAST_ACK_to_CLOSED);
 		
+		case CLOSE: 
+			/*RFC: Respond with "error:  connection closing". */
+			return transitioning_init(TIME_WAIT, (action_f)tcp_connection_CLOSING_error);
+			
 		default:
 			return transitioning_init(LAST_ACK, NULL);
 	}
@@ -144,6 +156,10 @@ transitioning_t time_wait_next_state(transition_e t){
 	switch(t){
 		case TIME_ELAPSED:
 			return transitioning_init(CLOSED, NULL);
+		
+		case CLOSE: 
+			/*RFC: Respond with "error:  connection closing". */
+			return transitioning_init(TIME_WAIT, (action_f)tcp_connection_CLOSING_error);
 		
 		default:
 			return transitioning_init(TIME_WAIT, NULL);
@@ -156,6 +172,11 @@ transitioning_t closing_next_state(transition_e t){
 			/* must be ACK of your FIN */
 			return transitioning_init(TIME_WAIT, NULL);
 		
+		case CLOSE: 
+			/*RFC: Respond with "error:  connection closing". */
+			puts("TODO: make transition to handle: RFC: Respond with 'error:  connection closing'");
+			return;
+			
 		default:
 			return transitioning_init(CLOSING, NULL);
 	}

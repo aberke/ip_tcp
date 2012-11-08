@@ -316,6 +316,10 @@ int tcp_connection_close(tcp_connection_t connection){
 // transition occurs when in established state user commands to CLOSE
 int tcp_connection_ESTABLISHED_to_FIN_WAIT_1(tcp_connection_t connection){
 	puts("HANDLE tcp_connection_ESTABLISHED_to_FIN_WAIT_1");
+	/* RFC: Queue this until all preceding SENDs have been segmentized, then
+      form a FIN segment and send it.  In any case, enter FIN-WAIT-1
+      state.
+	*/
 	return 1;	
 }
 
@@ -330,9 +334,14 @@ int tcp_connection_FIN_WAIT_1_to_CLOSING(tcp_connection_t connection){
 /* 0o0o0oo0o0o0o0o0o0o0o0o0o0o0o0o0o0o Closing Connection 0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o */
 /* 0o0o0oo0o0o0o0o0o0o0o0o0o0o0o0o0o0o Closing Connection 0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o */
 
-
+//TODO
 int tcp_connection_LISTEN_to_CLOSED(tcp_connection_t connection){	
 	puts("LISTEN --> CLOSED");
+	
+	//TODO:
+	
+	/* RFC:   Any outstanding RECEIVEs are returned with "error:  closing"
+      responses.  Delete TCB, enter CLOSED state, and return. */
 	
 	tcp_connection_accept_queue_destroy(connection);
 	
@@ -349,18 +358,28 @@ int tcp_connection_LISTEN_to_CLOSED(tcp_connection_t connection){
 	function that should occur at THAT point */
 int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection){
 	puts("SYN_SENT --> CLOSED");
+	
+	/* RFC: Delete the TCB and return "error:  closing" responses to any
+      queued SENDs, or RECEIVEs. */
+	
+	
 	if(connection->send_window)
 		send_window_destroy(&(connection->send_window));
 	if(connection->receive_window)
 		recv_window_destroy(&(connection->receive_window));
 	
 	tcp_connection_api_signal(connection, -ETIMEDOUT); // return from connect() api call with timeout error
-	
+	tcp_node_remove_connection_kernal(connection->tcp_node, connection);
 	/* you're just closing up, there's nothing to do */
 	return 1;
 }
 
 int tcp_connection_SYN_RECEIVED_to_FIN_WAIT_1(tcp_connection_t connection){
+
+	/*  RFC: If no SENDs have been issued and there is no pending data to send,
+      then form a FIN segment and send it, and enter FIN-WAIT-1 state;
+      otherwise queue for processing after entering ESTABLISHED state.*/
+
 	return 1;
 }
 
@@ -378,6 +397,13 @@ int tcp_connection_SYN_SENT_to_CLOSED_by_RST(tcp_connection_t connection){
 
 	/* just closing up, nothing to do */
 	return 1;
+}
+
+int tcp_connection_CLOSING_error(tcp_connection_t connection){
+	/*RFC: Respond with "error:  connection closing". */
+	puts("TODO: make transition to handle: RFC: Respond with 'error:  connection closing'");
+	tcp_connection_api_signal(connection, -EBADF); //fd isn't a valid open file descriptor.
+	return -1;
 }
 
 /********** End of State Changing Functions *******/

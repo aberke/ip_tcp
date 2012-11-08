@@ -284,7 +284,7 @@ tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 		return NULL;
 		
 	// init new tcp_connection
-	tcp_connection_t connection = tcp_connection_init(socket, tcp_node->to_send);
+	tcp_connection_t connection = tcp_connection_init(tcp_node, socket, tcp_node->to_send);
 
 	// place connection in array
 	_insert_connection_array(tcp_node, connection);
@@ -347,8 +347,15 @@ void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, int port){
 //needs to be called when close connection so that we can return port/socket to available queue for reuse
 // returns new number of connections in kernal
 int tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection){
-
+	puts("in tcp_node_close_connection");
 	//TODO: CONNECTION CLOSING LOGIG
+	tcp_connection_state_machine_transition(connection, CLOSE);
+	//int num_connections = tcp_node_remove_connection_kernal(tcp_node);
+	//return num_connections;
+	return 0;
+}	
+	
+int tcp_node_remove_connection_kernal(tcp_node_t tcp_node, tcp_connection_t connection){
 	
 	// return port and socket to available queue for reuse
 	int port = (int)tcp_connection_get_local_port(connection);
@@ -413,8 +420,6 @@ int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int p
 	tcp_connection_t c = tcp_node_get_connection_by_port(tcp_node, uport);
 	if(!c)
 		CRASH_AND_BURN("!!!!!!!!!!!!!!!!!!!!");
-	else
-		puts("good!");
 
 	/*
 	connection_port_keyed_t get_port_keyed;
