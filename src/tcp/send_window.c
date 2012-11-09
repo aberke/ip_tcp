@@ -153,7 +153,7 @@ send_window_t send_window_init(double timeout, int send_window_size, int send_si
 	send_window->wrap_count = 0;
 
 	pthread_mutex_init(&(send_window->mutex), NULL);
-
+	
 	return send_window;
 }
 
@@ -320,12 +320,10 @@ void send_window_check_timers_synchronized(send_window_t send_window){
 	time(&now);
 
 	int i;
-	for(i=0;i<(send_window->size+1);){
-
-		/* find the next timed_chunk that isn't the current one */
-		while( i<(send_window->size) && send_window->timed_chunks[i] == timed_chunk) i++;
-		if(i==(send_window->size+1)) break;
-
+	for(i=0;i<(send_window->size+1);i++){
+		if(send_window->timed_chunks[i]==timed_chunk)
+			continue;
+		
 		timed_chunk = send_window->timed_chunks[i];
 
 		/* if the new chunk is actually a chunk, then check if it's waiting for an ack,

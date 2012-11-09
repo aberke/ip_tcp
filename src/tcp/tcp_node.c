@@ -205,7 +205,6 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	int i;
 	for(i=0; i<(tcp_node->num_connections); i++){
 		// use void tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection) instead??
-		puts("destroying connection");
 		tcp_connection_destroy(tcp_node->connections[i]);
 	}
 	// free the array itself
@@ -228,7 +227,6 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 		else
 			printf("got result: %d!\n", args->result);
 		
-		puts("trying to destroy thread");
 		tcp_api_args_destroy(&args);
 		plain_list_remove(list, el);
 	}			
@@ -533,40 +531,40 @@ void tcp_node_start(tcp_node_t tcp_node){
 		/* otherwise there's a packet waiting for you! */
 		_handle_packet(tcp_node, (tcp_packet_data_t)packet);
 	}
-	puts("broke tcp_node handling loop");
+	print(("broke tcp_node handling loop"), CLOSING_PRINT);
 	
 	ip_node_stop(tcp_node->ip_node);
 
 	int rc;
-	puts("joining link interface thread");
+	print(("joining link interface thread"), CLOSING_PRINT);
 	rc = pthread_join(ip_link_interface_thread, NULL);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
 
-	puts("joining send_thread");
+	print(("joining send_thread"), CLOSING_PRINT);
 	rc = pthread_join(ip_send_thread, NULL);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
 
-	puts("joining ip_command thread");
+	print(("joining ip_command thread"), CLOSING_PRINT);
 	rc = pthread_join(ip_command_thread, NULL);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
 
-	puts("stdin thread");
+	print(("stdin thread"), CLOSING_PRINT);
 	rc = pthread_cancel(tcp_stdin_thread);
 	if (rc) {
 		printf("ERROR; return code from pthread_join() is %d\n", rc);
 		exit(-1);
 	}
 
-	puts("finished.");
+	print(("finished."), CLOSING_PRINT);
 }
 
 // puts command on to stdin_commands queue

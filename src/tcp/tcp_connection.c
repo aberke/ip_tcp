@@ -234,7 +234,7 @@ int tcp_connection_queue_to_read(tcp_connection_t connection, tcp_packet_data_t 
 /* Called when connection in LISTEN state receives a syn.  
 	Queues info necessary to create a new connection when accept called 
 	returns 0 on success, negative if failed -- ie queue destroyed */
-int tcp_connection_handle_syn(tcp_connection_t connection, 
+int tcp_connection_handle_syn_LISTEN(tcp_connection_t connection, 
 		uint32_t local_ip,uint32_t remote_ip, uint16_t remote_port, uint32_t seqnum){ 
 	
 	/* create accept_queue_data to load up with necessary info and queue for accept call */
@@ -252,14 +252,16 @@ tcp_connection_handle_receive_packet
 */
 
 void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
-	/* RFC 793: 
+	/* 
+	  RFC 793: 
 		Although these examples do not show connection synchronization using data
 		-carrying segments, this is perfectly legitimate, so long as the receiving TCP
   		doesn't deliver the data to the user until it is clear the data is valid
 		
 
 		so no matter what, we need to be pushing the data to the receiving window, 
-		and we simply shouldn't call get_next until we're in the established state */
+		and we simply shouldn't call get_next until we're in the established state 
+	*/
 
 	void* tcp_packet = tcp_packet_data->packet;
 	
@@ -283,124 +285,105 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		return;
 	}
 	
-	//TODO: ONLY PUSH DATA TO RECEIVE WINDOW WHEN OK TO DO SO
-	
 	/* check if there's any data, and if there is push it to the window,
 		but what does the seqnum even mean if the ACKs haven't been synchronized? */
 	memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
 	if(data){ 
-		
-		/* print out what you got */
-		char buff[256];
-		memcpy(buff, data->data, data->length);
-		buff[data->length] = '\0';
-		printf("%s", buff);
-		fflush(stdout);
-		/*                  	  */
-
+		print_non_null_terminated(data->data, data->length);
+	
 		recv_window_receive(connection->receive_window, data->data, data->length, tcp_seqnum(tcp_packet));
 	
 		/* send the ack back */
 		tcp_connection_ack(connection, recv_window_get_ack(connection->receive_window));
 	}	
 
-	/* ack data if you're in a position to do so */
-	if(tcp_ack_bit(tcp_packet) && connection->send_window != NULL){
-		send_window_ack(connection->send_window, tcp_ack(tcp_packet));
-	}
-
-	/* now check the bits */
+	/* now check the SYN bit */
 	if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
-		print(("syn/ack"),TCP_PRINT);
-
-		//puts("received packet with syn_bit and ack_bit set");
-		if(_validate_ack(connection, tcp_ack(tcp_packet)) < 0){
-			/* then you sent a syn with a seqnum that wasn't faithfully returned. 
-				what should we do? for now, let's discard */
-			puts("Received invalid ack with SYN/ACK. Discarding.");
-			return;
-		}
+		tcp_connection_handle_syn_ack(connection, tcp_packet_data);	
+		return;
+	}
 	
-/* >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< */
-		/* we need to reset the port that we're using on the remote 
-			machine in order to match the connection that accepted us */
-		connection->remote_addr.virt_port = tcp_source_port(tcp_packet_data->packet);
-/* >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>><<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< */
-
-
-		/* received a SYN/ACK, record the seq you got, and validate
-			that the ACK you received is correct */
-		connection->last_seq_received = tcp_seqnum(tcp_packet);
+	/* ack data if you're in a position to do so */
+	if(tcp_ack_bit(tcp_packet)){
+ 		if(connection->send_window)
+			send_window_ack(connection->send_window, tcp_ack(tcp_packet));
 		
-		// this function calls tcp_connection_api_finish if in SYN_SENT
-		state_machine_transition(connection->state_machine, receiveSYN_ACK); 
+		// do we want an else? that was a bad ACK (its not acking anything), or we fucked up
+		if(state_machine_get_state(connection->state_machine) == SYN_SENT)
+			state_machine_transition(connection->state_machine, receiveACK);	
+
+		return;
 	}
-
-	else if(tcp_syn_bit(tcp_packet)){
-		print(("syn"),TCP_PRINT);
-
-		//puts("received packet with syn_bit set");
-		/* got a SYN -- only valid changes are LISTEN_to_SYN_RECEIVED or SYN_SENT_to_SYN_RECEIVED */ 
-		
-		if(state_machine_get_state(connection->state_machine) == SYN_SENT){		
-		
-			tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
-		
-			/* set the last_seq_received, then pass off to state machine to make transition SYN_SENT_to_SYN_RECEIVED */	
-			connection->last_seq_received = tcp_seqnum(tcp_packet);
-			state_machine_transition(connection->state_machine, receiveSYN);
-		}
-		else if(state_machine_get_state(connection->state_machine) == LISTEN){
-			/* create a new connection will be initiated with below triple and LISTEN state and then
-				go through the LISTEN_to_SYN_RECEIVED transition.  -- will queue that connection
-				and v_accept will call to dequeue it */
-		
-			// listening connection just reset its remote/local ip with where this packet came from
-			// so this is what the new connection should be initialized with
-			tcp_connection_handle_syn(connection, tcp_connection_get_local_ip(connection),
-										tcp_connection_get_remote_ip(connection), 
-										tcp_source_port(tcp_packet), 
-										tcp_seqnum(tcp_packet));	
-			// anything else??		
-		}
-		else
-			// otherwise refuse the connection 
-			tcp_connection_refuse_connection(connection, tcp_packet_data);
 	
+	if(tcp_syn_bit(tcp_packet)){
+		tcp_connection_handle_syn(connection, tcp_packet_data);
+		return;
 	}
-	/* this will almost universally be true. */
-	else if(tcp_ack_bit(tcp_packet)){
-		print(("ack."),TCP_PRINT);
 
-		if(_validate_ack(connection, tcp_ack(tcp_packet)) < 0){
-			// should we drop the packet here?
-			puts("Received invalid ack with ACK. Discarding.");
-			return;
-		}
-		
-		//reset remote ip/port in case it has changed
-		tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
-		
-		//TODO: *************** todo *********************
-		
-		/* careful, this might be NULL -- shouldn't we actually do this in the state_machine transition?*/
-		//send_window_ack(connection->send_window, tcp_ack(tcp_packet));
-		
-		// should we give this ack to the receive window?
-		
-		state_machine_transition(connection->state_machine, receiveACK);
-	}
-	else if(tcp_rst_bit(tcp_packet)){
+	if(tcp_rst_bit(tcp_packet)){
 		print(("rst"),TCP_PRINT);
 		state_machine_transition(connection->state_machine, receiveRST);	
+		return;
 	}
-	else{
-		print(("else"),TCP_PRINT);
-	}
-			
-	/* Umm, anything else ? */	
-	// FREE IT??????
 }
+
+void tcp_connection_handle_syn_ack(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
+	print(("syn/ack"),TCP_PRINT);
+
+	void* tcp_packet = tcp_packet_data->packet;
+
+	//puts("received packet with syn_bit and ack_bit set");
+	if(_validate_ack(connection, tcp_ack(tcp_packet)) < 0){
+		/* then you sent a syn with a seqnum that wasn't faithfully returned. 
+			what should we do? for now, let's discard */
+		puts("Received invalid ack with SYN/ACK. Discarding.");
+		return;
+	}
+	
+	/* we need to reset the port that we're using on the remote 
+		machine in order to match the connection that accepted us */
+	connection->remote_addr.virt_port = tcp_source_port(tcp_packet_data->packet);
+
+	/* received a SYN/ACK, record the seq you got, and validate
+		that the ACK you received is correct */
+	connection->last_seq_received = tcp_seqnum(tcp_packet);
+	
+	// this function calls tcp_connection_api_finish if in SYN_SENT
+	state_machine_transition(connection->state_machine, receiveSYN_ACK); 
+}
+
+void tcp_connection_handle_syn(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
+	print(("syn"),TCP_PRINT);
+
+	void* tcp_packet = tcp_packet_data->packet;
+
+	/* got a SYN -- only valid changes are LISTEN_to_SYN_RECEIVED or SYN_SENT_to_SYN_RECEIVED */ 
+	if(state_machine_get_state(connection->state_machine) == SYN_SENT){		
+	
+		tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
+	
+		/* set the last_seq_received, then pass off to state machine to make transition SYN_SENT_to_SYN_RECEIVED */	
+		connection->last_seq_received = tcp_seqnum(tcp_packet);
+		state_machine_transition(connection->state_machine, receiveSYN);
+	}
+	else if(state_machine_get_state(connection->state_machine) == LISTEN){
+		/* create a new connection will be initiated with below triple and LISTEN state and then
+			go through the LISTEN_to_SYN_RECEIVED transition.  -- will queue that connection
+			and v_accept will call to dequeue it */
+		
+		// listening connection just reset its remote/local ip with where this packet came from
+		// so this is what the new connection should be initialized with
+		tcp_connection_handle_syn_LISTEN(connection, tcp_connection_get_local_ip(connection),
+									tcp_connection_get_remote_ip(connection), 
+									tcp_source_port(tcp_packet), 
+									tcp_seqnum(tcp_packet));	
+		// anything else??		
+	}
+	else
+		// otherwise refuse the connection 
+		tcp_connection_refuse_connection(connection, tcp_packet_data);
+}
+
 
 /* 0o0o0oo0o0o0o0o0o0o0o SENDING o0o0o0ooo0o0o0o0o0o0o0o0o0oo0o */
 
@@ -414,6 +397,8 @@ tcp_connection_queue_ip_send
 	is using. 
 */
 int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t packet){
+	print(("queueing"), TCP_PRINT);
+
 	/* if the queue isn't there, then you're probably testing, so just
 		print it out for debugging purposes */
 	if(!connection->to_send){
@@ -563,7 +548,7 @@ uint32_t
 tcp_connection_get_remote_ip(tcp_connection_t connection){ return connection->remote_addr.virt_ip; }
 
 int 
-tcp_connection_get_socket(tcp_connection_t connection){ 		return connection->socket_id; }
+tcp_connection_get_socket(tcp_connection_t connection){	return connection->socket_id; }
 
 /*0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0 to_read Thread o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0*/
 
@@ -579,11 +564,13 @@ void *_handle_read_send(void *tcpconnection){
 	int ret;
 
 	while(connection->running){	
+
 		gettimeofday(&now, NULL);	
 		wait_cond.tv_sec = now.tv_sec+0;
 		wait_cond.tv_nsec = 1000*now.tv_usec+TCP_CONNECTION_DEQUEUE_TIMEOUT_NSECS;
 		
 		ret = bqueue_timed_dequeue_abs(connection->my_to_read, &packet, &wait_cond);
+
 		
 		/* check if you're waiting for an ACK to come back */
 		if(tcp_connection_get_state(connection)==SYN_SENT){	
@@ -605,6 +592,7 @@ void *_handle_read_send(void *tcpconnection){
 				}
 			}
 		}
+
 
 		/* send whatever you're trying to send */
 		if(connection->send_window){
@@ -683,12 +671,6 @@ int tcp_connection_state_machine_transition(tcp_connection_t connection, transit
 	//tcp_connection_print_state(connection);
 	return ret;
 }
-
-/*
-state_machine_t tcp_connection_get_state_machine(tcp_connection_t connection){
-	return connection->state_machine;
-}
-*/
 
 state_e tcp_connection_get_state(tcp_connection_t connection){
 	return state_machine_get_state(connection->state_machine);
@@ -820,4 +802,29 @@ void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_da
 /* hacky? */  //<-- yeah kinda
 #include "tcp_connection_state_machine_handle.c"
 
-	
+		/*
+
+	* this will almost universally be true. *
+	else if(tcp_ack_bit(tcp_packet)){
+		print(("ack."),TCP_PRINT);
+
+		if(_validate_ack(connection, tcp_ack(tcp_packet)) < 0){
+			// should we drop the packet here?
+			puts("Received invalid ack with ACK. Discarding.");
+			return;
+		}
+		
+		//reset remote ip/port in case it has changed
+		tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
+		
+		//TODO: *************** todo *********************
+		
+		* careful, this might be NULL -- shuldn't we actually do this in the state_machine transition?*
+		//send_window_ack(connection->send_window, tcp_ack(tcp_packet));
+		
+		// should we give this ack to the receive window?
+		
+		state_machine_transition(connection->state_machine, receiveACK);
+	}
+
+	*/

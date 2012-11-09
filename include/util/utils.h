@@ -15,14 +15,16 @@
 #define SEND_WINDOW_PRINT 	4
 #define LEAK_PRINT 			5
 #define STATES_PRINT 		6
+#define CLOSING_PRINT		7
 
 #define mask (  0									\
 		   /*| (1<<(IP_PRINT-1))		    */		\
-		   /*| (1<<(TCP_PRINT-1)) 		    */		\
+		     | (1<<(TCP_PRINT-1)) 		    		\
 		   /*| (1<<(WINDOW_PRINT-1)) 		*/		\
 	   	   /*| (1<<(SEND_WINDOW_PRINT-1))	*/ 		\
 		   /*| (1<<(LEAK_PRINT-1))          */		\
 		     | (1<<(STATES_PRINT-1))				\
+			 | (1<<(CLOSING_PRINT-1))				\
 			 )
 
 #define DEBUG 1
@@ -53,7 +55,7 @@ while(0)
 
 #define print(msg,flag)								\
 do{													\
-	if((flag & mask) > 0){							\
+	if(((1<<((flag)-1)) & mask) > 0){							\
 		printf msg ;								\
 		puts("");									\
 	}												\
@@ -79,6 +81,22 @@ struct buffer{
 	int length;
 };
 
+#define _pthread_mutex_lock(m)   				\
+do{												\
+	printf("lock %s %d", __FILE__, __LINE__);	\
+	pthread_mutex_lock(m);						\
+	printf("----\n");							\
+}												\
+while(0);
+
+#define _pthread_mutex_unlock(m)   				\
+do{												\
+	printf("unlock %s %d", __FILE__, __LINE__);	\
+	pthread_mutex_unlock(m);					\
+	printf("----\n");							\
+}												\
+while(0);
+
 typedef struct memchunk* memchunk_t;
 typedef struct buffer* buffer_t;
 
@@ -102,6 +120,7 @@ void rtrim(char* s, const char* delim);
 int utils_startswith(const char* s, const char* starts);
 void util_free(void** ptr);
 void inspect_bytes(const char* msg, int num_bytes);
+void print_non_null_terminated(void* data, int length);
 
 int fd_fgets(fd_set* fd, char* buffer, int size_of_buffer, FILE* file, struct timeval* tv);
 

@@ -217,6 +217,7 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 	int ret = tcp_connection_api_result(new_connection); // if successful = new_connection->socket_id;
 	if(ret == SIGNAL_DESTROYING){
 		// is there anything else we can do here?
+		tcp_connection_api_unlock(listening_connection);
 		return SIGNAL_DESTROYING;
 	}
 
