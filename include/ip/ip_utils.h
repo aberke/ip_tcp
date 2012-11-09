@@ -23,7 +23,7 @@
 struct tcp_packet_data{
 	uint32_t local_virt_ip;
 	uint32_t remote_virt_ip;
-	char packet[MTU];
+	char* packet;//char packet[MTU];
 	int packet_size;  //size of packet in bytes
 };
 

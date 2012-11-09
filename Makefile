@@ -103,13 +103,16 @@ directory/%:
 
 rebuild: clean build
 
-run: rebuild
+#run: rebuild
+run:
 	@./$(EXEC_FILE) $(DEFAULT_ARGS)
 
-runA: rebuild
+#runA: rebuild
+runA:
 	@./$(EXEC_FILE) $(NODE_A)
 	
-runB: rebuild
+#runB: rebuild
+runB:
 	@./$(EXEC_FILE) $(NODE_B)
 	
 runC: rebuild

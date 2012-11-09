@@ -143,7 +143,6 @@ tcp_node_t tcp_node_init(iplist_t* links){
 	bqueue_init(stdin_commands);	
 	tcp_node->stdin_commands = stdin_commands;
 	/************ Queues Created *****************/
-		
 	/*********** create kernal table  ************/
 	tcp_node->connection_array_size = MAX_FILE_DESCRIPTORS;  
 	tcp_node->num_connections = 0; // no connections at start
@@ -175,7 +174,7 @@ tcp_node_t tcp_node_init(iplist_t* links){
 	
 	//// you're still running right? right
 	tcp_node->running = 1;
-	
+
 	return tcp_node;
 }
 
@@ -206,6 +205,7 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	int i;
 	for(i=0; i<(tcp_node->num_connections); i++){
 		// use void tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection) instead??
+		puts("destroying connection");
 		tcp_connection_destroy(tcp_node->connections[i]);
 	}
 	// free the array itself
@@ -325,7 +325,7 @@ tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 	*/
 
 	connection_virt_socket_keyed_t socket_keyed = connection_virt_socket_keyed_init(connection);
-	HASH_ADD_INT(tcp_node->virt_socketToConnection, virt_socket, socket_keyed);
+	HASH_ADD(hh, tcp_node->virt_socketToConnection, virt_socket, sizeof(int), socket_keyed);
 
 	return connection;
 }
@@ -336,7 +336,7 @@ void tcp_node_return_socket_to_kernal(tcp_node_t tcp_node, int socket){
 	queue_push_front(tcp_node->sockets_available_queue, (void*)((uint64_t)socket));
 	
 	connection_virt_socket_keyed_t socket_keyed;
-	HASH_FIND_INT(tcp_node->virt_socketToConnection, &socket, socket_keyed);
+	HASH_FIND(hh, tcp_node->virt_socketToConnection, &socket, sizeof(int), socket_keyed);
 	if(!socket_keyed){
 		puts("Error: Alex Neil see tcp_node_close_connection -- this SHOULD be in table");
 		return;
@@ -358,7 +358,7 @@ void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, int port){
 		queue_push_front(tcp_node->ports_available_queue, (void*)((uint64_t)port));
 	
 	connection_port_keyed_t port_keyed;
-	HASH_FIND_INT(tcp_node->portToConnection, &port, port_keyed);
+	HASH_FIND(hh, tcp_node->portToConnection, &port, sizeof(uint16_t), port_keyed);
 	if(!port_keyed){
 		puts("Error: Alex Neil see tcp_node_close_connection -- this SHOULD be in table");
 		return;
@@ -394,7 +394,7 @@ int tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection){
 tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int socket){
 	
 	connection_virt_socket_keyed_t socket_keyed;
-	HASH_FIND_INT(tcp_node->virt_socketToConnection, &socket, socket_keyed);
+	HASH_FIND(hh, tcp_node->virt_socketToConnection, &socket, sizeof(int), socket_keyed);
 	if(!socket_keyed)
 		return NULL;
 	else
@@ -405,10 +405,8 @@ tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int sock
 tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t port){
 	/* in order to be compatible with uthash's built in 
 	 	support for ports */
-	int int_port = (int)port; 
-
 	connection_port_keyed_t port_keyed;
-	HASH_FIND_INT(tcp_node->portToConnection, &int_port, port_keyed);
+	HASH_FIND(hh, tcp_node->portToConnection, &port, sizeof(uint16_t), port_keyed);
 	if(!port_keyed)
 		return NULL;
 	else
@@ -431,17 +429,9 @@ int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int p
 	uint16_t uport = (uint16_t)port;
 	tcp_connection_set_local_port(connection, uport);
 	
-	// put port to connection in kernal
+	// put port to connection in kernel
 	connection_port_keyed_t port_keyed = connection_port_keyed_init(connection);
-	HASH_ADD_INT(tcp_node->portToConnection, port, port_keyed);	
-
-	/*
-	connection_port_keyed_t get_port_keyed;
-	HASH_FIND_INT(tcp_node->portToConnection, &port, get_port_keyed);
-	if(!get_port_keyed)
-		CRASH_AND_BURN("added port to hash_map and then couldn't get it out");
-	puts("good.");
-	*/
+	HASH_ADD(hh, tcp_node->portToConnection, port, sizeof(uint16_t), port_keyed);	
 
 	return 1;
 }
@@ -451,7 +441,7 @@ int tcp_node_port_unused(tcp_node_t tcp_node, int port){
 	
 	connection_port_keyed_t port_keyed;
 	// check that port not already in hashmap
-	HASH_FIND_INT(tcp_node->portToConnection, &port, port_keyed);
+	HASH_FIND(hh, tcp_node->portToConnection, &port, sizeof(uint16_t), port_keyed);
 	if(!port_keyed)
 		return 1;
 	else
@@ -629,7 +619,7 @@ void tcp_node_refuse_connection(tcp_node_t tcp_node, tcp_packet_data_t packet){
 	tcp_utils_add_checksum(outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip, TCP_DATA);
 
 	tcp_packet_data_t rst_packet = tcp_packet_data_init((char*)outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip);
-	free(outgoing_header);
+	//free(outgoing_header); now not memcpying into packet_data (just using pointer)
 	
 	ip_node_send_tcp(tcp_node->ip_node, rst_packet);
 }
@@ -649,7 +639,7 @@ static int _insert_connection_array(tcp_node_t tcp_node, tcp_connection_t connec
 	}
 	// insert new connection in array
 	tcp_node->connections[num_connections] = connection;
-	tcp_node->num_connections = num_connections + 1;
+	tcp_node->num_connections++;
 	
 	return tcp_node->num_connections;
 }

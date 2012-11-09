@@ -58,7 +58,7 @@ int tcp_connection_CLOSED_to_LISTEN(tcp_connection_t connection){
 	puts("CLOSED --> LISTEN");
 	// init accept_queue
 	bqueue_t *accept_queue = (bqueue_t*) malloc(sizeof(bqueue_t));
-	bqueue_init(accept_queue);
+
 	connection->accept_queue = accept_queue;
 	return 1;	
 }
@@ -70,7 +70,7 @@ tcp_connection_LISTEN_to_SYN_RECEIVED
 	send that off. The sending window should have been NULL before this point, if it
 	wasn't then it was init()ed somewhere else, which is probably a mistake */
 int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){	
-	//puts("LISTEN --> SYN_RECEIVED");
+	print(("LISTEN --> SYN_RECEIVED"), STATES_PRINT);
 
 	/* Must create new connection that will handle the rest of the connection establishment.  This connection will sit on
 		the queue rather than being inserted into the connections array of the node.*/
@@ -115,9 +115,9 @@ int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, ui
 
 	/* set the remote and then transition */
 	tcp_connection_set_remote(connection, ip_addr, port);
-	state_machine_transition(connection->state_machine, activeOPEN);
+	int result = state_machine_transition(connection->state_machine, activeOPEN);
 
-	return 1;
+	return result;
 }
 
 /* helper to CLOSED_to_SYN_SENT as well as in the _handle_read_write thread for resending syn */
@@ -163,7 +163,7 @@ int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection){
 }
 
 int tcp_connection_LISTEN_to_SYN_SENT(tcp_connection_t connection){
-	//puts("LISTEN --> SYN_SENT");
+	print(("LISTEN --> SYN_SENT"), STATES_PRINT);
 
 	// should we destroy the accept queue?  Like are we all done listening? -- lets check the RFC at some point...
 	tcp_connection_accept_queue_destroy(connection);
@@ -196,7 +196,7 @@ int tcp_connection_LISTEN_to_SYN_SENT(tcp_connection_t connection){
 }
 
 int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection){
-	puts("SYN_SENT --> SYN_RECEIVED");
+	print(("SYN_SENT --> SYN_RECEIVED"), STATES_PRINT);
 
 	/* I may be wrong, but if you sent a SYN and you received a SYN (and not
 		a SYN/ACK, then this is a simultaneous connection. Send back a SYN/ACK */  //<-- yup exactly
@@ -226,7 +226,7 @@ int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection){
 }
 
 int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
-	puts("SYN_SENT --> ESTABLISHED");
+	print(("SYN_SENT --> ESTABLISHED"), STATES_PRINT);
 
 	/* just got a SYN/ACK, so send back a ACK, and that's it */
 
@@ -259,7 +259,7 @@ int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
 }
 
 int tcp_connection_SYN_RECEIVED_to_ESTABLISHED(tcp_connection_t connection){
-	puts("SYN_RECEIVED->ESTABLISHED");
+	print(("SYN_RECEIVED->ESTABLISHED"), STATES_PRINT);
 	//signal successfully tcp_api_accept to successfully return
 	tcp_connection_api_signal(connection, tcp_connection_get_socket(connection)); 
 
@@ -332,7 +332,7 @@ int tcp_connection_FIN_WAIT_1_to_CLOSING(tcp_connection_t connection){
 
 
 int tcp_connection_LISTEN_to_CLOSED(tcp_connection_t connection){	
-	puts("LISTEN --> CLOSED");
+	print(("LISTEN --> CLOSED"),STATES_PRINT);
 	
 	tcp_connection_accept_queue_destroy(connection);
 	
@@ -377,9 +377,14 @@ int tcp_connection_SYN_SENT_to_CLOSED_by_RST(tcp_connection_t connection){
 	tcp_connection_api_signal(connection, -ECONNREFUSED);
 
 	/* just closing up, nothing to do */
-	return 1;
+	return -ECONNREFUSED;
 }
 
 /********** End of State Changing Functions *******/
 
-
+// invalid transition
+int tcp_connection_invalid_transition(tcp_connection_t connection){
+	print(("invalid transition"), STATES_PRINT);
+	tcp_connection_api_signal(connection, INVALID_TRANSITION);
+	return INVALID_TRANSITION;
+}
