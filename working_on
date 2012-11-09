@@ -1,3 +1,7 @@
+THINGS NEIL WANTS ALEX TO USE
+
+printf("hello %d", num)
+print( ("hello %d", num), TCP_PRINT)
 
 STDIN thread
 

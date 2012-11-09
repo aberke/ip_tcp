@@ -104,11 +104,13 @@ void tcp_connection_print_state(tcp_connection_t connection);
 
 /****** Receiving packets **********/
 
+void tcp_connection_handle_syn(tcp_connection_t connection, tcp_packet_data_t packet);
+void tcp_connection_handle_syn_ack(tcp_connection_t connection, tcp_packet_data_t packet);
 
 /* Called when connection in LISTEN state receives a syn.  
 	Queues info necessary to create a new connection when accept called 
 	returns 0 on success, negative if failed -- ie queue destroyed */
-int tcp_connection_handle_syn(tcp_connection_t connection, 
+int tcp_connection_handle_syn_LISTEN(tcp_connection_t connection, 
 		uint32_t local_ip,uint32_t remote_ip, uint16_t remote_port, uint32_t seqnum);
 
 

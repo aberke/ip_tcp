@@ -1,36 +1,3 @@
-/*
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-//#include <netinet/tcp.h> -- we define it in utils.h!
-#include <inttypes.h>
-
-#include "tcp_connection_state_machine_handle.h"
-*/
-
-/* 
-
-I understand why these are now in a new function and I agreed with it, 
-but I didn't realize that we would now have to add helper functions for
-EVERYTHING, which I think can significantly bloat our code and also 
-potentially decrease efficiency. I don't know if there's anything we
-can do about that, but we should consiter it, because it now seems
-really kind weird. One thing that we could do, in order to make these
-separate files but to retain the ability to access directly members
-of the tcp_connection struct, is that we could use the preprocessor
-to paste the files together. I'm gonna go ahead and do it and see if
-it works like I think it will (I'm just gonna try to add an include at 
-the bottom of tcp_connection that #includes this file.
-
-Ok I did it and it works and I think we should just to it this way, it'll make
-the code much cleaner
-
-NOTE: I've saved the old file as tcp_connection_state_machine_handle.c.old for 
-	reference 
-
-*/
-
 
 /***********************************************/
 /*** #included from tcp_connection.c ***********/
@@ -55,9 +22,10 @@ tcp_connection_transition_passive_open
 	transition
 */
 int tcp_connection_CLOSED_to_LISTEN(tcp_connection_t connection){
-	puts("CLOSED --> LISTEN");
+	print(("CLOSED --> LISTEN"), STATES_PRINT);
 	// init accept_queue
 	bqueue_t *accept_queue = (bqueue_t*) malloc(sizeof(bqueue_t));
+	bqueue_init(accept_queue);
 
 	connection->accept_queue = accept_queue;
 	return 1;	
@@ -242,9 +210,7 @@ int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
 	// load it up!
 	tcp_set_seq(header, connection->last_seq_sent + 1);
 	tcp_set_ack_bit(header);
-	//printf("setting ack to connection->last_seq_receved+1 = %u\n", ((connection->last_seq_received)+1));
 	tcp_set_ack(header, ((connection->last_seq_received)+1));
-	//tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
 
 	// window size?
 	tcp_set_window_size(header, recv_window_get_size(connection->receive_window));
@@ -336,7 +302,7 @@ int tcp_connection_FIN_WAIT_1_to_CLOSING(tcp_connection_t connection){
 
 //TODO
 int tcp_connection_LISTEN_to_CLOSED(tcp_connection_t connection){	
-	print(("LISTEN --> CLOSED"),STATES_PRINT);
+	print(("LISTEN --> CLOSED"), STATES_PRINT);
 	
 	//TODO:
 	
@@ -357,12 +323,12 @@ int tcp_connection_LISTEN_to_CLOSED(tcp_connection_t connection){
 	decides to close it and not wait for a response). This is the 
 	function that should occur at THAT point */
 int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection){
-	puts("SYN_SENT --> CLOSED");
 	
 	/* RFC: Delete the TCB and return "error:  closing" responses to any
       queued SENDs, or RECEIVEs. */
-	
-	
+
+	print(("SYN_SENT --> CLOSED"), STATES_PRINT);
+
 	if(connection->send_window)
 		send_window_destroy(&(connection->send_window));
 	if(connection->receive_window)
@@ -387,7 +353,7 @@ int tcp_connection_SYN_RECEIVED_to_FIN_WAIT_1(tcp_connection_t connection){
 	means we want to talk to the node (free its port for reuse, reset its
 	ip addresses) */
 int tcp_connection_SYN_SENT_to_CLOSED_by_RST(tcp_connection_t connection){
-	puts("SYN_SENT --> CLOSED by RST");
+	print(("SYN_SENT --> CLOSED by RST"), STATES_PRINT);
 	if(connection->send_window)
 		send_window_destroy(&(connection->send_window));
 	if(connection->receive_window)
