@@ -17,6 +17,8 @@ int tcp_connection_passive_open(tcp_connection_t connection);
 int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, uint16_t port);
 /****** End of Functions called to invoke statemachine ******/
 	
+// to be called during invalid transition 
+int tcp_connection_invalid_transition(tcp_connection_t connection);
 
 	/****** Functions called as actions by statemachine ******/
 int tcp_connection_CLOSED_to_LISTEN(tcp_connection_t connection);

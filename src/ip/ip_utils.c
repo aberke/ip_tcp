@@ -25,20 +25,24 @@ tcp_packet_data_t tcp_packet_data_init(char* packet_data, int packet_data_size, 
 	tcp_packet->local_virt_ip = local_virt_ip;
 	tcp_packet->remote_virt_ip = remote_virt_ip;
 	tcp_packet->packet_size = packet_data_size;
+	tcp_packet->packet = packet_data;
 
 	/* did we talk about this ? how is this not seg-faulting, because it's trying
 		to copy MTU bytes from packet_data which is definitely NOT guaranteed to 
 		be that long?? */ //<-- want to write a quick min function?
+	/*
 	int copy_over = packet_data_size;
 	if(MTU < packet_data_size)
 		copy_over = MTU;
 			
 	memcpy(tcp_packet->packet, packet_data, copy_over);
+	*/
 	
 	return tcp_packet;
 }
 
 void tcp_packet_data_destroy(tcp_packet_data_t packet_data){
+	free(packet_data->packet);
 	free(packet_data);
 }
 
@@ -59,7 +63,6 @@ void tcp_packet_print(tcp_packet_data_t packet_data){
 //Param: buffer read in, number of bytes read in
 //Return value: bytes of data within packet on success, -1 on error
 int ip_check_valid_packet(char* buffer, int bytes_read){
-	// check if its long enough
 	if(bytes_read < IP_HEADER_SIZE){
 		//packet not large enough
 		printf("received packet with length < sizeof(struct ip)");
@@ -137,28 +140,31 @@ uint32_t ip_get_dest_addr(char* buffer){
 // fills packet_unwrapped with data within packet
 int ip_unwrap_packet(char* buffer, char** packet_unwrapped, int packet_data_size){
 
-	u_int header_len;
-	u_char ip_p;           /* protocol */
+	u_char ip_p = ((struct ip*)buffer)->ip_p;           /* protocol */
+	u_int header_len = ((struct ip*)buffer)->ip_hl*4; //// from wikipedia: header length in bytes = value set in ip_hl x 4
+	*packet_unwrapped = malloc(packet_data_size);
+	memcpy(*packet_unwrapped, buffer+header_len, packet_data_size);
+/*
 	char header[IP_HEADER_SIZE];
+	u_int header_len;
 	memcpy(header, buffer, IP_HEADER_SIZE);
 	struct ip *ip_header = (struct ip *)header;
-	header_len = ip_header->ip_hl*4; //// from wikipedia: header length in bytes = value set in ip_hl x 4
-	ip_p = ip_header->ip_p;
+*/
 
-	*packet_unwrapped = buffer+header_len;
 //	memcpy(packet_unwrapped, buffer+header_len, packet_data_size);
 	
-	if(ip_p == RIP_DATA){
-		return RIP_DATA;
+	switch(ip_p){
+		case RIP_DATA:
+			return RIP_DATA;
+		case TEST_DATA:
+			return TEST_DATA;
+		case TCP_DATA:
+			return TCP_DATA;
+		default:
+			puts("Received packet of unknown protocol");
+			return -1;
 	}
-	if(ip_p == TEST_DATA){
-		return TEST_DATA;
-	}
-	if(ip_p == TCP_DATA){
-		return TCP_DATA;
-	}
-	puts("Received packet of unknown protocol");
-	return -1;
+
 }
 
 // fills wraps ip header around data and sends through interface li

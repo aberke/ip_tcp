@@ -16,7 +16,7 @@ transitioning_t closed_next_state(transition_e t){
 			return transitioning_init(SYN_SENT, (action_f)tcp_connection_CLOSED_to_SYN_SENT);
 
 		default:
-			return transitioning_init(CLOSED, NULL); //TODO: SUPPLY ACTION FOR BAD CALL
+			return transitioning_init(CLOSED, (action_f)tcp_connection_invalid_transition); //TODO: SUPPLY ACTION FOR BAD CALL
 	}
 }
 
@@ -38,7 +38,7 @@ transitioning_t listen_next_state(transition_e t){
 			return transitioning_init(SYN_SENT, (action_f)tcp_connection_LISTEN_to_SYN_SENT);
 			
 		default:
-			return transitioning_init(LISTEN, NULL);
+			return transitioning_init(LISTEN, (action_f)tcp_connection_invalid_transition);
 	}
 }
 
@@ -59,7 +59,7 @@ transitioning_t syn_sent_next_state(transition_e t){
 			return transitioning_init(CLOSED, (action_f)tcp_connection_SYN_SENT_to_CLOSED_by_RST);	
 			
 		default:
-			return transitioning_init(SYN_SENT, NULL);
+			return transitioning_init(SYN_SENT, (action_f)tcp_connection_invalid_transition);
 	}
 }
 
@@ -73,7 +73,7 @@ transitioning_t syn_received_next_state(transition_e t){
 			return transitioning_init(FIN_WAIT_1, (action_f)tcp_connection_SYN_RECEIVED_to_FIN_WAIT_1);
 
 		default:
-			return transitioning_init(SYN_RECEIVED, NULL);
+			return transitioning_init(SYN_RECEIVED, (action_f)tcp_connection_invalid_transition);
 	}
 }
 
@@ -87,7 +87,7 @@ transitioning_t established_next_state(transition_e t){
 			return transitioning_init(FIN_WAIT_1, (action_f)tcp_connection_ESTABLISHED_to_FIN_WAIT_1);
 
 		default:
-			return transitioning_init(ESTABLISHED, NULL);
+			return transitioning_init(ESTABLISHED, (action_f)tcp_connection_invalid_transition);
 	}
 }
 
@@ -96,13 +96,13 @@ transitioning_t fin_wait_1_next_state(transition_e t){
 		case receiveACK: 
 			/* must be the ACK of your FIN */
 			/* ACTION: none */
-			return transitioning_init(FIN_WAIT_2, NULL);
+			return transitioning_init(FIN_WAIT_2, (action_f)tcp_connection_invalid_transition);
 		case receiveFIN:
 			/* ACTION: send ACK */
 			return transitioning_init(CLOSING, (action_f)tcp_connection_FIN_WAIT_1_to_CLOSING);
 		
 		default:
-			return transitioning_init(FIN_WAIT_1, NULL);
+			return transitioning_init(FIN_WAIT_1, (action_f)tcp_connection_invalid_transition);
 	}
 }
 
@@ -110,7 +110,7 @@ transitioning_t fin_wait_2_next_state(transition_e t){
 	switch(t){
 		case receiveFIN:
 			/* ACTION: send ACK */	
-			return transitioning_init(TIME_WAIT, NULL);
+			return transitioning_init(TIME_WAIT, (action_f)tcp_connection_invalid_transition);
 		
 		case CLOSE:
 			/*RFC:       Strictly speaking, this is an error and should receive a "error:
@@ -120,7 +120,7 @@ transitioning_t fin_wait_2_next_state(transition_e t){
 		return transitioning_init(TIME_WAIT, (action_f)tcp_connection_CLOSING_error);
 		
 		default:
-			return transitioning_init(FIN_WAIT_2, NULL);
+			return transitioning_init(FIN_WAIT_2, (action_f)tcp_connection_invalid_transition);
 	}
 }
 
@@ -133,7 +133,7 @@ transitioning_t close_wait_next_state(transition_e t){
 			return transitioning_init(LAST_ACK, (action_f)tcp_connection_CLOSE_WAIT_to_LAST_ACK);
 
 		default:
-			return transitioning_init(CLOSE_WAIT, NULL);
+			return transitioning_init(CLOSE_WAIT, (action_f)tcp_connection_invalid_transition);
 	}
 }
 
@@ -148,21 +148,21 @@ transitioning_t last_ack_next_state(transition_e t){
 			return transitioning_init(TIME_WAIT, (action_f)tcp_connection_CLOSING_error);
 			
 		default:
-			return transitioning_init(LAST_ACK, NULL);
+			return transitioning_init(LAST_ACK, (action_f)tcp_connection_invalid_transition);
 	}
 }
 
 transitioning_t time_wait_next_state(transition_e t){	
 	switch(t){
 		case TIME_ELAPSED:
-			return transitioning_init(CLOSED, NULL);
+			return transitioning_init(CLOSED, (action_f)tcp_connection_invalid_transition);
 		
 		case CLOSE: 
 			/*RFC: Respond with "error:  connection closing". */
 			return transitioning_init(TIME_WAIT, (action_f)tcp_connection_CLOSING_error);
 		
 		default:
-			return transitioning_init(TIME_WAIT, NULL);
+			return transitioning_init(TIME_WAIT, (action_f)tcp_connection_invalid_transition);
 	}
 }
 
@@ -170,7 +170,7 @@ transitioning_t closing_next_state(transition_e t){
 	switch(t){
 		case receiveACK:
 			/* must be ACK of your FIN */
-			return transitioning_init(TIME_WAIT, NULL);
+			return transitioning_init(TIME_WAIT, (action_f)tcp_connection_invalid_transition);
 		
 		case CLOSE: 
 			/*RFC: Respond with "error:  connection closing". */
@@ -178,7 +178,7 @@ transitioning_t closing_next_state(transition_e t){
 		
 			
 		default:
-			return transitioning_init(CLOSING, NULL);
+			return transitioning_init(CLOSING, (action_f)tcp_connection_invalid_transition);
 	}
 }
 

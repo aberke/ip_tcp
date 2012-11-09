@@ -47,9 +47,8 @@ void* tcp_api_accept_entry(void* args);
 
 
 
-
-
-
+///////////// DRIVER COMMANDS ////////////////
+void* tcp_driver_accept_entry(void* args);
 
 
 #endif //__TCP_API_H__

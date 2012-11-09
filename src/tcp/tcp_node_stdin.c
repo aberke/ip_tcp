@@ -135,11 +135,6 @@ void v_connect(const char *line, tcp_node_t tcp_node){
 	args->port = port;
 
 	tcp_node_thread(tcp_node, tcp_api_connect_entry, args);
-
-	/*
-	ret = tcp_api_connect(tcp_node, socket, sa.sin_addr, (uint16_t)port);
-	printf("connect call returned value %d\n", ret);
-	*/
 }
 
 int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint32_t num_bytes){
@@ -157,7 +152,7 @@ int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint
 
 void vv_write(const char* line, tcp_node_t tcp_node){
 	int socket;
-	unsigned char* to_write = malloc(sizeof(char)*BUFFER_SIZE);
+	char* to_write = malloc(sizeof(char)*BUFFER_SIZE);
 	uint32_t num_bytes;
 	
 	if(sscanf(line, "v_write %d %s %u", &socket, to_write, &num_bytes) != 3){
@@ -167,7 +162,7 @@ void vv_write(const char* line, tcp_node_t tcp_node){
 
 	printf("to_write: %s\n", to_write);
 
-	int ret = v_write(tcp_node, socket, to_write, num_bytes);
+	int ret = v_write(tcp_node, socket, (unsigned char*)to_write, num_bytes);
 	printf("write result: %d\n", ret);
 
 	free(to_write);
@@ -408,25 +403,59 @@ void numbers(const char* line, tcp_node_t tcp_node){
 	}
 
 	/* hope you don't go over that */
-	unsigned char to_write[4096];
+	char to_write[4096];
 	memset(to_write, 0, 4096);
 	
 	int i;
-	unsigned char int_string_buffer[BUFFER_SIZE];
+	char int_string_buffer[BUFFER_SIZE];
 	for(i=0;i<range;i++){
 		sprintf(int_string_buffer, "%d", i);
 		strcat(to_write,int_string_buffer);
 	}
 	strcat(to_write,"\n");
 	
-	int ret = tcp_connection_send_data(connection, to_write, strlen(to_write));
+	int ret = tcp_connection_send_data(connection, (unsigned char*)to_write, strlen(to_write));
 	// wanna do anything with that?
 	
 	return;//nah
 }
 
+void accept_cmd(const char* line, tcp_node_t tcp_node){
+/*
+	int port;
+	if(sscanf(line, "accept %d", &port)==0 && sscanf(line, "a %d", &port)==0)
+	{
+		fprintf(stderr, "Syntax error: usage (accept/a <port>)\n");
+		return;
+	}
 
+	tcp_connection_t connection = tcp_node_new_conection(tcp_node);
+	if(!connection)
+	{
+		fprintf(stderr, "Unable to init connection\n");
+		return;
+	}
 
+	if(!tcp_node_assign_port(connection, port))
+	{
+		fprintf(stderr, "Unable to init connection on desired port %d\n", port);
+		return;
+	}
+
+	* otherwise you've established a connection on
+	   the desired port, so start accepting! *
+
+	// first pack the args up
+	tcp_api_args_t args = tcp_api_args_init();
+	args->node		 = tcp_node;
+	args->socket  	 = tcp_connection_get_socket(connection);
+	args->addr 		 = addr;
+
+	// thread it, and you're done
+	tcp_node_thread(tcp_node, tcp_driver_accept_entry, args);
+*/
+}
+	
 
 struct {
   const char *command;
@@ -435,17 +464,26 @@ struct {
   {"help", help_cmd},
   {"send", send_cmd},
   {"interfaces", interfaces_cmd},
+  {"li", interfaces_cmd},
   {"routes", routes_cmd},
+  {"lr", routes_cmd},
   {"down", down_cmd},
   {"up", up_cmd},
   {"fp", fp_cmd},
   {"rp", rp_cmd},
   {"sockets", sockets_cmd}, 
-	
+  {"ls", sockets_cmd}, 
   /*{"accept", accept_cmd},
+  {"a", accept_cmd}, 
   {"connect", connect_cmd},
-  {"recv", recv_cmd},*/
+  {"c", connect_cmd}, 
+  {"recv", recv_cmd},
+  {"r", recv_cmd},*/
   {"sendfile", sendfile_cmd},
+  /*{"send", send_cmd},
+  {"s", send_cmd},
+  {"w", send_cmd},*/
+
   /*{"recvfile", recvfile_cmd},
   {"shutdown", shutdown_cmd},
   {"close", close_cmd},*/

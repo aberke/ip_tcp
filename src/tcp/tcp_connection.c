@@ -12,7 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <netinet/tcp.h>
+//#include <netinet/tcp.h> -- we define it in utils.h!
 #include <inttypes.h>
 #include <sys/time.h>
 #include <time.h>
@@ -158,7 +158,7 @@ tcp_connection_t tcp_connection_init(tcp_node_t tcp_node, int socket, bqueue_t *
 void tcp_connection_destroy(tcp_connection_t connection){
 	
 	connection->running = 0;
-
+	puts("0");
 	// >> do this immediately! because it depends on the things you're destroying! <<
 	// cancel read_thread
 	int rc = pthread_join(connection->read_send_thread, NULL);
@@ -166,7 +166,7 @@ void tcp_connection_destroy(tcp_connection_t connection){
 		printf("ERROR; return code from pthread_cancel() for tcp_connection of socket %d is %d\n", connection->socket_id, rc);
 		exit(-1);
 	}
-
+	puts("1");
 	// tell everyone who is waiting on this thread that
 	// the connection is being destroyed
 	tcp_connection_api_signal(connection, SIGNAL_DESTROYING);
@@ -185,14 +185,13 @@ void tcp_connection_destroy(tcp_connection_t connection){
 	state_machine_destroy(&(connection->state_machine));
 	tcp_connection_accept_queue_destroy(connection);
 	
-	
-	
 	// take all packets off my_to_read queue and destroys queue
 	tcp_packet_data_t tcp_packet_data;
 	while(!bqueue_trydequeue(connection->my_to_read, (void**)&tcp_packet_data))
 		tcp_packet_data_destroy(tcp_packet_data);	
 	
 	bqueue_destroy(connection->my_to_read);
+	free(connection->my_to_read);
 						
 	free(connection);
 	connection = NULL;
@@ -457,8 +456,6 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 		free(data);
 	}
 	
-	
-	
 	// tcp checksum calculated on BOTH header and data
 	tcp_utils_add_checksum(header, total_length, connection->local_addr.virt_ip, connection->remote_addr.virt_ip, TCP_DATA);//TCP_DATA is tcp protocol number right?
 	
@@ -471,7 +468,7 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 										tcp_connection_get_remote_ip(connection));
 										
 	// no longer need packet
-	free(header);
+	//free(header); no longer memcpying into the tcp_packet_data
 	
 	if(tcp_connection_queue_ip_send(connection, packet_data) < 0){
 		//TODO: HANDLE!
@@ -484,6 +481,7 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 }
 
 void tcp_connection_send_next_chunk(tcp_connection_t connection, send_window_chunk_t next_chunk){
+	// mallocs enough memory for the header and the data
 	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, next_chunk->length);
 	
 	/* set the ack bit, and get the ack to send from 
@@ -508,17 +506,18 @@ void tcp_connection_push_data(tcp_connection_t connection, void* data, int data_
 	if(connection->send_window == NULL)
 		CRASH_AND_BURN("Sending window null when trying to push data");
 	
+	// memcpys the data into the window (will handle freeing the data)
 	send_window_push(connection->send_window, data, data_len);
 }
 
 // queues chunks off from send_window and handles sending them for as long as send_window wants to send more chunks
-// NOTE: this presents the danger of one greedy connection that blocks all the other ones from sending
 int tcp_connection_send_next(tcp_connection_t connection){
 	int bytes_sent = 0;
 	send_window_chunk_t next_chunk;
 	send_window_t send_window = connection->send_window;
 
 	// keep sending as many chunks as window has available to give us
+	// get_next gives you a copy of the data in the window
 	while((next_chunk = send_window_get_next(send_window))){
 	
 		// send it off
@@ -644,6 +643,7 @@ void tcp_connection_accept_queue_destroy(tcp_connection_t connection){
 		accept_queue_data_destroy(&data);
 	}
 	bqueue_destroy(q);
+	free(q);
 	connection->accept_queue = NULL;
 }
 
@@ -813,7 +813,7 @@ void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_da
 	tcp_utils_add_checksum(outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip, TCP_DATA);
 
 	tcp_packet_data_t rst_packet = tcp_packet_data_init((char*)outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip);
-	free(outgoing_header);
+	//free(outgoing_header); now not memcpying into tcp_packet_data
 	
 	tcp_connection_queue_ip_send(connection, rst_packet);
 }

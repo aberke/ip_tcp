@@ -323,7 +323,9 @@ void send_window_check_timers_synchronized(send_window_t send_window){
 	for(i=0;i<(send_window->size+1);){
 
 		/* find the next timed_chunk that isn't the current one */
-		while( i<(send_window->size+1) && send_window->timed_chunks[i] == timed_chunk) i++;
+		while( i<(send_window->size) && send_window->timed_chunks[i] == timed_chunk) i++;
+		if(i==(send_window->size+1)) break;
+
 		timed_chunk = send_window->timed_chunks[i];
 
 		/* if the new chunk is actually a chunk, then check if it's waiting for an ack,
@@ -340,12 +342,12 @@ void send_window_check_timers_synchronized(send_window_t send_window){
 		}
 	}
 }	
+
 void send_window_check_timers(send_window_t sw){
 	pthread_mutex_lock(&(sw->mutex));
 	send_window_check_timers_synchronized(sw);
 	pthread_mutex_unlock(&(sw->mutex));
 }
-
 
 void _free_timers(send_window_t* send_window){
 	

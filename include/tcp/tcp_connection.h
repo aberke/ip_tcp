@@ -2,7 +2,7 @@
 #define __TCP_CONNECTION_H__
 
 #include <inttypes.h>
-#include <netinet/tcp.h>
+//#include <netinet/tcp.h> -- we define it in utils.h!
 #include "bqueue.h"
 #include "send_window.h"
 #include "recv_window.h"

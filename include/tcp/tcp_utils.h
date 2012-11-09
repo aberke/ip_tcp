@@ -2,11 +2,6 @@
 #ifndef __TCP_UTILS_H__ 
 #define __TCP_UTILS_H__
 
-#ifdef __APPLE__
-#include <netinet/tcp.h>
-#else
-#include "linux_tcp.h"  //<-- for making sure our linux macros work etc - this was copied from the department machines, saved in util
-#endif
 
 #include "utils.h"
 #include "ip_utils.h" // tcp_packet_data_t and its associated functions defined there
@@ -71,46 +66,181 @@ memchunk_t tcp_unwrap_data(void* packet, int length);
 #define ACK_BIT 4
 #define URG_BIT 5
 
-#ifdef __APPLE__ // these are the functions that will work for tcphdr defined for mac
 
-	#define tcp_window_size(header) ntohl(((struct tcphdr*)header)->th_win)
-	#define tcp_ack(header) ntohl(((struct tcphdr*)header)->th_ack)
-	#define tcp_seqnum(header) ntohl(((struct tcphdr*)header)->th_seq)
-	#define tcp_dest_port(header) ntohs(((struct tcphdr*)header)->th_dport)
-	#define tcp_source_port(header) ntohs(((struct tcphdr*)header)->th_sport)
-	#define tcp_offset_in_bytes(header) ((((struct tcphdr*)header)->th_off)*4) 
-	#define tcp_checksum(header) (((struct tcphdr*)header)->th_sum)
+#if __APPLE__	//(defined __APPLE__ || defined __FAVOR_BSD)// these are the functions that will work for tcphdr defined for mac
+	#include <sys/appleapiopts.h>
+	#include <sys/_types.h>
+	#include <machine/endian.h>
 	
+	#if !defined(_POSIX_C_SOURCE) || defined(_DARWIN_C_SOURCE)
+	typedef	__uint32_t tcp_seq;
+	typedef __uint32_t tcp_cc;		/* connection count per rfc1644 */
+	
+	#define tcp6_seq	tcp_seq	/* for KAME src sync over BSD*'s */
+	#define tcp6hdr		tcphdr	/* for KAME src sync over BSD*'s */
+	
+	/*
+	 * TCP header.
+	 * Per RFC 793, September, 1981.
+	 */
+	struct tcphdr {
+		unsigned short	th_sport;	/* source port */
+		unsigned short	th_dport;	/* destination port */
+		tcp_seq	th_seq;			/* sequence number */
+		tcp_seq	th_ack;			/* acknowledgement number */
+	#if __DARWIN_BYTE_ORDER == __DARWIN_LITTLE_ENDIAN
+		unsigned int	th_x2:4,	/* (unused) */
+				th_off:4;	/* data offset */
+	#endif
+	#if __DARWIN_BYTE_ORDER == __DARWIN_BIG_ENDIAN
+		unsigned int	th_off:4,	/* data offset */
+				th_x2:4;	/* (unused) */
+	#endif
+		unsigned char	th_flags;
+	#define	TH_FIN	0x01
+	#define	TH_SYN	0x02
+	#define	TH_RST	0x04
+	#define	TH_PUSH	0x08
+	#define	TH_ACK	0x10
+	#define	TH_URG	0x20
+	#define	TH_ECE	0x40
+	#define	TH_CWR	0x80
+	#define	TH_FLAGS	(TH_FIN|TH_SYN|TH_RST|TH_ACK|TH_URG|TH_ECE|TH_CWR)
+	
+		unsigned short	th_win;		/* window */
+		unsigned short	th_sum;		/* checksum */
+		unsigned short	th_urp;		/* urgent pointer */
+	};
+	#endif /* (_POSIX_C_SOURCE && !_DARWIN_C_SOURCE) */
+
+#else // redefine for the two linux versions grrrrr
+
+	#include <features.h>
+	#include <sys/types.h>
+	#include <sys/socket.h>
+	
+	#ifdef __FAVOR_BSD
+		typedef	u_int32_t tcp_seq;
+		/*
+		 * TCP header.
+		 * Per RFC 793, September, 1981.
+		 */
+		struct tcphdr
+		  {
+			u_int16_t th_sport;		/* source port */
+			u_int16_t th_dport;		/* destination port */
+			tcp_seq th_seq;		/* sequence number */
+			tcp_seq th_ack;		/* acknowledgement number */
+		#  if __BYTE_ORDER == __LITTLE_ENDIAN
+			u_int8_t th_x2:4;		/* (unused) */
+			u_int8_t th_off:4;		/* data offset */
+		#  endif
+		#  if __BYTE_ORDER == __BIG_ENDIAN
+			u_int8_t th_off:4;		/* data offset */
+			u_int8_t th_x2:4;		/* (unused) */
+		#  endif
+			u_int8_t th_flags;
+		#  define TH_FIN	0x01
+		#  define TH_SYN	0x02
+		#  define TH_RST	0x04
+		#  define TH_PUSH	0x08
+		#  define TH_ACK	0x10
+		#  define TH_URG	0x20
+			u_int16_t th_win;		/* window */
+			u_int16_t th_sum;		/* checksum */
+			u_int16_t th_urp;		/* urgent pointer */
+		};
+	# else /* !__FAVOR_BSD */
+	
+		#define TCP_LINUX_VERSION 1 //our flag for using different getting/setting methods below
+	
+		struct tcphdr
+		  {
+			u_int16_t th_sport;		/* source port */	//source
+			u_int16_t th_dport;		/* destination port */	//dest
+			u_int32_t th_seq;		/* sequence number */	//seq
+			u_int32_t th_ack;		/* acknowledgement number */	//seq_ack
+		#  if __BYTE_ORDER == __LITTLE_ENDIAN
+			u_int16_t res1:4;
+			u_int16_t th_off:4;		/* data offset */	//doff:4;
+			u_int16_t fin:1;
+			u_int16_t syn:1;
+			u_int16_t rst:1;
+			u_int16_t psh:1;
+			u_int16_t ack:1;
+			u_int16_t urg:1;
+			u_int16_t res2:2;
+		#  elif __BYTE_ORDER == __BIG_ENDIAN
+			u_int16_t th_off:4;
+			u_int16_t res1:4;
+			u_int16_t res2:2;
+			u_int16_t urg:1;
+			u_int16_t ack:1;
+			u_int16_t psh:1;
+			u_int16_t rst:1;
+			u_int16_t syn:1;
+			u_int16_t fin:1;
+		#  else
+		#   error "Adjust your <bits/endian.h> defines"
+		#  endif
+			u_int16_t th_win;
+			u_int16_t th_sum;
+			u_int16_t th_urp;
+		};
+	# endif /* __FAVOR_BSD */
+#endif // !__APPLE__
+
+
+#define tcp_window_size(header) ntohs(((struct tcphdr*)header)->th_win)
+#define tcp_ack(header) ntohl(((struct tcphdr*)header)->th_ack)
+#define tcp_seqnum(header) ntohl(((struct tcphdr*)header)->th_seq)
+#define tcp_dest_port(header) ntohs(((struct tcphdr*)header)->th_dport)
+#define tcp_source_port(header) ntohs(((struct tcphdr*)header)->th_sport)
+#define tcp_offset_in_bytes(header) ((((struct tcphdr*)header)->th_off)*4) 
+#define tcp_checksum(header) (((struct tcphdr*)header)->th_sum)
+
+#ifdef TCP_LINUX_VERSION //instead of bitpacking lets just get/set
+	#define tcp_fin_bit(header) (((struct tcphdr*)header)->fin) // is fin set? 
+	#define tcp_syn_bit(header) (((struct tcphdr*)header)->syn) // is syn set?
+	#define tcp_rst_bit(header) (((struct tcphdr*)header)->rst) // is rst set?
+	#define tcp_psh_bit(header) (((struct tcphdr*)header)->psh) // is psh set?  <-- don't need to handle
+	#define tcp_ack_bit(header) (((struct tcphdr*)header)->ack) // is ack set?
+	#define tcp_urg_bit(header) (((struct tcphdr*)header)->urg) // is urg set?  <-- don't need to handle
+
+#else //using normal mac bitpacking
 	#define tcp_fin_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << FIN_BIT)) > 0) // is fin set? 
 	#define tcp_syn_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << SYN_BIT)) > 0) // is syn set?
 	#define tcp_rst_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << RST_BIT)) > 0) // is rst set?
 	#define tcp_psh_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << PSH_BIT)) > 0) // is psh set?  <-- don't need to handle
 	#define tcp_ack_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << ACK_BIT)) > 0) // is ack set?
 	#define tcp_urg_bit(header) ((((struct tcphdr*)header)->th_flags & (1 << URG_BIT)) > 0) // is urg set?  <-- don't need to handle
-	
-	/******** For wrapping *****/
-	#define tcp_set_window_size(header, size) ((((struct tcphdr*)header)->th_win) = ((uint16_t)htonl(size)))
-	#define tcp_set_ack(header, ack) ((((struct tcphdr*)header)->th_ack) = ((uint32_t)htonl(ack)))
-	#define tcp_set_seq(header, seq) ((((struct tcphdr*)header)->th_seq) = ((uint32_t)htonl(seq)))
-	#define tcp_set_offset(header) ((((struct tcphdr*)header)->th_off) = NO_OPTIONS_HEADER_LENGTH)
-	#define tcp_set_checksum(header, sum) ((((struct tcphdr*)header)->th_sum) = sum)
-	#define tcp_set_dest_port(header, port) ((((struct tcphdr*)header)->th_dport) = port)
-	#define tcp_set_source_port(header, port) ((((struct tcphdr*)header)->th_sport) = port)
-	
+#endif
+
+/******** For wrapping *****/
+#define tcp_set_window_size(header, size) ((((struct tcphdr*)header)->th_win) = ((uint16_t)htonl(size)))
+#define tcp_set_ack(header, ack) ((((struct tcphdr*)header)->th_ack) = ((uint32_t)htonl(ack)))
+#define tcp_set_seq(header, seq) ((((struct tcphdr*)header)->th_seq) = ((uint32_t)htonl(seq)))
+#define tcp_set_offset(header) ((((struct tcphdr*)header)->th_off) = NO_OPTIONS_HEADER_LENGTH)
+#define tcp_set_checksum(header, sum) ((((struct tcphdr*)header)->th_sum) = sum)
+#define tcp_set_dest_port(header, port) ((((struct tcphdr*)header)->th_dport) = port)
+#define tcp_set_source_port(header, port) ((((struct tcphdr*)header)->th_sport) = port)
+
+#ifdef TCP_LINUX_VERSION //instead of bitpacking lets just get/set
+	#define tcp_set_fin_bit(header) (((struct tcphdr*)header)->fin = 1) // set the fin bit to 1
+	#define tcp_set_syn_bit(header) (((struct tcphdr*)header)->syn = 1) // set the syn bit to 1
+	#define tcp_set_rst_bit(header) (((struct tcphdr*)header)->rst = 1) // set the rst bit to 1
+	#define tcp_set_psh_bit(header) (((struct tcphdr*)header)->psh = 1) // set the psh bit to 1
+	#define tcp_set_ack_bit(header) (((struct tcphdr*)header)->ack = 1) // set the ack bit to 1
+	#define tcp_set_urg_bit(header) (((struct tcphdr*)header)->urg = 1) // set the urg bit to 1
+
+#else //using normal mac bitpacking
 	#define tcp_set_fin_bit(header) ((((struct tcphdr*)header)->th_flags) |= (1 << FIN_BIT)) // set the fin bit to 1
 	#define tcp_set_syn_bit(header) ((((struct tcphdr*)header)->th_flags) |= (1 << SYN_BIT)) // set the syn bit to 1
 	#define tcp_set_rst_bit(header) ((((struct tcphdr*)header)->th_flags) |= (1 << RST_BIT)) // set the rst bit to 1
 	#define tcp_set_psh_bit(header) ((((struct tcphdr*)header)->th_flags) |= (1 << PSH_BIT)) // set the psh bit to 1
 	#define tcp_set_ack_bit(header) ((((struct tcphdr*)header)->th_flags) |= (1 << ACK_BIT)) // set the ack bit to 1
 	#define tcp_set_urg_bit(header) ((((struct tcphdr*)header)->th_flags) |= (1 << URG_BIT)) // set the urg bit to 1
-
-#else // these are the tcphdr functions defined for linux -- right? --- need to test on department machines to be double sure
-		// note: I copied the tcphdr.h file from our department machines to our util folder for testing.
-
-
 #endif
-
-
 
 struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_port, int data_size);
 

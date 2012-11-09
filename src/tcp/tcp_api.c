@@ -56,10 +56,10 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint1
 	/* Make sure connection has a unique port before sending anything so that node can multiplex response */
 	if(!tcp_connection_get_local_port(connection))
 		tcp_node_assign_port(tcp_node, connection, tcp_node_next_port(tcp_node));
-	
+
 	//connection needs to know both its local and remote ip before sending
 	uint32_t local_ip = tcp_node_get_local_ip(tcp_node, (*addr).s_addr);
-	
+
 	if(!local_ip){
 		tcp_connection_api_unlock(connection);
 		return -ENETUNREACH;
@@ -68,15 +68,21 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint1
 	tcp_connection_set_remote_ip(connection, (*addr).s_addr);
 	tcp_connection_set_local_ip(connection, local_ip);
 	
-	tcp_connection_active_open(connection, tcp_connection_get_remote_ip(connection), port);
+	// we could check if the transition is valid, but let's just not, instead it 
+	// is handled and signaled just like everything else by a call to tcp_connection_invalid_transition
+	int ret = tcp_connection_active_open(connection, tcp_connection_get_remote_ip(connection), port);
+	if(ret==INVALID_TRANSITION){
+		// then just return that result (well maybe lets return EBADF, is that right?);
+		tcp_connection_api_unlock(connection);
+		return -EBADF;//INVALID_TRANSITION;
+	}
 	
 	/* Now wait until connection ESTABLISHED or timed out -- ret value will indicate */
-	int ret = tcp_connection_api_result(connection); // will block until it gets the result
-	if(ret == SIGNAL_DESTROYING){
+	int transition_result = tcp_connection_api_result(connection); // will block until it gets the result
+	if(transition_result == SIGNAL_DESTROYING){
 		// is there anything else we should do here?
 		return SIGNAL_DESTROYING;
 	}
-
 	return ret;
 }
 
@@ -135,9 +141,7 @@ int tcp_api_bind(tcp_node_t tcp_node, int socket, char* addr, uint16_t port){
 		//int port = tcp_connection_get_local_port(connection);
 		return -EINVAL; 	// The socket is already bound to an address.
 	}
-
 	tcp_node_assign_port(tcp_node, connection, port);
-	
 	/* All done so unlock */
 	//TODO
 	
@@ -236,4 +240,41 @@ void* tcp_api_accept_entry(void* _args){
 	_return(args, ret);
 	return NULL;
 }
+
+////////////////// DRIVER ///////////////////////
+
+void* tcp_driver_accept_entry(void* _args){ return NULL; }
+/*
+	tcp_api_args_t args = (tcp_api_args_t)_args;
+
+	* verifies that these fields are valid (node != NULL, socket >=0, ...) *
+	_verify_node(args);
+	_verify_socket(args);
+
+	tcp_node_t node = args->node;
+	int socket = args->socket;
+	struct in_addr* addr;
+
+	int count=0;
+	while(node->running){
+
+		addr = malloc(sizeof(struct in_addr));
+	
+		* pack the args *
+		new_args 		 = tcp_api_args_init();
+		new_args->node   = node;
+		new_args->socket = socket;
+		new_args->addr 	 = addr;
+
+		pthread_create(&(new_args->thread), tcp_api_accept_entry, new_args);
+		pthread_join(&(new_args->thread), NULL);
+		printf("accepted connection on socket: %d\n", new_args->result);
+		count++;
+	}
+
+	* we'll use the macro _return in order to return a value *
+	_return(args, count);
+	return NULL; // this won't do anything
+}
+*/
 

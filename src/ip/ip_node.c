@@ -161,7 +161,7 @@ ip_node_t ip_node_init(iplist_t* links){
 			puts("link_interface didn't init properly");
 			
 			// get out while you can
-			ip_node->num_interfaces--;
+			ip_node->num_interfaces = index;
 			ip_node_destroy(&ip_node);
 			free_links(links);
 			return NULL;
@@ -224,7 +224,6 @@ void ip_node_destroy(ip_node_t* ip_node){
 }
 
 void ip_node_stop(ip_node_t ip_node){	
-	print(("IP NODE STOPPED!"), IP_PRINT);
 	ip_node->running = 0;
 }
 /*
@@ -241,7 +240,7 @@ returns:
 */
 int ip_node_read(ip_node_t ip_node, char* packet, int packet_size, uint32_t local_virt_ip, uint32_t remote_virt_ip){
 
-	packet[packet_size] = '\0';
+	//packet[packet_size] = '\0';
 	//printf("In ip_node_read.  TCP_DATA packet_size: %d, packet: \n%s\n", packet_size, packet);
 
 	if(!ip_node->read_queue) 
@@ -257,6 +256,7 @@ int ip_node_read(ip_node_t ip_node, char* packet, int packet_size, uint32_t loca
 		tcp_packet_data_destroy(tcp_packet);
 		return -1;
 	}
+
 	return 0;
 }
 
@@ -791,7 +791,9 @@ static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, 
 	else{
 		printf("Bad RIP packet: command=%d\n", ntohs(info->command));
 	}
- }
+
+	free(packet_unwrapped);
+}
 
 
 /* _handle_selected is a dummy function for testing the functionality of the rest
@@ -809,6 +811,7 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 		return;
 	}
 
+	/* packet_data_size is the size of the payload */
 	int packet_data_size = 	ip_check_valid_packet(packet_buffer, bytes_read);	
  	if(packet_data_size < 0){
  		puts("Discarding packet");
