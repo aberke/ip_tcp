@@ -384,6 +384,50 @@ void command_4(const char* line, tcp_node_t tcp_node){
 	vv_write(cmd, tcp_node);
 }
 
+/* 
+command:
+	numbers <socket> <range>
+		- sends all numbers over that established socket
+		  ie numbers 1 10 would send the string 12345678910
+		  and so on. string buffer is statically defined
+		  to be 4096 bytes, so probably nothing over 1000
+		  is a good idea (unless you like to live on the 
+		  wild side)
+*/
+void numbers(const char* line, tcp_node_t tcp_node){
+	int range, sock;
+	if(sscanf(line, "numbers %d %d", &sock, &range) != 2){
+		fprintf(stderr, "Syntax error: usage (numbers <socket> <number>)\n");
+		return;
+	}
+
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, sock);
+	if(!connection){
+		printf("Error: %s\n", strerror(EBADF));
+		return;
+	}
+
+	/* hope you don't go over that */
+	unsigned char to_write[4096];
+	memset(to_write, 0, 4096);
+	
+	int i;
+	unsigned char int_string_buffer[BUFFER_SIZE];
+	for(i=0;i<range;i++){
+		sprintf(int_string_buffer, "%d", i);
+		strcat(to_write,int_string_buffer);
+	}
+	strcat(to_write,"\n");
+	
+	int ret = tcp_connection_send_data(connection, to_write, strlen(to_write));
+	// wanna do anything with that?
+	
+	return;//nah
+}
+
+
+
+
 struct {
   const char *command;
   void (*handler)(const char *, tcp_node_t);
@@ -419,7 +463,8 @@ struct {
   {"1", command_1}, // performs command 'v_connect 0 10.10.168.73 12'
   {"2", command_2},
   {"3", command_3},
-  {"4", command_4}
+  {"4", command_4},
+  {"numbers", numbers}
 };
 
 

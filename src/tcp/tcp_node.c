@@ -96,26 +96,34 @@ void connection_port_keyed_destroy(connection_port_keyed_t* port_keyed){
 struct tcp_node{
 	int running; // 0 for not running, 1 for running // mimics ip_node
 	ip_node_t ip_node;	// owns an ip_node_t that it keeps running to send/receive/listen on its interfaces
-	bqueue_t *to_send;	//--- tcp data for ip to send
-	bqueue_t *to_read;	//--- tcp data that ip pushes on to queue for tcp to handle
-	bqueue_t *stdin_commands;	//---  way for tcp_node to pass user input commands to ip_node
 	
 	// owns table of tcp_connections
 		// each tcp_connection owns a statemachine to keep track of its state
 
+	/****** Kernal Related *********/
+	 //This mtx should be locked any time we are accessing/changing kernal
+	 // where kernal is any of the data structures/ints in this 'kernal related' section
+	pthread_mutex_t kernal_mutex;
+	
 	int num_connections; //number of current tcp_connections
 	int connection_array_size; // will need to realloc if don't initially create enough room in array kernal
 	
 	tcp_connection_t* connections;
 	connection_virt_socket_keyed_t virt_socketToConnection;
-	connection_port_keyed_t portToConnection;
-	
+	connection_port_keyed_t portToConnection;	
 	// used to systematically keep track of available file descriptors/ports and to reuse them after socket closed
 	// each time need new unique socket/port, call dequeue and item is pointer to int to use as socket/port
 	queue_t sockets_available_queue;
 	queue_t ports_available_queue;
+	/****** End of Kernal Related *********/
+
+	/******* Thread Related **************/
+	bqueue_t *to_send;	//--- tcp data for ip to send
+	bqueue_t *to_read;	//--- tcp data that ip pushes on to queue for tcp to handle
+	bqueue_t *stdin_commands;	//---  way for tcp_node to pass user input commands to ip_node
 
 	plain_list_t thread_list;
+	/******* End of Thread Related **************/
 };
 
 tcp_node_t tcp_node_init(iplist_t* links){
@@ -145,6 +153,7 @@ tcp_node_t tcp_node_init(iplist_t* links){
 	/************ Queues Created *****************/
 		
 	/*********** create kernal table  ************/
+	pthread_mutex_init(&(tcp_node->kernal_mutex), NULL);
 	tcp_node->connection_array_size = MAX_FILE_DESCRIPTORS;  
 	tcp_node->num_connections = 0; // no connections at start
 	tcp_node->connections = (tcp_connection_t*)malloc(sizeof(tcp_connection_t)*(tcp_node->connection_array_size));
@@ -186,7 +195,14 @@ void tcp_node_stop(tcp_node_t tcp_node){
 
 void tcp_node_destroy(tcp_node_t tcp_node){
 	puts("destroying node");
-
+	tcp_node->running = 0;
+	
+	// gracefully CLOSE all connections
+	// this blocks for a little until all connections CLOSED - and presumably kernal empty?
+	tcp_node_close_all_connections(tcp_node);
+	
+	// wait for mutex so we can ensure we destroy e'erthang
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 	//// iterate through the hash maps and destroy all of the keys/values,
 	//// this will NOT destroy the connections
 	connection_virt_socket_keyed_t socket_keyed, tmp_sock_keyed;
@@ -210,6 +226,10 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	}
 	// free the array itself
 	free(tcp_node->connections);
+	
+	// get rid of kernal mutex
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+	pthread_mutex_destroy(&(tcp_node->kernal_mutex));
 
 /*****************************/
 	plain_list_t list = tcp_node->thread_list;
@@ -309,8 +329,10 @@ tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 		return NULL;
 		
 	// init new tcp_connection
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 	tcp_connection_t connection = tcp_connection_init(tcp_node, socket, tcp_node->to_send);
-
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+	
 	// place connection in array
 	_insert_connection_array(tcp_node, connection);
 
@@ -323,15 +345,17 @@ tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 	int port = tcp_node_next_port(tcp_node);
 	tcp_node_assign_port(tcp_node, connection, port);
 	*/
-
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 	connection_virt_socket_keyed_t socket_keyed = connection_virt_socket_keyed_init(connection);
 	HASH_ADD_INT(tcp_node->virt_socketToConnection, virt_socket, socket_keyed);
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 
 	return connection;
 }
 //needs to be called when close connection so that we can return port/socket to available queue for reuse
 void tcp_node_return_socket_to_kernal(tcp_node_t tcp_node, int socket){
 	
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 	// return socket to available queue
 	queue_push_front(tcp_node->sockets_available_queue, (void*)((uint64_t)socket));
 	
@@ -344,10 +368,13 @@ void tcp_node_return_socket_to_kernal(tcp_node_t tcp_node, int socket){
 
 	HASH_DEL(tcp_node->virt_socketToConnection, socket_keyed);
 	connection_virt_socket_keyed_destroy(&socket_keyed);
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 }
 
 //needs to be called when close connection so that we can return port/socket to available queue for reuse
 void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, int port){
+	
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 	
 	// port of zero means port wasn't actually set for that connection -- not a valid port
 	if(!port) 
@@ -366,14 +393,20 @@ void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, int port){
 
 	HASH_DEL(tcp_node->portToConnection, port_keyed);
 	connection_port_keyed_destroy(&port_keyed);
+	
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 }
-
+//ALEX TODO:
+// gracefully CLOSE all connections
+void tcp_node_close_all_connections(tcp_node_t tcp_node){
+	puts("ALEX TODO: GRACEFULLY CLOSE ALL CONNECTIONS BEFORE DESTROYING NODE");
+}
 //###TODO: FINISH LOGIC ####
 //needs to be called when close connection so that we can return port/socket to available queue for reuse
 // returns new number of connections in kernal
 int tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection){
 	puts("in tcp_node_close_connection");
-	//TODO: CONNECTION CLOSING LOGIG
+	//TODO: CONNECTION CLOSING LOGIC
 	tcp_connection_state_machine_transition(connection, CLOSE);
 	//int num_connections = tcp_node_remove_connection_kernal(tcp_node);
 	//return num_connections;
@@ -386,22 +419,34 @@ int tcp_node_remove_connection_kernal(tcp_node_t tcp_node, tcp_connection_t conn
 	int port = (int)tcp_connection_get_local_port(connection);
 	int socket = tcp_connection_get_socket(connection);
 	
-	// remove from kernal	
+	// remove from kernal	- these calls lock/unlock kernal
 	tcp_node_return_socket_to_kernal(tcp_node, socket);
 	tcp_node_return_port_to_kernal(tcp_node, port);
 	
+	// lock kernal
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 	tcp_connection_destroy(connection);
 		
 	tcp_node->connections[socket] = NULL;
 	tcp_node->num_connections = (tcp_node->num_connections) - 1;
 	
+	//unlock kernal
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+	
 	return tcp_node->num_connections;
 }
-// returns tcp_connection corresponding to socket
+// returns tcp_connection corresponding to socket -- locks/unlocks kernal
 tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int socket){
+	
+	//lock kernal
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 	
 	connection_virt_socket_keyed_t socket_keyed;
 	HASH_FIND_INT(tcp_node->virt_socketToConnection, &socket, socket_keyed);
+	
+	//unlock kernal
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+	
 	if(!socket_keyed)
 		return NULL;
 	else
@@ -414,8 +459,15 @@ tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t p
 	 	support for ports */
 	int int_port = (int)port; 
 
+	//lock kernal
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
+
 	connection_port_keyed_t port_keyed;
 	HASH_FIND_INT(tcp_node->portToConnection, &int_port, port_keyed);
+	
+	//unlock kernal
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+	
 	if(!port_keyed)
 		return NULL;
 	else
@@ -442,20 +494,31 @@ int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int p
 	tcp_connection_set_local_port(connection, uport);
 	
 	// put port to connection in kernal
+	//lock kernal
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
+	
 	connection_port_keyed_t port_keyed = connection_port_keyed_init(connection);
 	HASH_ADD_INT(tcp_node->portToConnection, port, port_keyed);	
 
-
+	//unlock kernal
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 
 	return 1;
 }
 
 // returns 1 if the port is available for use, 0 if already in use
 int tcp_node_port_unused(tcp_node_t tcp_node, int port){	
+
+	//lock kernal
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 	
 	connection_port_keyed_t port_keyed;
 	// check that port not already in hashmap
 	HASH_FIND_INT(tcp_node->portToConnection, &port, port_keyed);
+	
+	//unlock kernal
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));	
+	
 	if(!port_keyed)
 		return 1;
 	else
@@ -464,18 +527,33 @@ int tcp_node_port_unused(tcp_node_t tcp_node, int port){
 
 // returns next available, currently unused, port to bind or connect/accept a new tcp_connection with
 int tcp_node_next_port(tcp_node_t tcp_node){
+
+	//lock kernal
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
+
 	int next_port = (uint64_t)queue_pop(tcp_node->ports_available_queue);
 	
 	// check that next_port not already in use -- not already in hashmap	
 	while(!tcp_node_port_unused(tcp_node, next_port)){
 		next_port = (uint64_t)queue_pop(tcp_node->ports_available_queue);
 	}
+	//unlock kernal
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+	
 	return next_port;
 }
 
 // returns next available, currently unused, virtual socket file descriptor to initiate a new tcp_connection with
 int tcp_node_next_virt_socket(tcp_node_t tcp_node){
+
+	//lock kernal
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
+
 	int next_socket = (uint64_t)queue_pop(tcp_node->sockets_available_queue);
+	
+	//unlock kernal
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));	
+	
 	return next_socket;
 }
 /**************** End of functions that deal with Kernal Table *******************/
