@@ -253,6 +253,8 @@ tcp_connection_handle_receive_packet
 */
 
 void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
+	puts("received packet");
+	
 	/* 
 	  RFC 793: 
 		Although these examples do not show connection synchronization using data
@@ -306,11 +308,12 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	
 	/* ack data if you're in a position to do so */
 	if(tcp_ack_bit(tcp_packet)){
+		puts("received packet with ack_bit set");
  		if(connection->send_window)
 			send_window_ack(connection->send_window, tcp_ack(tcp_packet));
 		
 		// do we want an else? that was a bad ACK (its not acking anything), or we fucked up
-		if(state_machine_get_state(connection->state_machine) == SYN_SENT)
+		if(state_machine_get_state(connection->state_machine) == SYN_RECEIVED) //<-- Neil: why did you change that to syn_sent????
 			state_machine_transition(connection->state_machine, receiveACK);	
 
 		return;
