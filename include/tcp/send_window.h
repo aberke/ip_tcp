@@ -32,6 +32,9 @@ void send_window_resize(send_window_t send_window, int size);
 uint32_t send_window_get_next_seq(send_window_t send_window);
 send_window_chunk_t send_window_get_next(send_window_t send_window);
 
+
+
+
 void send_window_print(send_window_t send_window);
 
 #endif // __WINDOW_H__

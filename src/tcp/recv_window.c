@@ -166,6 +166,7 @@ uint32_t recv_window_get_ack(recv_window_t recv_window){
 
 /* returns the current size of the window, which is currently
 	not dynamic */
+	//NEIL TODO: MAKE THAT SHIT DYNAMIC
 uint16_t recv_window_get_size(recv_window_t recv_window){
 	return recv_window->size;
 }
@@ -281,8 +282,8 @@ recv_window_get_next
 recv_window_chunk_t recv_window_get_next_synchronized(recv_window_t recv_window){
 	return (recv_window_chunk_t)queue_pop(recv_window->to_read);
 }
-
-recv_window_chunk_t recv_window_get_next(recv_window_t recv_window){
+//FOR NEIL TO FILL IN PLEASEEE -- also on the todo is get window size fix -- make dynamic please
+recv_window_chunk_t recv_window_get_next(recv_window_t window, int bytes){
 	pthread_mutex_lock(&(recv_window->mutex));
 	recv_window_chunk_t rwc = recv_window_get_next_synchronized(recv_window);
 	pthread_mutex_unlock(&(recv_window->mutex));

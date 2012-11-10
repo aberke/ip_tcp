@@ -90,7 +90,6 @@ int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, ui
 
 /* helper to CLOSED_to_SYN_SENT as well as in the _handle_read_write thread for resending syn */
 int tcp_connection_send_syn(tcp_connection_t connection){
-	puts("sending syn");
 
 	//Note: Window already initialized with connection->last_seq_sent when we transitioned from CLOSED_to_SYN_SENT
 
@@ -100,7 +99,7 @@ int tcp_connection_send_syn(tcp_connection_t connection){
 	/* fill the syn, and set the seqnum */
 	tcp_set_syn_bit(header);
 	tcp_set_seq(header, connection->last_seq_sent);
-	printf("sending syn with seq: %u\n", connection->last_seq_sent);
+	//tcp_settcp_set_window_size(header, );
 	tcp_utils_add_checksum(header, sizeof(*header), connection->local_addr.virt_ip, connection->remote_addr.virt_ip, TCP_DATA);
 	
 	// set time of when we're sending off syn
