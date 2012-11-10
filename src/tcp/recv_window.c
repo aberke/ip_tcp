@@ -74,13 +74,13 @@ void recv_window_chunk_decrement(recv_window_chunk_t* rwc){
 
 struct recv_window {
 	queue_t to_read;
-	uint32_t size;
+	uint16_t size;
 	uint32_t left;
 	recv_window_chunk_t* slider;
 	pthread_mutex_t mutex;
 };
 
-recv_window_t recv_window_init(uint32_t window_size, uint32_t ISN){
+recv_window_t recv_window_init(uint16_t window_size, uint32_t ISN){
 	recv_window_t recv_window = (struct recv_window*)malloc(sizeof(struct recv_window));
 	recv_window->size = window_size;
 	
@@ -166,7 +166,7 @@ uint32_t recv_window_get_ack(recv_window_t recv_window){
 
 /* returns the current size of the window, which is currently
 	not dynamic */
-uint32_t recv_window_get_size(recv_window_t recv_window){
+uint16_t recv_window_get_size(recv_window_t recv_window){
 	return recv_window->size;
 }
 

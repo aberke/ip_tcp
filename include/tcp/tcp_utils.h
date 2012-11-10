@@ -53,8 +53,11 @@ typedef struct tcp_socket_address{
 } tcp_socket_address_t;
 
 
+//forward declare memchunk:
+struct memchunk;
+
 struct tcphdr* tcp_unwrap_header(void* packet, int length);
-memchunk_t tcp_unwrap_data(void* packet, int length);
+struct memchunk* tcp_unwrap_data(void* packet, int length);
 
 /****** For Unwrapping *****/
 
@@ -217,7 +220,7 @@ memchunk_t tcp_unwrap_data(void* packet, int length);
 #endif
 
 /******** For wrapping *****/
-#define tcp_set_window_size(header, size) ((((struct tcphdr*)header)->th_win) = ((uint16_t)htonl(size)))
+#define tcp_set_window_size(header, size) ((((struct tcphdr*)header)->th_win) = ((uint16_t)htons(size)))
 #define tcp_set_ack(header, ack) ((((struct tcphdr*)header)->th_ack) = ((uint32_t)htonl(ack)))
 #define tcp_set_seq(header, seq) ((((struct tcphdr*)header)->th_seq) = ((uint32_t)htonl(seq)))
 #define tcp_set_offset(header) ((((struct tcphdr*)header)->th_off) = NO_OPTIONS_HEADER_LENGTH)
@@ -256,5 +259,9 @@ struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_por
 uint16_t tcp_utils_calc_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t proto);
 void tcp_utils_add_checksum(void* packet, uint16_t  total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t proto);
 int tcp_utils_validate_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t proto);
+
+
+//alex wrote for debugging: prints packet - see tcp_wrap_packet_send
+void view_packet(struct tcphdr* header, void* data);
 
 #endif

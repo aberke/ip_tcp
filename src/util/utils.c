@@ -4,6 +4,7 @@
 #include "stdio.h"
 #include "utils.h"
 
+
 /* STRUCTS */
 
 ///// MEMCHUNK
@@ -18,13 +19,15 @@ void memchunk_destroy(memchunk_t* chunk){
 	free(*chunk);
 	*chunk = NULL;
 }	
+
+
 	
 void print_non_null_terminated(void* data, int length){
 	/* print out what you got */
 	char buff[length + 1];
 	memcpy(buff, data, length);
 	buff[length] = '\0';
-	printf("%s", buff);
+	printf("data sent: %s\n", buff);
 	fflush(stdout);
 	/*                  	  */
 }

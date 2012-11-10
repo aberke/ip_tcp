@@ -268,6 +268,9 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 
 	void* tcp_packet = tcp_packet_data->packet;
 	
+	// prints packet -- defined by alex in tcp_utils
+	view_packet((struct tcphdr*)tcp_packet, tcp_packet+20); //<-- (+20) my guess for data offset
+	
 	//TODO: FIGURE OUT WHEN ITS NOT APPROPRIATE TO RESET REMOTE ADDRESSES -- we don't want our connection sabotaged 
 	//reset remote ip/port in case it has changed + so that we can correctly calculate checksum	
 	if(tcp_connection_get_state(connection) == LISTEN){
@@ -423,6 +426,7 @@ void tcp_connection_ack(tcp_connection_t connection, uint32_t ack){
 	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0);
 	tcp_set_ack_bit(header);
 	tcp_set_ack(header, ack);
+	tcp_set_window_size(header, recv_window_get_size(connection->receive_window));
 
 	tcp_wrap_packet_send(connection, header, NULL, 0);
 }
@@ -434,6 +438,9 @@ void tcp_connection_ack(tcp_connection_t connection, uint32_t ack){
    I also left the original version intact in src/tcp/tcp_utils.s
 */
 int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len){	
+
+	//alex wrote for debugging: PRINTS PACKET
+	view_packet(header, data); // <-- defined in tcp_utils
 	
 	uint32_t total_length = tcp_offset_in_bytes(header) + data_len;
 	

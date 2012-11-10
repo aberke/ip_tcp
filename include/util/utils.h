@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <time.h>
 #include <sys/select.h>
+#include "tcp_utils.h"
 
 /* ALL THE TIMEOUTS */
 #define TCP_CONNECTION_DEQUEUE_TIMEOUT_NSECS 10000000
@@ -24,7 +25,7 @@
 	   	   /*| (1<<(SEND_WINDOW_PRINT-1))	*/ 		\
 		   /*| (1<<(LEAK_PRINT-1))          */		\
 		     | (1<<(STATES_PRINT-1))				\
-			 | (1<<(CLOSING_PRINT-1))				\
+			 /*| (1<<(CLOSING_PRINT-1))			*/	\
 			 )
 
 #define DEBUG 1
@@ -114,6 +115,7 @@ int buffer_fill(buffer_t buffer, void* data, int length);
 
 void buffer_empty(buffer_t buffer);
 
+
 /* AUXILIARY METHODS */
 void error(const char* msg);
 void rtrim(char* s, const char* delim);
@@ -121,7 +123,6 @@ int utils_startswith(const char* s, const char* starts);
 void util_free(void** ptr);
 void inspect_bytes(const char* msg, int num_bytes);
 void print_non_null_terminated(void* data, int length);
-
 int fd_fgets(fd_set* fd, char* buffer, int size_of_buffer, FILE* file, struct timeval* tv);
 
 #endif // __UTILS_H__
