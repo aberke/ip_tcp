@@ -269,6 +269,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	void* tcp_packet = tcp_packet_data->packet;
 	
 	// prints packet -- defined by alex in tcp_utils
+	puts("Received packet:");
 	view_packet((struct tcphdr*)tcp_packet, tcp_packet+20); //<-- (+20) my guess for data offset
 	
 	//TODO: FIGURE OUT WHEN ITS NOT APPROPRIATE TO RESET REMOTE ADDRESSES -- we don't want our connection sabotaged 
@@ -440,6 +441,7 @@ void tcp_connection_ack(tcp_connection_t connection, uint32_t ack){
 int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len){	
 
 	//alex wrote for debugging: PRINTS PACKET
+	puts("sending packet:");
 	view_packet(header, data); // <-- defined in tcp_utils
 	
 	uint32_t total_length = tcp_offset_in_bytes(header) + data_len;

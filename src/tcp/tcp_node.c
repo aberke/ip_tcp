@@ -193,7 +193,6 @@ void tcp_node_stop(tcp_node_t tcp_node){
 }
 
 void tcp_node_destroy(tcp_node_t tcp_node){
-	puts("destroying node");
 	tcp_node->running = 0;
 	
 	// gracefully CLOSE all connections
@@ -225,11 +224,10 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	}
 	// free the array itself
 	free(tcp_node->connections);
-	puts("3");
 	// get rid of kernal mutex
 	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 	pthread_mutex_destroy(&(tcp_node->kernal_mutex));
-	puts("4");
+
 /*****************************/
 	plain_list_t list = tcp_node->thread_list;
 	plain_list_el_t el;
