@@ -44,18 +44,18 @@ void v_socket(const char *line, tcp_node_t tcp_node){
 void vv_bind(const char *line, tcp_node_t tcp_node){
 	
 	int socket;
-	char* addr = malloc(sizeof(char)*FILE_BUF_SIZE);
+	struct in_addr* addr = malloc(sizeof(struct in_addr));
 	int port;
 	
-	int ret = sscanf(line, "v_bind %d %s %d", &socket, addr, &port);
+	int ret = sscanf(line, "%d address %d", &socket, &port);
 	if (ret != 3){
 		fprintf(stderr, "syntax error (usage: v_bind [socket] [address] [port])\n");
 		free(addr);
 		return;
 	} 	
-	ret = tcp_api_bind(tcp_node, socket, addr, port);
+	ret = tcp_api_bind(tcp_node, socket, *addr, port);
 	if(ret < 0)
-		printf("v_bind returned error: %s\n", strerror(-ret));
+		printf("v_bind returned error: %d\n", ret);
 	else
 		printf("v_bind returned: %d\n", ret);
 	free(addr);
@@ -64,7 +64,7 @@ void vv_bind(const char *line, tcp_node_t tcp_node){
 void v_listen(const char *line, tcp_node_t tcp_node){
 	
 	int socket;
-	int ret = sscanf(line, "v_listen %d", &socket);
+	int ret = sscanf(line, "%d", &socket);
 	if(ret !=1){
 		fprintf(stderr, "syntax error (usage: v_listen [socket])\n");
 		return;
@@ -81,12 +81,61 @@ void v_listen(const char *line, tcp_node_t tcp_node){
 accept/a port Open a socket, bind it to the given port, and start accepting connections on that
 port. Your driver must continute to accept other commands.
 */
-void v_accept(const char *line, tcp_node_t tcp_node){
-	//NEED TO CHANGE TO CORRESPOND TO SPECS BUT FOR NOW just working like normal api
-	int ret, socket;
-	// int port;
+
+void accept_cmd(const char *line, tcp_node_t tcp_node){
+	int ret, port, socket;
 	
-	ret = sscanf(line, "v_accept %d", &socket);
+	ret = sscanf(line, "%d", &port);
+	if(ret != 1){
+		fprintf(stderr, "syntax error (usage: accept [port])\n");
+		return;
+	}
+	// create new socket
+	if((socket = tcp_api_socket(tcp_node))<0){
+		printf("Error: v_socket() returned value %d\n", socket);
+		return;
+	}
+	// now bind
+	struct in_addr* addr = malloc(sizeof(struct in_addr));	
+	ret = tcp_api_bind(tcp_node, socket, *addr, port);
+	if(ret < 0){
+		printf("Error: v_bind returned: %d\n", ret);
+		return;
+	}
+	// now listen
+	ret = tcp_api_listen(tcp_node, socket);	
+	if(ret < 0){
+		printf("Error: v_listen returned: %d\n", ret);	
+		return;
+	}
+	// now accept in a loop - keep accepting	
+	/* pack the args */
+	tcp_api_args_t args = tcp_api_args_init();
+	args->node		 = tcp_node;
+	args->socket  	 = socket;
+	args->function_call = "v_accept()";
+	args->addr 		 = addr; //reusing address we called bind with but whatever	
+
+	/* So we need to call tcp_api_accept in a loop without blocking.... so here's my solution that I've implemented:
+		We call thread the call tcp_driver_accept_entry which then goes to call tcp_api_accept_entry in a loop.
+		This means we're creating threads within the while loop thread, but this way we can pretty print the result
+		of each individual tcp_api_accept call.  the thread for tcp_driver_accept_entry has return value 0
+		because the actual accept calls that returned sockets will have already been printed.
+	*/
+	tcp_node_thread(tcp_node, tcp_driver_accept_entry, args);
+	
+	return;
+}
+void v_accept(const char *line, tcp_node_t tcp_node){
+	/* this is for our personal api use of accept -- we just accept once rather than accepting on the 
+		given socket forever in a loop like the accept_cmd.
+		The distinction is made by the args->boolean parameter.
+		if args->boolean = 0 (as in this case), then we just accept once
+		else if args->boolean = 1: (as in accept_cmd case) then we accept in a while loop
+		*/
+	int ret, socket;
+	
+	ret = sscanf(line, "%d", &socket);
 	if(ret != 1){
 		fprintf(stderr, "syntax error (usage: v_accept [socket])\n");
 		return;
@@ -100,7 +149,9 @@ void v_accept(const char *line, tcp_node_t tcp_node){
 	args->node		 = tcp_node;
 	args->socket  	 = socket;
 	args->addr 		 = addr;
+	args->function_call = "v_accept()";
 
+	//just accept once, rather than in while loop like accept_cmd
 	tcp_node_thread(tcp_node, tcp_api_accept_entry, args);
 
 	return;
@@ -117,7 +168,7 @@ void v_connect(const char *line, tcp_node_t tcp_node){
 	char addr_buffer[INET_ADDRSTRLEN];
 	int socket, port, ret;
 	
-	ret = sscanf(line, "v_connect %d %s %d", &socket, addr_buffer, &port);
+	ret = sscanf(line, "%d %s %d", &socket, addr_buffer, &port);
 	if(ret !=3){
 		fprintf(stderr, "syntax error (usage: v_conect [socket] [ip address] [port])\n");
 		return;
@@ -133,21 +184,22 @@ void v_connect(const char *line, tcp_node_t tcp_node){
 	args->socket = socket;
 	args->addr = addr;
 	args->port = port;
-
+	args->function_call = "v_connect()";
+	
 	tcp_node_thread(tcp_node, tcp_api_connect_entry, args);
 }
 /*
 recv/r socket numbytes y/n Try to read data from a given socket. If the last argument is y, then
 you should block until numbytes is received, or the connection closes. If n, then don’t block;
 return whatever recv returns. Default is n */
-void recv(const char* line, tcp_node_t tcp_node){
+void recv_cmd(const char* line, tcp_node_t tcp_node){
 	int socket;
 	int num_bytes;
 	char block_y_n;
 	int block = 0; //boolean as to whether recv should block or not
 	int ret;
 	
-	ret = sscanf(line, "recv %d %d %d", &socket, &num_bytes, &block_y_n);
+	ret = sscanf(line, "%d %d %s", &socket, &num_bytes, &block_y_n);
 	if(ret<2 || ret>3){
 		fprintf(stderr, "syntax error (usage: recv [socket] [numbytes] [y/n])\n");
 		return;
@@ -160,26 +212,22 @@ void recv(const char* line, tcp_node_t tcp_node){
 			return;
 		}	
 	}
+	char* to_read = malloc(sizeof(char)*num_bytes);
 	
-	if(block)
-		tcp_api_args_t args = tcp_api_args_init();
+	tcp_api_args_t args = tcp_api_args_init();
 	args->node = tcp_node;
 	args->socket = socket;
-	args->addr = addr;
-	args->port = port;
+	args->buffer = to_read;
+	args->function_call = "v_read";
+	args->boolean = 0;
+		
+	if(block)
+		args->boolean = 1;
 
-	tcp_node_thread(tcp_node, tcp_api_connect_entry, args);
+	tcp_node_thread(tcp_node, tcp_api_read_entry, args);
 	
 }
 
-/* read on an open socket (RECEIVE in the RFC)
-return num bytes read or negative number on failure or 0 on eof */
-//int v read(int socket, unsigned char *buf, uint32 t nbyte);
-void v_read(const char* line, tcp_node_t tcp_node){
-	int socket;
-	
-
-}
 
 int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint32_t num_bytes){
 
@@ -190,7 +238,6 @@ int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint
 	int ret;
 	ret = tcp_connection_send_data(connection, to_write, num_bytes);
 	return ret;
-	//return ret; /* how are we gonna get the result of this if we're pushing to a queue?? ie, fuck */  // <-- daha (Alex)
 }
 
 void vv_write(const char* line, tcp_node_t tcp_node){
@@ -198,16 +245,14 @@ void vv_write(const char* line, tcp_node_t tcp_node){
 	char* to_write = malloc(sizeof(char)*BUFFER_SIZE);
 	uint32_t num_bytes;
 	
-	if(sscanf(line, "v_write %d %s %u", &socket, to_write, &num_bytes) != 3){
+	if(sscanf(line, "%d %s %u", &socket, to_write, &num_bytes) != 3){
 		fprintf(stderr, "syntax error (usage: v_write [socket] [to_write] [bytes])\n");
 		free(to_write);
 		return;
 	}
 
-	printf("to_write: %s\n", to_write);
-
 	int ret = v_write(tcp_node, socket, (unsigned char*)to_write, num_bytes);
-	printf("write result: %d\n", ret);
+	printf("v_write returned value: %d\n", ret);
 
 	free(to_write);
 }
@@ -373,7 +418,7 @@ void sendfile_cmd(const char* line, tcp_node_t tcp_node){
 	int ret, socket;
 	char filename_buffer[BUFFER_SIZE];
 	
-	ret = sscanf(line, "sendfile %d %s", &socket, filename_buffer);
+	ret = sscanf(line, "%d %s", &socket, filename_buffer);
 	if(ret != 2){
 		fprintf(stderr, "syntax error (usage: sendfile [socket] [filename])\n");
 		return;
@@ -436,7 +481,7 @@ command:
 */
 void numbers(const char* line, tcp_node_t tcp_node){
 	int range, sock;
-	if(sscanf(line, "numbers %d %d", &sock, &range) != 2){
+	if(sscanf(line, "%d %d", &sock, &range) != 2){
 		fprintf(stderr, "Syntax error: usage (numbers <socket> <number>)\n");
 		return;
 	}
@@ -465,42 +510,6 @@ void numbers(const char* line, tcp_node_t tcp_node){
 	return;//nah
 }
 
-void accept_cmd(const char* line, tcp_node_t tcp_node){
-/*
-	int port;
-	if(sscanf(line, "accept %d", &port)==0 && sscanf(line, "a %d", &port)==0)
-	{
-		fprintf(stderr, "Syntax error: usage (accept/a <port>)\n");
-		return;
-	}
-
-	tcp_connection_t connection = tcp_node_new_conection(tcp_node);
-	if(!connection)
-	{
-		fprintf(stderr, "Unable to init connection\n");
-		return;
-	}
-
-	if(!tcp_node_assign_port(connection, port))
-	{
-		fprintf(stderr, "Unable to init connection on desired port %d\n", port);
-		return;
-	}
-
-	* otherwise you've established a connection on
-	   the desired port, so start accepting! *
-
-	// first pack the args up
-	tcp_api_args_t args = tcp_api_args_init();
-	args->node		 = tcp_node;
-	args->socket  	 = tcp_connection_get_socket(connection);
-	args->addr 		 = addr;
-
-	// thread it, and you're done
-	tcp_node_thread(tcp_node, tcp_driver_accept_entry, args);
-*/
-}
-	
 
 struct {
   const char *command;
@@ -522,8 +531,8 @@ struct {
   {"a", accept_cmd}, 
   {"connect", connect_cmd},
   {"c", connect_cmd}, */
-  {"recv", recv}, // calls tcp_api_read
-  {"r", recv},	// calls tcp_api_read
+  {"recv", recv_cmd}, // calls tcp_api_read
+  {"r", recv_cmd},	// calls tcp_api_read
   {"sendfile", sendfile_cmd},
   /*{"send", send_cmd},
   {"s", send_cmd},
@@ -540,6 +549,9 @@ struct {
   {"v_listen", v_listen}, // calls v_listen
   {"v_connect", v_connect}, // calls v_connect
   {"v_accept", v_accept}, // calls v_accept
+  {"accept", accept_cmd}, // follows specs for driver -- opens socket, binds, , listens and starts accepting connections
+  {"a", accept_cmd}, // follows specs for driver -- opens socket, binds, , listens and starts accepting connections
+
   {"v_write", vv_write},  // calls v_write
 	
   // custom commands 
@@ -599,10 +611,10 @@ void* _handle_tcp_node_stdin(void* node){
 						printf("Error: %s\n", error_string);
 					}
 					else if(args->result==0)
-						printf("successful.");
+						printf("%s on socket %d successful.\n", args->function_call, args->socket);
 					
 					else
-						printf("got result: %d!\n", args->result);
+						printf("%s on socket %d returned value: %d\n", args->function_call, args->socket, args->result);
 					
 					tcp_api_args_destroy(&args);
 					plain_list_remove(list, el);
@@ -624,7 +636,7 @@ void* _handle_tcp_node_stdin(void* node){
 				
 			for (i=0; i < sizeof(cmd_table) / sizeof(cmd_table[0]); i++){
 				if (!strcmp(cmd, cmd_table[i].command)){
-					cmd_table[i].handler(line, tcp_node);
+					cmd_table[i].handler(line+(strlen(cmd)+1), tcp_node);
 					break;
 				}
 			}

@@ -195,6 +195,30 @@ void tcp_node_stop(tcp_node_t tcp_node){
 void tcp_node_destroy(tcp_node_t tcp_node){
 	tcp_node->running = 0;
 	
+	/*****************************/
+	plain_list_t list = tcp_node->thread_list;
+	plain_list_el_t el;
+	tcp_api_args_t args;
+	PLAIN_LIST_ITER(list, el)
+	args = (tcp_api_args_t)el->data;
+	if(args->done){
+		if(args->result < 0){	
+			char* error_string = strerror(-(args->result));
+			printf("Error: %s\n", error_string);
+		}
+		else if(args->result==0)
+			printf("successful.");
+		
+		else
+			printf("got result: %d!\n", args->result);
+		
+		tcp_api_args_destroy(&args);
+		plain_list_remove(list, el);
+	}			
+	PLAIN_LIST_ITER_DONE(list);
+	/*****************************/
+	
+	
 	// gracefully CLOSE all connections
 	// this blocks for a little until all connections CLOSED - and presumably kernal empty?
 	tcp_node_close_all_connections(tcp_node);
@@ -228,28 +252,7 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 	pthread_mutex_destroy(&(tcp_node->kernal_mutex));
 
-/*****************************/
-	plain_list_t list = tcp_node->thread_list;
-	plain_list_el_t el;
-	tcp_api_args_t args;
-	PLAIN_LIST_ITER(list, el)
-	args = (tcp_api_args_t)el->data;
-	if(args->done){
-		if(args->result < 0){	
-			char* error_string = strerror(-(args->result));
-			printf("Error: %s\n", error_string);
-		}
-		else if(args->result==0)
-			printf("successful.");
-		
-		else
-			printf("got result: %d!\n", args->result);
-		
-		tcp_api_args_destroy(&args);
-		plain_list_remove(list, el);
-	}			
-	PLAIN_LIST_ITER_DONE(list);
-/*****************************/
+
 
 	// destroy ip_node and queues
 	ip_node_t ip_node = tcp_node->ip_node;
@@ -453,9 +456,6 @@ tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int sock
 
 // returns tcp_connection corresponding to port
 tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t port){
-	/* in order to be compatible with uthash's built in 
-	 	support for ports */
-	int int_port = (int)port; 
 
 	//lock kernal
 	pthread_mutex_lock(&(tcp_node->kernal_mutex));
@@ -604,8 +604,8 @@ void tcp_node_start(tcp_node_t tcp_node){
 	int ret;
 	int i=0,mod=10;
 	while((tcp_node->running)&&(tcp_node_ip_running(tcp_node))){	
-		//if(i++%mod==0)
-			//print(("tcp_node still running"), TCP_PRINT); <-- just to spite you I commented it out rather than setting that print stuff
+		if(i++%mod==0)
+			print(("tcp_node still running"), TCP_PRINT); //<-- just to spite you I commented it out rather than setting that print stuff
 
 		/* get the time of the day so that we are passing in to bqueue_timed_dequeue_abs
 			the absolute time when we want the timeout to occur (the docs in bqueue.c say

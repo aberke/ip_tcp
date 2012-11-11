@@ -17,8 +17,10 @@ struct tcp_api_args{
 	int socket;
 	struct in_addr* addr;
 	uint16_t port;
+	char* function_call; //to be used for pretty result printing.  eg, v_accept() 
 	
 	int num; //multipurpose number
+	int boolean; //multipurpose boolean -- eg, for tcp_api_read_entry, if true, blocks until reads num bytes
 	char* buffer; //to be used for reading/writing
 	
 	pthread_t thread;
@@ -39,15 +41,21 @@ int tcp_api_socket(struct tcp_node* node);
 /* binds a socket to a port
 always bind to all interfaces - which means addr is unused.
 returns 0 on success or negative number on failure */
-int tcp_api_bind(struct tcp_node* tcp_node, int socket, char* addr, uint16_t port);
+int tcp_api_bind(struct tcp_node* tcp_node, int socket,  struct in_addr addr, uint16_t port);
 int tcp_api_listen(struct tcp_node* tcp_node, int socket);
 
 /* accept a requested connection (behave like unix socket’s accept)
 returns new socket handle on success or negative number on failure 
 int v accept(int socket, struct in addr *node); */
 int tcp_api_accept(struct tcp_node* tcp_node, int socket, struct in_addr *addr);
+// Not for driver use -- just for our use when we only want to accept once
 void* tcp_api_accept_entry(void* args);
 
+/* read on an open socket (RECEIVE in the RFC)
+return num bytes read or negative number on failure or 0 on eof */
+//int v read(int socket, unsigned char *buf, uint32 t nbyte);
+int tcp_api_read(tcp_node_t tcp_node, int socket, unsigned char *buffer, uint32_t nbyte);
+void* tcp_api_read_entry(void* _args);
 
 
 ///////////// DRIVER COMMANDS ////////////////

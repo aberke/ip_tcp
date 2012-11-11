@@ -531,7 +531,6 @@ int tcp_connection_send_next(tcp_connection_t connection){
 		// increment bytes_sent
 		bytes_sent += next_chunk->length;
 	}	
-
 	return bytes_sent;
 }
 
@@ -818,6 +817,10 @@ void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_da
 	//free(outgoing_header); now not memcpying into tcp_packet_data
 	
 	tcp_connection_queue_ip_send(connection, rst_packet);
+}
+//needed for tcp_api_read
+recv_window_t tcp_connection_get_recv_window(tcp_connection_t connection){
+	return connection->receive_window;
 }
 
 /* hacky? */  //<-- yeah kinda

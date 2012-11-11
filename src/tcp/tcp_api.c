@@ -14,6 +14,8 @@ tcp_api_args_t tcp_api_args_init(){
 	tcp_api_args_t args = malloc(sizeof(struct tcp_api_args));
 	memset(args, 0, sizeof(struct tcp_api_args));
 	args->done = 0;
+	args->addr = NULL;
+	args->buffer = NULL;
 	return args;
 }
 
@@ -22,7 +24,11 @@ void tcp_api_args_destroy(tcp_api_args_t* args){
 		if you're not done yet */
 	pthread_join((*args)->thread, NULL);
 
-	/* for now just free it, but should probably also destroy the struct in_addr* */
+	/* For this not to go wrong we had better set args->addr to NULL at first.  See function init() */
+	if((*args)->addr != NULL)
+		free((*args)->addr);
+	if((*args)->buffer != NULL)
+		free((*args)->buffer);
 	free(*args);
 	*args = NULL;
 }
@@ -34,6 +40,8 @@ void tcp_api_args_destroy(tcp_api_args_t* args){
 #define _verify_socket(args) if((args)->socket < 0) {CRASH_AND_BURN("INVALID SOCKET");}
 #define _verify_addr(args) if((args)->addr == NULL) {CRASH_AND_BURN("INVALID ADDR");}
 #define _verify_port(args) // always true
+#define _verify_buffer(args) if((args)->buffer == NULL) {CRASH_AND_BURN("NULL BUFFER TO READ INTO");}
+#define _verity_bool(args)	 if((((args)->boolean)!=0)&&(((args)->boolean)!=1)) {CRASH_AND_BURN("INVALID BOOLEAN VALUE");}
 
 static void* _return(tcp_api_args_t args, int ret){
 	//puts("thread queueing return");
@@ -84,6 +92,9 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint1
 		// is there anything else we should do here?
 		return SIGNAL_DESTROYING;
 	}
+	if(ret==1) //successful active_open
+		return 0;
+	
 	return ret;
 }
 
@@ -124,7 +135,8 @@ int tcp_api_socket(tcp_node_t tcp_node){
 /* binds a socket to a port
 always bind to all interfaces - which means addr is unused.
 returns 0 on success or negative number on failure */
-int tcp_api_bind(tcp_node_t tcp_node, int socket, char* addr, uint16_t port){
+//int v bind(int socket, struct in addr addr, uint16 t port);
+int tcp_api_bind(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t port){
 
 	// check if port already in use
 	if(!tcp_node_port_unused(tcp_node, port))		
@@ -176,28 +188,28 @@ int tcp_api_listen(tcp_node_t tcp_node, int socket){
 /* read on an open socket (RECEIVE in the RFC)
 return num bytes read or negative number on failure or 0 on eof */
 //int v read(int socket, unsigned char *buf, uint32 t nbyte);
-int tcp_api_read(tcp_node_t node, int socket, unsigned char *buffer, uint32_t nbyte){
+int tcp_api_read(tcp_node_t tcp_node, int socket, unsigned char *buffer, uint32_t nbyte){
 
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
-	if(listening_connection == NULL)
+	if(connection == NULL)
 		return -EBADF;
 
 	/* Lock up api on this connection -- BLOCK  -- really we don't want to 
 		be able to call this if another api call in process */
-	tcp_connection_api_lock(listening_connection);
+	tcp_connection_api_lock(connection);
 	
 	state_e state = tcp_connection_get_state(connection);
 	
 	//TODO: HANDLE CORRECT RESPONSES BASED ON STATE
 	
 	if(state == CLOSE_WAIT){
-		tcp_connection_api_unlock(listening_connection);
+		tcp_connection_api_unlock(connection);
 		return 0; //inform application layer that we need to close
 	}
 	
 	if(tcp_connection_get_state(connection) != ESTABLISHED){
 		//TODO: HANDLE APPROPRIATELY
-		tcp_connection_api_unlock(listening_connection);
+		tcp_connection_api_unlock(connection);
 		return -1; //<-- get correct error code
 	}		
 /*
@@ -212,9 +224,32 @@ struct recv_window_chunk{
 	
 	//clean up
 	recv_window_chunk_destroy(&chunk);
-	tcp_connection_api_unlock(listening_connection);
+	tcp_connection_api_unlock(connection);
 	
 	return read;
+}
+void* tcp_api_read_entry(void* _args){
+	tcp_api_args_t args = (tcp_api_args_t)_args;
+
+	/* verifies that these fields are valid (node != NULL, socket >=0, ...) */
+	_verify_node(args);
+	_verify_socket(args);
+	_verify_buffer(args);
+	
+	/* we'll use the macro thread_return in order to return a value */
+	
+	int ret = tcp_api_read(args->node, args->socket, args->buffer, args->num);
+	if(args->boolean){
+		// block until read in args->num bytes
+		int read;	
+		while(ret < args->num){
+			read = tcp_api_read(args->node, args->socket, (args->buffer)+ret, (args->num)-ret);
+			ret = ret + read;
+		}
+	}
+	printf("[read for socket %d]:\n\t%s\n", args->socket, args->buffer); 
+	_return(args, ret);
+	return NULL;
 }
 
 /* accept a requested connection (behave like unix socket’s accept)
@@ -271,55 +306,69 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 	return ret;	
  
 }
-
+// Not for driver use -- just for our use when we only want to accept once
 void* tcp_api_accept_entry(void* _args){
 	tcp_api_args_t args = (tcp_api_args_t)_args;
 
-	/* verifies that these fields are valid (node != NULL, socket >=0, ...) */
+	// verifies that these fields are valid (node != NULL, socket >=0, ...) 
 	_verify_node(args);
 	_verify_socket(args);
 	_verify_addr(args);
-	
-	/* we'll use the macro thread_return in order to return a value */
+
+	// blocks until gets new connection or bad value
 	int ret = tcp_api_accept(args->node, args->socket, args->addr);
+
 	_return(args, ret);
 	return NULL;
 }
 
 ////////////////// DRIVER ///////////////////////
 
-void* tcp_driver_accept_entry(void* _args){ return NULL; }
-/*
+/* So we need to call tcp_api_accept in a loop without blocking.... so here's my solution that I've implemented:
+	We call thread the call tcp_driver_accept_entry which then goes to call tcp_api_accept_entry in a loop.
+	This means we're creating threads within the while loop thread, but this way we can pretty print the result
+	of each individual tcp_api_accept call.  the thread for tcp_driver_accept_entry has return value 0
+	because the actual accept calls that returned sockets will have already been printed.
+*/
+void* tcp_driver_accept_entry(void* _args){ 
+	
 	tcp_api_args_t args = (tcp_api_args_t)_args;
-
-	* verifies that these fields are valid (node != NULL, socket >=0, ...) *
+	/* verifying fields */
 	_verify_node(args);
 	_verify_socket(args);
-
-	tcp_node_t node = args->node;
-	int socket = args->socket;
-	struct in_addr* addr;
-
-	int count=0;
-	while(node->running){
-
-		addr = malloc(sizeof(struct in_addr));
+	_verify_addr(args);
 	
-		* pack the args *
-		new_args 		 = tcp_api_args_init();
-		new_args->node   = node;
-		new_args->socket = socket;
-		new_args->addr 	 = addr;
-
-		pthread_create(&(new_args->thread), tcp_api_accept_entry, new_args);
-		pthread_join(&(new_args->thread), NULL);
-		printf("accepted connection on socket: %d\n", new_args->result);
-		count++;
+	tcp_node_t tcp_node = args->node;
+		
+	// before we call this a million times, lets first make sure everything's valid
+	tcp_connection_t listening_connection = tcp_node_get_connection_by_socket(tcp_node, args->socket);
+	if(listening_connection == NULL){
+		_return(args, -EBADF);
+		return NULL; // this won't do anything
+	}
+	
+	// create a thread to accept each time our socket gets a listen call
+	while(tcp_node_running(args->node)){
+		/* pack the args */
+		tcp_api_args_t t_args = tcp_api_args_init();
+		t_args->node		 = args->node;
+		t_args->socket  	 = args->socket;
+		t_args->function_call = "v_accept()";
+		t_args->addr 		 = args->addr; //reusing address we called bind with but whatever	
+		
+		// blocks until gets new connection or bad value
+		int ret = tcp_api_accept(args->node, args->socket, args->addr);
+		if(tcp_node_running(args->node))
+			break; //we might have broken out with an error value because tcp_node started destroying stuff already
+		
+		if(ret<0)
+			_return(args, ret);
+		printf("v_accept() returned socket: %d\n", ret);
 	}
 
-	* we'll use the macro _return in order to return a value *
-	_return(args, count);
+	//* we'll use the macro _return in order to return a value * //<--- nah lets have it just be successful
+	_return(args, 0);
 	return NULL; // this won't do anything
 }
-*/
+
 
