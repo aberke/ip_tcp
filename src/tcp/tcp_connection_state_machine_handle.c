@@ -182,7 +182,7 @@ int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection){
 	// the first syn
 	tcp_set_seq(header, connection->last_seq_sent);
 	tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
-	tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
+	tcp_set_window_size(header, recv_window_get_size(connection->receive_window));
 	
 	tcp_set_syn_bit(header);
 	tcp_set_ack_bit(header);

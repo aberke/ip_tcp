@@ -6,6 +6,7 @@
 
 #include "tcp_api.h"
 #include "tcp_connection_state_machine_handle.h"
+#include "recv_window.h" // for the read function
 
 /* args */
 
@@ -172,6 +173,49 @@ int tcp_api_listen(tcp_node_t tcp_node, int socket){
 	
 	return port; // returns 0 on success
 }	
+/* read on an open socket (RECEIVE in the RFC)
+return num bytes read or negative number on failure or 0 on eof */
+//int v read(int socket, unsigned char *buf, uint32 t nbyte);
+int tcp_api_read(tcp_node_t node, int socket, unsigned char *buffer, uint32_t nbyte){
+
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(listening_connection == NULL)
+		return -EBADF;
+
+	/* Lock up api on this connection -- BLOCK  -- really we don't want to 
+		be able to call this if another api call in process */
+	tcp_connection_api_lock(listening_connection);
+	
+	state_e state = tcp_connection_get_state(connection);
+	
+	//TODO: HANDLE CORRECT RESPONSES BASED ON STATE
+	
+	if(state == CLOSE_WAIT){
+		tcp_connection_api_unlock(listening_connection);
+		return 0; //inform application layer that we need to close
+	}
+	
+	if(tcp_connection_get_state(connection) != ESTABLISHED){
+		//TODO: HANDLE APPROPRIATELY
+		tcp_connection_api_unlock(listening_connection);
+		return -1; //<-- get correct error code
+	}		
+/*
+struct recv_window_chunk{
+	void* data;
+	uint32_t offset;
+	uint32_t length;
+};*/
+	recv_window_chunk_t chunk = recv_window_get_next(tcp_connection_get_recv_window(connection), nbyte);
+	int read = (int)chunk->length;
+	memcpy(buffer, (chunk->data)+(chunk->offset), read); 
+	
+	//clean up
+	recv_window_chunk_destroy(&chunk);
+	tcp_connection_api_unlock(listening_connection);
+	
+	return read;
+}
 
 /* accept a requested connection (behave like unix socket’s accept)
 returns new socket handle on success or negative number on failure 

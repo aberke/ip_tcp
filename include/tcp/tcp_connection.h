@@ -59,9 +59,9 @@ send_window_t tcp_connection_get_send_window(tcp_connection_t connection);
 void tcp_connection_send_window_destroy(tcp_connection_t connection);
 
 recv_window_t tcp_connection_recv_window_init(tcp_connection_t connection, uint32_t window_size, uint32_t ISN);
-recv_window_t tcp_connection_get_recv_window(tcp_connection_t connection);
 void tcp_connection_recv_window_destroy(tcp_connection_t connection);
 */
+recv_window_t tcp_connection_get_recv_window(tcp_connection_t connection);
 
 /******* End of Window getting and setting and destroying functions *********/
 

@@ -136,6 +136,50 @@ void v_connect(const char *line, tcp_node_t tcp_node){
 
 	tcp_node_thread(tcp_node, tcp_api_connect_entry, args);
 }
+/*
+recv/r socket numbytes y/n Try to read data from a given socket. If the last argument is y, then
+you should block until numbytes is received, or the connection closes. If n, then don’t block;
+return whatever recv returns. Default is n */
+void recv(const char* line, tcp_node_t tcp_node){
+	int socket;
+	int num_bytes;
+	char block_y_n;
+	int block = 0; //boolean as to whether recv should block or not
+	int ret;
+	
+	ret = sscanf(line, "recv %d %d %d", &socket, &num_bytes, &block_y_n);
+	if(ret<2 || ret>3){
+		fprintf(stderr, "syntax error (usage: recv [socket] [numbytes] [y/n])\n");
+		return;
+	}
+	if(ret == 3){ // if ret == 2 then we keep block as false since Default is n
+		if(block_y_n == 'y')
+			block = 1;
+		else if(block_y_n != 'n'){
+			fprintf(stderr, "syntax error (usage: recv [socket] [numbytes] [y/n])\n");
+			return;
+		}	
+	}
+	
+	if(block)
+		tcp_api_args_t args = tcp_api_args_init();
+	args->node = tcp_node;
+	args->socket = socket;
+	args->addr = addr;
+	args->port = port;
+
+	tcp_node_thread(tcp_node, tcp_api_connect_entry, args);
+	
+}
+
+/* read on an open socket (RECEIVE in the RFC)
+return num bytes read or negative number on failure or 0 on eof */
+//int v read(int socket, unsigned char *buf, uint32 t nbyte);
+void v_read(const char* line, tcp_node_t tcp_node){
+	int socket;
+	
+
+}
 
 int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint32_t num_bytes){
 
@@ -149,7 +193,6 @@ int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint
 	//return ret; /* how are we gonna get the result of this if we're pushing to a queue?? ie, fuck */  // <-- daha (Alex)
 }
 
-
 void vv_write(const char* line, tcp_node_t tcp_node){
 	int socket;
 	char* to_write = malloc(sizeof(char)*BUFFER_SIZE);
@@ -157,6 +200,7 @@ void vv_write(const char* line, tcp_node_t tcp_node){
 	
 	if(sscanf(line, "v_write %d %s %u", &socket, to_write, &num_bytes) != 3){
 		fprintf(stderr, "syntax error (usage: v_write [socket] [to_write] [bytes])\n");
+		free(to_write);
 		return;
 	}
 
@@ -167,6 +211,7 @@ void vv_write(const char* line, tcp_node_t tcp_node){
 
 	free(to_write);
 }
+
 
 /*
 struct sendrecvfile_arg {
@@ -476,9 +521,9 @@ struct {
   /*{"accept", accept_cmd},
   {"a", accept_cmd}, 
   {"connect", connect_cmd},
-  {"c", connect_cmd}, 
-  {"recv", recv_cmd},
-  {"r", recv_cmd},*/
+  {"c", connect_cmd}, */
+  {"recv", recv}, // calls tcp_api_read
+  {"r", recv},	// calls tcp_api_read
   {"sendfile", sendfile_cmd},
   /*{"send", send_cmd},
   {"s", send_cmd},

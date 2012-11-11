@@ -439,7 +439,15 @@ void tcp_connection_ack(tcp_connection_t connection, uint32_t ack){
    I also left the original version intact in src/tcp/tcp_utils.s
 */
 int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len){	
-
+	
+	// Neil is right: always set window size of the receive window.  Ayy I gave you credit
+	if(connection->receive_window)
+		tcp_set_window_size(header, recv_window_get_size(connection->receive_window));
+	else
+		// what it will be as soon as we receive anything 
+		//-- shouldn't we just init the receive window at start then?
+		tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
+	
 	//alex wrote for debugging: PRINTS PACKET
 	puts("sending packet:");
 	view_packet(header, data); // <-- defined in tcp_utils

@@ -18,6 +18,9 @@ struct tcp_api_args{
 	struct in_addr* addr;
 	uint16_t port;
 	
+	int num; //multipurpose number
+	char* buffer; //to be used for reading/writing
+	
 	pthread_t thread;
 	int result;
 	int done;
