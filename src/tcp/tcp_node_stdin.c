@@ -159,9 +159,43 @@ void v_accept(const char *line, tcp_node_t tcp_node){
 
 /*	connect/c ip port Attempt to connect to the given ip address, in dot notation, on the given port.
 	Example: c 10.13.15.24 1056.
-	// CONFUSED: Why doesn't this take in a socket??? Should it print out the socket it connects with??
-	// For now I'm saying you need to include a socket.  Just deal with it for now.  It's the first argument for now.
 */
+void connect_cmd(const char *line, tcp_node_t tcp_node){
+
+	struct in_addr* addr = malloc(sizeof(struct in_addr));
+	char addr_buffer[INET_ADDRSTRLEN];
+	int socket, port, ret;
+	
+	ret = sscanf(line, "%s %d", addr_buffer, &port);
+	if(ret != 2){
+		fprintf(stderr, "syntax error (usage: connect [remote ip address] [remote port])\n");
+		return;
+	}	
+	//convert string ip address to real ip address
+	if(inet_pton(AF_INET, addr_buffer, addr) <= 0){ // IPv4
+		fprintf(stderr, "syntax error - could not parse ip address (usage: connect [remote ip address] [remote port])\n");
+		return;
+	}
+	// first initialize new socket that will do the connecting
+	if((socket = tcp_api_socket(tcp_node))<0){
+		printf("Error: v_socket() returned value %d\n", socket);
+		return;
+	}
+
+	tcp_api_args_t args = tcp_api_args_init();
+	args->node = tcp_node;
+	args->socket = socket;
+	args->addr = addr;
+	args->port = port;
+	args->function_call = "v_connect()";
+	
+	tcp_node_thread(tcp_node, tcp_api_connect_entry, args);
+
+
+
+}
+// allows us to call v_connect after calling our own v_socket rather than using driver connect_cmd
+// expects: v_connect [socket] [ip address of remote connection] [remote port]
 void v_connect(const char *line, tcp_node_t tcp_node){
 	
 	struct in_addr* addr = malloc(sizeof(struct in_addr));
@@ -170,7 +204,7 @@ void v_connect(const char *line, tcp_node_t tcp_node){
 	
 	ret = sscanf(line, "%d %s %d", &socket, addr_buffer, &port);
 	if(ret !=3){
-		fprintf(stderr, "syntax error (usage: v_conect [socket] [ip address] [port])\n");
+		fprintf(stderr, "syntax error (usage: v_connect [socket] [ip address] [port])\n");
 		return;
 	}	
 	//convert string ip address to real ip address
@@ -548,6 +582,8 @@ struct {
   {"v_bind", vv_bind}, // calls v_bind
   {"v_listen", v_listen}, // calls v_listen
   {"v_connect", v_connect}, // calls v_connect
+  {"connect", connect_cmd},
+  {"c", connect_cmd},
   {"v_accept", v_accept}, // calls v_accept
   {"accept", accept_cmd}, // follows specs for driver -- opens socket, binds, , listens and starts accepting connections
   {"a", accept_cmd}, // follows specs for driver -- opens socket, binds, , listens and starts accepting connections

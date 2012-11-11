@@ -89,7 +89,8 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint1
 	/* Now wait until connection ESTABLISHED or timed out -- ret value will indicate */
 	int transition_result = tcp_connection_api_result(connection); // will block until it gets the result
 	if(transition_result == SIGNAL_DESTROYING){
-		// is there anything else we should do here?
+		// does this fix our bug?
+		tcp_node_remove_connection_kernal(tcp_node, connection); 
 		return SIGNAL_DESTROYING;
 	}
 	if(ret==1) //successful active_open
