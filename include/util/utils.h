@@ -69,6 +69,7 @@ typedef int boolean;
 typedef void (*destructor_f)(void**);
 typedef void (*printer_f)(void*);
 typedef int (*action_f)(void*);
+typedef int (*comparator_f)(void*, void*);
 
 /* USEFUL STRUCTS */
 struct memchunk{
@@ -117,6 +118,7 @@ void buffer_empty(buffer_t buffer);
 
 
 /* AUXILIARY METHODS */
+int compare_ints(int a, int b);
 void error(const char* msg);
 void rtrim(char* s, const char* delim);
 int utils_startswith(const char* s, const char* starts);

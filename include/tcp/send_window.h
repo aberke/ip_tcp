@@ -10,9 +10,11 @@
 typedef struct send_window* send_window_t;
 
 struct send_window_chunk{
+	time_t send_time;
 	void* data;
 	int length;
 	int seqnum;
+	int offset;
 };
 
 typedef struct send_window_chunk* send_window_chunk_t;
@@ -24,6 +26,7 @@ void send_window_chunk_destroy_free(send_window_chunk_t* wc);
 send_window_t send_window_init(double timeout, int send_window_size, int send_size, int ISN);
 void send_window_destroy(send_window_t* send_window);
 
+void send_window_set_size(send_window_t send_window, uint32_t size);
 void send_window_push(send_window_t send_window, void* data, int length);
 void send_window_check_timers(send_window_t send_window);
 int send_window_validate_ack(send_window_t send_window, uint32_t ack);

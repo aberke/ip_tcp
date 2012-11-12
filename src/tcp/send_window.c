@@ -7,6 +7,7 @@
 #include "ext_array.h"
 #include "send_window.h"
 #include "utils.h"
+#include "list.h"
 
 #define QUEUE_CAPACITY 1024
 
@@ -17,15 +18,6 @@ do{															\
 	memcpy((dst)+write_right, (src)+0, (size)-write_right);	\
 } 															\
 while(0)
-/*
-#define wrap_dst_memcpy(dst, dst_offset, src, size, modulo) \
-do{															\
-	int write_right = MIN((modulo) - (dst_offset), size);	\
-	memcpy((dst)+(dst_offset), (src), write_right);			\
-	memcpy((dst)+0, (src)+write_right, (size)-write_right);	\
-} 															\
-while(0)
-*/
 
 #define send_window_memcpy(win, src, length) 					\
 do{																\
@@ -44,21 +36,15 @@ typedef struct timed_chunk* timed_chunk_t;
 ///////////// WINDOW //////////////////
 struct send_window{
 	ext_array_t data_queue;
-	queue_t to_send;
-	int sent_left;	
+	plain_list_t sent_list;
+	queue_t timed_out_chunks;
+
+	uint32_t sent_left;	
 	
 	double timeout;
-	int size;
-	int send_size;
-	void* slider;
-
-	int left;
-	int right;
-	int wrap_count;
-	int ISN;
-
-	timed_chunk_t* timed_chunks;
-	timed_chunk_t acked_chunk_placeholder;
+	uint32_t size;
+	uint32_t left;
+	uint32_t send_size;
 
 	/* for being thread safe,
 		synchronizes over all functions */
@@ -67,41 +53,15 @@ struct send_window{
 
 /////////////// AUXILIARY DATA STRUCTURES /////////////////////////
 
-typedef enum status{
-	NOT_WAITING,
-	WAITING // on an ack	
-} status_e;
-
-struct timed_chunk{
-	time_t start_time;
-	int left; 
-	int right;
-	status_e status; 
-};
-
-timed_chunk_t timed_chunk_init(int left, int right){
-	print(("initing with left:%d right:%d", left, right), SEND_WINDOW_PRINT);
-
-	timed_chunk_t tc = malloc(sizeof(struct timed_chunk));
-	
-	tc->left = left; 
-	tc->right = right;
-	tc->status = NOT_WAITING;
-
-	return tc;
-}
-
 ///////////// WINDOW CHUNK ////////////
 
 /* gets data from left all the way up to (but NOT including) right */
-send_window_chunk_t send_window_chunk_init(send_window_t send_window, int left, int right){
+send_window_chunk_t send_window_chunk_init(send_window_t send_window, void* data, int length, uint32_t seqnum){
 	send_window_chunk_t send_window_chunk = malloc(sizeof(struct send_window_chunk));
-	int wrap_length = WRAP_DIFF(left, right, MAX_SEQNUM);
-	send_window_chunk->data = malloc(wrap_length);
-	wrap_src_memcpy(send_window_chunk->data, send_window->slider, (left%(send_window->size+1)), wrap_length, send_window->size+1);
 
-	send_window_chunk->seqnum = send_window_get_seqnum(send_window, left);
-	send_window_chunk->length = wrap_length;
+	send_window_chunk->data   = data;
+	send_window_chunk->seqnum = seqnum;
+	send_window_chunk->length = length;
 	
 	return send_window_chunk;
 }
@@ -122,35 +82,19 @@ void send_window_chunk_destroy_free(send_window_chunk_t* wc){
 }
 
 
-/// internal helpers ////
-
-void _free_timers(send_window_t* send_window);
-
 /////////////////////////
 
-send_window_t send_window_init(double timeout, int send_window_size, int send_size, int ISN){
+send_window_t send_window_init(double timeout, int window_size, int send_size, int ISN){
 	send_window_t send_window = (send_window_t)malloc(sizeof(struct send_window));
 
-	send_window->data_queue = ext_array_init(QUEUE_CAPACITY);
-	send_window->to_send    = queue_init();
+	send_window->data_queue 	  = ext_array_init(QUEUE_CAPACITY);
+	send_window->sent_list		  = plain_list_init();
+	send_window->timed_out_chunks = queue_init();
 
 	send_window->timeout 	= timeout;
-	send_window->send_size   = send_size;
-	send_window->size 		= send_window_size;
-	send_window->slider  	= malloc(send_window_size+1);
-	memset(send_window->slider, 0, send_window_size);
-
-	send_window->timed_chunks = malloc(sizeof(timed_chunk_t)*(send_window_size+1));
-	memset(send_window->timed_chunks, 0, sizeof(timed_chunk_t)*(send_window_size+1));
-	
-	/* this will be a placeholder for when we have acked a time_chunk, but it
-		isn't on the left of the send_window */
-	send_window->acked_chunk_placeholder = timed_chunk_init(0, 0);
- 
-	send_window->ISN = ISN;
-	ISN %= MAX_SEQNUM;
-	send_window->left = send_window->right = send_window->sent_left = ISN;
-	send_window->wrap_count = 0;
+	send_window->send_size  = send_size;
+	send_window->size = window_size;
+	send_window->left = send_window->sent_left = ISN;
 
 	pthread_mutex_init(&(send_window->mutex), NULL);
 	
@@ -160,31 +104,30 @@ send_window_t send_window_init(double timeout, int send_window_size, int send_si
 void send_window_destroy(send_window_t* send_window){
 	ext_array_destroy(&((*send_window)->data_queue));
 
-	_free_timers(send_window);
-
-	queue_destroy_total(&((*send_window)->to_send), (destructor_f)send_window_chunk_destroy_free);
+	plain_list_destroy_total(&((*send_window)->sent_list), send_window_chunk_destroy_free);
+	queue_destroy(&((*send_window)->timed_out_chunks));
 	pthread_mutex_destroy(&((*send_window)->mutex));
-	free((*send_window)->acked_chunk_placeholder);
-	free((*send_window)->slider);
-	free((*send_window)->timed_chunks);
+
 	free(*send_window);
 	*send_window = NULL;
 }
 
+void send_window_set_window_size(send_window_t send_window, uint32_t size){
+	pthread_mutex_lock(&(send_window->mutex));
+	send_window->size = size;
+	pthread_mutex_unlock(&(send_window->mutex));
+}
+
 int send_window_validate_ack(send_window_t send_window, uint32_t ack){
-	if( BETWEEN_WRAP(ack, send_window->left, send_window->right) || ack==((send_window->right+1)%MAX_SEQNUM)){
-		//printf("ack %u, window->left: %u, window->right: %d\n", ack, send_window->left, send_window->right);
+	if( BETWEEN_WRAP(ack, send_window->left, (send_window->left+send_window->size)%MAX_SEQNUM) 
+		|| ack==((send_window->left+send_window->size+1)%MAX_SEQNUM)){
 		return 0;
 	}
 	return -1;
 }
 
 void send_window_push_synchronized(send_window_t send_window, void* data, int length){
-	int left_in_send_window = send_window->size - WRAP_DIFF(send_window->left, send_window->right, MAX_SEQNUM);
-	int to_write       = MIN(left_in_send_window, length);
-	send_window_memcpy(send_window, data, to_write);
-	ext_array_push(send_window->data_queue, data+to_write, length-to_write);
-	send_window->right = (send_window->right + to_write) % MAX_SEQNUM;
+	ext_array_push(send_window->data_queue, data, length);
 }
 
 void send_window_push(send_window_t sw, void* d, int l){
@@ -196,7 +139,7 @@ void send_window_push(send_window_t sw, void* d, int l){
 // just add a function for getting the next sequence number
 // that you're going to send 
 uint32_t send_window_get_next_seq_synchronized(send_window_t send_window){
-	return send_window->left;
+	return send_window->sent_left;
 }
 
 uint32_t send_window_get_next_seq(send_window_t send_window){
@@ -206,32 +149,25 @@ uint32_t send_window_get_next_seq(send_window_t send_window){
 	return ret;
 }
 
-
 send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window){
-	timed_chunk_t chunk;
-	if((chunk = (timed_chunk_t)queue_pop(send_window->to_send)) == NULL){
-		int left_to_send = WRAP_DIFF(send_window->sent_left, send_window->right, MAX_SEQNUM);
-		if(!left_to_send)
-			return NULL;
-		
-		else 
-		{
-			int chunk_size = MIN(send_window->send_size, left_to_send);
-			chunk 	  	   = timed_chunk_init(send_window->sent_left, (send_window->sent_left + chunk_size) % MAX_SEQNUM);
-
-			int i;
-			for(i=0;i<chunk_size;i++){
-				send_window->timed_chunks[(send_window->sent_left + i) % (send_window->size + 1)] = chunk;
-			}
-
-			send_window->sent_left = (send_window->sent_left + chunk_size) % MAX_SEQNUM;
-		}
+	send_window_chunk_t sw_chunk;
+	if((sw_chunk=(send_window_chunk_t)queue_pop(send_window->timed_out_chunks)) != NULL){
+		return sw_chunk;
 	}
 
-	time(&(chunk->start_time));
-	chunk->status = WAITING;
+	uint32_t sent_left = send_window->sent_left;
+	memchunk_t chunk = ext_array_peel(send_window->data_queue, MIN(send_window->send_size, send_window->left+send_window->size - sent_left));
+	if(!chunk)	
+		return NULL;
 
-	return send_window_chunk_init(send_window, chunk->left, chunk->right);
+	sw_chunk = malloc(sizeof(struct send_window_chunk));
+	sw_chunk->data = chunk->data;
+	sw_chunk->length = chunk->length;
+	sw_chunk->seqnum = sent_left;
+
+	send_window->sent_left = (sent_left + chunk->length) % MAX_SEQNUM;
+	free(chunk);
+	return sw_chunk;
 }
 
 send_window_chunk_t send_window_get_next(send_window_t send_window){
@@ -244,61 +180,42 @@ send_window_chunk_t send_window_get_next(send_window_t send_window){
 void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 
 	int send_window_min = send_window->left,
-		send_window_max = send_window->right;
+		send_window_max = (send_window->left+send_window->size) % MAX_SEQNUM;
 	
-	if(seqnum==send_window->left || seqnum==(send_window->right+1)%MAX_SEQNUM)
-		// then there's nothing to do, they're still waiting on the first byte
-		// after the start of the window or the first one AFTER the window, 
-		// which we're well aware we haven't sent
+	if(seqnum==send_window->left || seqnum==(send_window->left+send_window->size+1)%MAX_SEQNUM)
 		return;
 
-	if(!BETWEEN_WRAP(seqnum, send_window_min, send_window_max))
-		{ LOG(("Received invalid seqnum: %d, current send_window_min: %d, send_window_max: %d\n", seqnum, send_window_min, send_window_max)); return; }
-
-	seqnum = seqnum==0 ? MAX_SEQNUM : seqnum-1;
-	
-	timed_chunk_t acked_chunk = send_window->timed_chunks[(seqnum)%(send_window->size+1)];
-	if(!acked_chunk)
-		{ LOG(("NULL acked_chunk")); return; }
-
-
-	int acked_left = acked_chunk->left;
-	if (send_window->left == acked_left) {
-		print(("shifting"), SEND_WINDOW_PRINT);
-		int acked_right = seqnum;
-		do{ 
-			acked_right = (acked_right+1) % MAX_SEQNUM;
-			if(CONGRUENT(acked_left, acked_right, send_window->size+1)) break;
-		}
-		while(send_window->timed_chunks[(acked_right % (send_window->size+1))] == send_window->acked_chunk_placeholder);
-
-		int i;
-		for( i=(acked_left%(send_window->size+1));
-				!CONGRUENT(i, acked_right, send_window->size+1);
-					i=(i+1)%(send_window->size+1)) {
-			send_window->timed_chunks[i] = NULL;
-		}
-	
-		free(acked_chunk);
-
-		send_window->left = acked_right;
-		memchunk_t from_queue = ext_array_peel(send_window->data_queue, send_window->size-WRAP_DIFF(send_window->left, send_window->right, MAX_SEQNUM));
-		if(from_queue){
-			send_window_memcpy(send_window, from_queue->data, from_queue->length);
-			send_window->right = (send_window->right + from_queue->length) % MAX_SEQNUM;
-			memchunk_destroy_total(&from_queue, util_free);
-		}
+	if(!BETWEEN_WRAP(seqnum, send_window_min, send_window_max)){ 
+		LOG(("Received invalid seqnum: %d, current send_window_min: %d, send_window_max: %d\n", seqnum, send_window_min, send_window_max)); 
+		return; 
 	}
-	else{
-		print(("not shifting: acked_left %d, seqnum %d, window left %d", acked_left, seqnum, send_window->left), SEND_WINDOW_PRINT);
-		int i;
-		for(i=(acked_left%(send_window->size+1));
-			!CONGRUENT(i,seqnum,(send_window->size+1));
-				i=(i+1)%(send_window->size+1)) 
-			send_window->timed_chunks[i] = send_window->acked_chunk_placeholder;
-		acked_chunk->left=seqnum;
-	}
-}
+
+	send_window->left = seqnum;
+	
+	plain_list_t list = send_window->sent_list;
+	plain_list_el_t el;
+	send_window_chunk_t chunk;
+
+	PLAIN_LIST_ITER(list, el)
+		chunk = (send_window_chunk_t)el->data;
+		if(BETWEEN_WRAP(seqnum, chunk->seqnum, (chunk->seqnum+chunk->length)%MAX_SEQNUM)){
+			/* this is the chunk containing the ack, so move the pointer of 
+				chunk up until its pointing to the as-of-yet unsent data */ 
+			chunk->offset += WRAP_DIFF(chunk->seqnum, seqnum, MAX_SEQNUM);
+			break;
+		}
+
+		/* you can free this chunk because it's been acked (all data has 
+			been received UP TO the given seqnum */
+		free(chunk->data);
+		free(chunk);
+	
+		/* you can delete this link in the list */
+		plain_list_remove(list, el);
+	PLAIN_LIST_ITER_DONE(list);
+
+	return;
+}	
 
 void send_window_ack(send_window_t sw, int seqnum){
 	pthread_mutex_lock(&(sw->mutex));
@@ -306,40 +223,29 @@ void send_window_ack(send_window_t sw, int seqnum){
 	pthread_mutex_unlock(&(sw->mutex));
 }
 
-
-
-
 /* Will handle going through all the timers and for the ones who have 
    timers that have elapsed time > timeout, adds these to the to_send
    queue and resets the timer. */
 void send_window_check_timers_synchronized(send_window_t send_window){
-	timed_chunk_t timed_chunk = NULL;
 
 	/* get the time */
 	time_t now;
 	time(&now);
-
-	int i;
-	for(i=0;i<(send_window->size+1);i++){
-		if(send_window->timed_chunks[i]==timed_chunk)
-			continue;
-		
-		timed_chunk = send_window->timed_chunks[i];
-
-		/* if the new chunk is actually a chunk, then check if it's waiting for an ack,
-			and if it is then check the time-elapsed. If more than send_window->timeout, then
-			push it onto the front of the to_send queue, and set its status to NOT_WAITING
-			(because it hasn't been sent yet) */
-		if(timed_chunk && 
-				timed_chunk->status == WAITING && 
-					difftime(now, timed_chunk->start_time) > send_window->timeout) {
 	
+	plain_list_t list = send_window->sent_list;
+	plain_list_el_t el;
+	send_window_chunk_t chunk;
+
+	PLAIN_LIST_ITER(list, el)
+		chunk = (send_window_chunk_t)el->data;
+		if(difftime(now, chunk->send_time) > send_window->timeout){
 			print(("resending"), SEND_WINDOW_PRINT);
-			queue_push_front(send_window->to_send, (void*)timed_chunk);
-			timed_chunk->status = NOT_WAITING;
+			queue_push_front(send_window->timed_out_chunks, (void*)chunk);
 		}
-	}
-}	
+	PLAIN_LIST_ITER_DONE(list);
+
+	return;
+}
 
 void send_window_check_timers(send_window_t sw){
 	pthread_mutex_lock(&(sw->mutex));
@@ -347,33 +253,8 @@ void send_window_check_timers(send_window_t sw){
 	pthread_mutex_unlock(&(sw->mutex));
 }
 
-void _free_timers(send_window_t* send_window){
-	
-	timed_chunk_t chunk;
-	if((*send_window)->size > 0){
-		chunk = (*send_window)->timed_chunks[0];
-
-		int until;
-		if (chunk)
-			until = chunk->left == 0 ? (*send_window)->size : chunk->left%((*send_window)->size+1);
-		else 
-			until = (*send_window)->size;
-
-		int i;
-		for(i=0;i<until;){
-			chunk = (*send_window)->timed_chunks[i];
-			if(chunk && chunk != (*send_window)->acked_chunk_placeholder){
-				i = chunk->right;
-				free(chunk);
-				if(i==0) break;
-			}
-			else i++;
-		}	
-	}
-}
-	
 void send_window_print(send_window_t send_window){
-	printf("Left: %d\nRight: %d\nSent_left: %d\n", send_window->left, send_window->right, send_window->sent_left);
+	printf("Left: %d\nsize: %d\nSent_left: %d\n", send_window->left, send_window->size, send_window->sent_left);
 }
 
 

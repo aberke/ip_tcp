@@ -24,7 +24,7 @@ void recv_window_chunk_destroy_free(recv_window_chunk_t* rwc);
 recv_window_t recv_window_init(uint16_t window_size, uint32_t ISN);
 void recv_window_destroy(recv_window_t* recv_window);
 //FOR NEIL TO FILL IN PLEASEEE
-recv_window_chunk_t recv_window_get_next(recv_window_t window, int bytes);
+memchunk_t recv_window_get_next(recv_window_t window, int bytes);
 uint32_t recv_window_get_ack(recv_window_t window);
 uint16_t recv_window_get_size(recv_window_t window);
 void recv_window_receive(recv_window_t window, void* data, uint32_t length, uint32_t seqnum);
