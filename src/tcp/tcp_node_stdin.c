@@ -47,7 +47,7 @@ void vv_bind(const char *line, tcp_node_t tcp_node){
 	struct in_addr* addr = malloc(sizeof(struct in_addr));
 	int port;
 	
-	int ret = sscanf(line, "%d address %d", &socket, &port);
+	int ret = sscanf(line, "v_bind %d %s %d", &socket, (char*)addr, &port);
 	if (ret != 3){
 		fprintf(stderr, "syntax error (usage: v_bind [socket] [address] [port])\n");
 		free(addr);
@@ -64,7 +64,7 @@ void vv_bind(const char *line, tcp_node_t tcp_node){
 void v_listen(const char *line, tcp_node_t tcp_node){
 	
 	int socket;
-	int ret = sscanf(line, "%d", &socket);
+	int ret = sscanf(line, "v_listen %d", &socket);
 	if(ret !=1){
 		fprintf(stderr, "syntax error (usage: v_listen [socket])\n");
 		return;
@@ -72,9 +72,9 @@ void v_listen(const char *line, tcp_node_t tcp_node){
 	ret = tcp_api_listen(tcp_node, socket);
 	
 	if(ret < 0)
-		printf("listen error: %s\n", strerror(-ret));
+		printf("Error: v_listen returned: %s\n", strerror(-ret));
 	else
-		printf("listen result: %d\n", ret);
+		printf("Error: v_listen returned: %d\n", strerror(-ret));
 }
 
 /*
@@ -85,27 +85,29 @@ port. Your driver must continute to accept other commands.
 void accept_cmd(const char *line, tcp_node_t tcp_node){
 	int ret, port, socket;
 	
-	ret = sscanf(line, "%d", &port);
-	if(ret != 1){
+	ret = sscanf(line, "accept %d", &port);
+	if((ret != 1)&&(sscanf(line, "a %d", &port)!=1)){
 		fprintf(stderr, "syntax error (usage: accept [port])\n");
 		return;
 	}
 	// create new socket
 	if((socket = tcp_api_socket(tcp_node))<0){
-		printf("Error: v_socket() returned value %d\n", socket);
+		printf("Error: v_socket() returned: %d\n", strerror(-ret));
 		return;
 	}
 	// now bind
 	struct in_addr* addr = malloc(sizeof(struct in_addr));	
 	ret = tcp_api_bind(tcp_node, socket, *addr, port);
 	if(ret < 0){
-		printf("Error: v_bind returned: %d\n", ret);
+		printf("Error: v_bind returned: %d\n", strerror(-ret));
+		free(addr);
 		return;
 	}
 	// now listen
 	ret = tcp_api_listen(tcp_node, socket);	
 	if(ret < 0){
-		printf("Error: v_listen returned: %d\n", ret);	
+		printf("Error: v_listen returned: %d\n", strerror(-ret));
+		free(addr);	
 		return;
 	}
 	// now accept in a loop - keep accepting	
@@ -135,7 +137,7 @@ void v_accept(const char *line, tcp_node_t tcp_node){
 		*/
 	int ret, socket;
 	
-	ret = sscanf(line, "%d", &socket);
+	ret = sscanf(line, "v_accept %d", &socket);
 	if(ret != 1){
 		fprintf(stderr, "syntax error (usage: v_accept [socket])\n");
 		return;
@@ -166,8 +168,8 @@ void connect_cmd(const char *line, tcp_node_t tcp_node){
 	char addr_buffer[INET_ADDRSTRLEN];
 	int socket, port, ret;
 	
-	ret = sscanf(line, "%s %d", addr_buffer, &port);
-	if(ret != 2){
+	ret = sscanf(line, "connect %s %d", addr_buffer, &port);
+	if((ret != 2)&&(sscanf(line, "c %s %d", addr_buffer, &port)!=2)){
 		fprintf(stderr, "syntax error (usage: connect [remote ip address] [remote port])\n");
 		return;
 	}	
@@ -202,7 +204,7 @@ void v_connect(const char *line, tcp_node_t tcp_node){
 	char addr_buffer[INET_ADDRSTRLEN];
 	int socket, port, ret;
 	
-	ret = sscanf(line, "%d %s %d", &socket, addr_buffer, &port);
+	ret = sscanf(line, "v_connect %d %s %d", &socket, addr_buffer, &port);
 	if(ret !=3){
 		fprintf(stderr, "syntax error (usage: v_connect [socket] [ip address] [port])\n");
 		return;
@@ -233,10 +235,14 @@ void recv_cmd(const char* line, tcp_node_t tcp_node){
 	int block = 0; //boolean as to whether recv should block or not
 	int ret;
 	
-	ret = sscanf(line, "%d %d %s", &socket, &num_bytes, &block_y_n);
+	ret = sscanf(line, "recv %d %d %s", &socket, &num_bytes, &block_y_n);
 	if(ret<2 || ret>3){
-		fprintf(stderr, "syntax error (usage: recv [socket] [numbytes] [y/n])\n");
-		return;
+		// try again using 'r' instead of 'recv'
+		ret = sscanf(line, "r %d %d %s", &socket, &num_bytes, &block_y_n);
+		if(ret<2 || ret>3){
+			fprintf(stderr, "syntax error (usage: recv [socket] [numbytes] [y/n])\n");
+			return;
+		}
 	}
 	if(ret == 3){ // if ret == 2 then we keep block as false since Default is n
 		if(block_y_n == 'y')
@@ -258,8 +264,7 @@ void recv_cmd(const char* line, tcp_node_t tcp_node){
 	if(block)
 		args->boolean = 1;
 
-	tcp_node_thread(tcp_node, tcp_api_read_entry, args);
-	
+	tcp_node_thread(tcp_node, tcp_api_read_entry, args);	
 }
 
 
@@ -279,7 +284,7 @@ void vv_write(const char* line, tcp_node_t tcp_node){
 	char* to_write = malloc(sizeof(char)*BUFFER_SIZE);
 	uint32_t num_bytes;
 	
-	if(sscanf(line, "%d %s %u", &socket, to_write, &num_bytes) != 3){
+	if(sscanf(line, "v_write %d %s %u", &socket, to_write, &num_bytes) != 3){
 		fprintf(stderr, "syntax error (usage: v_write [socket] [to_write] [bytes])\n");
 		free(to_write);
 		return;
@@ -452,7 +457,9 @@ void sendfile_cmd(const char* line, tcp_node_t tcp_node){
 	int ret, socket;
 	char filename_buffer[BUFFER_SIZE];
 	
-	ret = sscanf(line, "%d %s", &socket, filename_buffer);
+	//TODO: THIS ISN'T RIGHT 
+	//should be: sendﬁle f ilename ip port
+	ret = sscanf(line, "sendfile %d %s", &socket, filename_buffer);
 	if(ret != 2){
 		fprintf(stderr, "syntax error (usage: sendfile [socket] [filename])\n");
 		return;
@@ -515,7 +522,7 @@ command:
 */
 void numbers(const char* line, tcp_node_t tcp_node){
 	int range, sock;
-	if(sscanf(line, "%d %d", &sock, &range) != 2){
+	if(sscanf(line, "numbers %d %d", &sock, &range) != 2){
 		fprintf(stderr, "Syntax error: usage (numbers <socket> <number>)\n");
 		return;
 	}
@@ -543,7 +550,31 @@ void numbers(const char* line, tcp_node_t tcp_node){
 	
 	return;//nah
 }
+/* Driver specs: window socket Print the socket’s send / receive window size */
+void window_cmd(const char* line, tcp_node_t tcp_node){
+	int socket;
+	if(sscanf(line, "window %d", &socket) != 1){
+		fprintf(stderr, "Syntax error: usage (window <socket>)\n");
+		return;
+	}
 
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(!connection){
+		printf("Error: %s\n", strerror(EBADF));
+		return;
+	}
+	int s_size = 0;
+	int r_size = 0;	
+	send_window_t s = tcp_connection_get_send_window(connection);
+	recv_window_t r = tcp_connection_get_recv_window(connection);
+	
+	if(s)
+	 	s_size = send_window_get_size(s);
+	if(r)	
+		r_size = (int)recv_window_get_size(r);
+
+	printf("[socket %d]:\n\t send window size: %d\n\t receive window size: %d\n", socket, s_size, r_size);
+}
 
 struct {
   const char *command;
@@ -561,6 +592,7 @@ struct {
   {"rp", rp_cmd},
   {"sockets", sockets_cmd}, 
   {"ls", sockets_cmd}, 
+  {"window", window_cmd},
   /*{"accept", accept_cmd},
   {"a", accept_cmd}, 
   {"connect", connect_cmd},
@@ -672,7 +704,7 @@ void* _handle_tcp_node_stdin(void* node){
 				
 			for (i=0; i < sizeof(cmd_table) / sizeof(cmd_table[0]); i++){
 				if (!strcmp(cmd, cmd_table[i].command)){
-					cmd_table[i].handler(line+(strlen(cmd)+1), tcp_node);
+					cmd_table[i].handler(line, tcp_node);
 					break;
 				}
 			}
