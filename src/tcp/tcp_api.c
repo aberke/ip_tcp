@@ -88,10 +88,12 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint1
 	
 	/* Now wait until connection ESTABLISHED or timed out -- ret value will indicate */
 	int transition_result = tcp_connection_api_result(connection); // will block until it gets the result
-	if(transition_result == SIGNAL_DESTROYING){
-		// does this fix our bug?
+	//unlock and handle result
+	tcp_connection_api_unlock(connection);
+	if(transition_result < 0){
+		// error or timeout so lets get rid of this
 		tcp_node_remove_connection_kernal(tcp_node, connection); 
-		return SIGNAL_DESTROYING;
+		return transition_result;
 	}
 	if(ret==1) //successful active_open
 		return 0;
@@ -359,7 +361,7 @@ void* tcp_driver_accept_entry(void* _args){
 		
 		// blocks until gets new connection or bad value
 		int ret = tcp_api_accept(args->node, args->socket, args->addr);
-		if(tcp_node_running(args->node))
+		if(!(tcp_node_running(args->node)))
 			break; //we might have broken out with an error value because tcp_node started destroying stuff already
 		
 		if(ret<0)

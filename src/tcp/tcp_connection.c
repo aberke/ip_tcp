@@ -253,8 +253,7 @@ tcp_connection_handle_receive_packet
 */
 
 void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
-	puts("received packet");
-	
+
 	/* 
 	  RFC 793: 
 		Although these examples do not show connection synchronization using data
@@ -265,8 +264,9 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		so no matter what, we need to be pushing the data to the receiving window, 
 		and we simply shouldn't call get_next until we're in the established state 
 	*/
-
+	
 	void* tcp_packet = tcp_packet_data->packet;
+	state_e connection_state = state_machine_get_state(connection->state_machine);
 	
 	// prints packet -- defined by alex in tcp_utils
 	puts("Received packet:");
@@ -274,7 +274,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	
 	//TODO: FIGURE OUT WHEN ITS NOT APPROPRIATE TO RESET REMOTE ADDRESSES -- we don't want our connection sabotaged 
 	//reset remote ip/port in case it has changed + so that we can correctly calculate checksum	
-	if(tcp_connection_get_state(connection) == LISTEN){
+	if(connection_state == LISTEN){
 		/* since listen binds to all interfaces, must be able to reset its ip addresses to receive connect requests */
 		tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
 		tcp_connection_set_local_ip(connection, tcp_packet_data->local_virt_ip);
@@ -315,9 +315,13 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		puts("received packet with ack_bit set");
  		if(connection->send_window)
 			send_window_ack(connection->send_window, tcp_ack(tcp_packet));
+				
+		if(connection_state == ESTABLISHED)
+			//send next chunks of data
+			tcp_connection_send_next(connection);
 		
 		// do we want an else? that was a bad ACK (its not acking anything), or we fucked up
-		if(state_machine_get_state(connection->state_machine) == SYN_RECEIVED) //<-- Neil: why did you change that to syn_sent????
+		else if(connection_state == SYN_RECEIVED) //<-- Neil: why did you change that to syn_sent????
 			state_machine_transition(connection->state_machine, receiveACK);	
 
 		return;
@@ -384,7 +388,7 @@ void tcp_connection_handle_syn(tcp_connection_t connection, tcp_packet_data_t tc
 		tcp_connection_handle_syn_LISTEN(connection, tcp_connection_get_local_ip(connection),
 									tcp_connection_get_remote_ip(connection), 
 									tcp_source_port(tcp_packet), 
-									tcp_seqnum(tcp_packet));	
+									tcp_seqnum(tcp_packet));
 		// anything else??		
 	}
 	else

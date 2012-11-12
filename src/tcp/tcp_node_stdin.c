@@ -47,7 +47,7 @@ void vv_bind(const char *line, tcp_node_t tcp_node){
 	struct in_addr* addr = malloc(sizeof(struct in_addr));
 	int port;
 	
-	int ret = sscanf(line, "%d address %d", &socket, &port);
+	int ret = sscanf(line, "%d %s %d", &socket, (char*)addr, &port);
 	if (ret != 3){
 		fprintf(stderr, "syntax error (usage: v_bind [socket] [address] [port])\n");
 		free(addr);

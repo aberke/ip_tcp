@@ -335,7 +335,7 @@ int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection){
 	
 	tcp_connection_api_signal(connection, -ETIMEDOUT); // return from connect() api call with timeout error
 	//tcp_node_remove_connection_kernal(connection->tcp_node, connection); //<-- put it in api call
-	/* you're just closing up, there's nothing to do */
+
 	return 1;
 }
 
