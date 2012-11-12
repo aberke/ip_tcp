@@ -106,7 +106,7 @@ struct tcp_node{
 	pthread_mutex_t kernal_mutex;
 	
 	int num_connections; //number of current tcp_connections
-	int connection_array_size; // will need to realloc if don't initially create enough room in array kernal
+	int connection_array_size; // = MAX_FILE_DESCRIPTORS;
 	
 	tcp_connection_t* connections;
 	connection_virt_socket_keyed_t virt_socketToConnection;
@@ -300,7 +300,7 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 	// -- function will insert it into kernal array and socket hashmap
 	tcp_connection_t new_connection = tcp_node_new_connection(tcp_node);
 	if(new_connection == NULL){
-		// reached limit MAX_FILE_DESCRIPTORS?
+		// reached limit MAX_FILE_DESCRIPTORS
 		accept_queue_data_destroy(&data);
 		return NULL; 
 	}
@@ -311,7 +311,11 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 	tcp_connection_set_last_seq_received(new_connection, accept_queue_data_get_seq(data));
 
 	// don't we need to set the local port? because it needs to receive data
-	tcp_node_assign_port(tcp_node, new_connection, -1); //-1 just assigns to next port
+	int port = tcp_node_assign_port(tcp_node, new_connection, -1); //-1 just assigns to next port
+	
+	//to test:
+	printf("port = tcp_node_assign_port(tcp_node, new_connection, -1) = %d\n", port);
+	printf("tcp_connection_get_local_port(new_connection) = %d\n", tcp_connection_get_local_port(new_connection));
 	
 	// destroy data -- all done with it
 	accept_queue_data_destroy(&data);
@@ -322,9 +326,12 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 // creates a new tcp_connection and properly places it in kernal table -- ports initialized to unique value, ip to 0
 // returns NULL if reached limit MAX_FILE_DESCRIPTORS
 tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
-
+	
+	if(tcp_node->num_connections == tcp_node->connection_array_size)
+		return NULL;	// reached limit MAX_FILE_DESCRIPTORS
+	
 	int socket = tcp_node_next_virt_socket(tcp_node);
-	if(socket<0) // reached limit MAX_FILE_DESCRIPTORS
+	if(socket<0) // This is from when we were using bqueue rather than your queue but your queue returns NULL when nothing to dequeue so this doesn't make sense
 		return NULL;
 		
 	// init new tcp_connection
@@ -421,7 +428,8 @@ int tcp_node_remove_connection_kernal(tcp_node_t tcp_node, tcp_connection_t conn
 	
 	// remove from kernal	- these calls lock/unlock kernal
 	tcp_node_return_socket_to_kernal(tcp_node, socket);
-	tcp_node_return_port_to_kernal(tcp_node, port);
+	if(tcp_connection_get_local_port(connection))
+		tcp_node_return_port_to_kernal(tcp_node, port);
 	
 	// lock kernal
 	pthread_mutex_lock(&(tcp_node->kernal_mutex));
@@ -478,14 +486,17 @@ tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t p
 /* just a note, I feel like 0 is traditional used to indicate success */
 int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int port){
 	
-	if(port<=0)
+	if(port<=0){
 		port = tcp_node_next_port(tcp_node);
+		printf("port = tcp_node_next_port(tcp_node) = %d\n", port);
+	}
 		
 	if(tcp_node_port_unused(tcp_node, port)<0)
-		return 0; // port already in use
+		return -1; // port already in use
 	
-	// return previous port to kernal
-	tcp_node_return_port_to_kernal(tcp_node, tcp_connection_get_local_port(connection));
+	// return previous port to kernal if it was previously set
+	if(tcp_connection_get_local_port(connection))
+		tcp_node_return_port_to_kernal(tcp_node, tcp_connection_get_local_port(connection));
 		
 	// set connection's port
 	uint16_t uport = (uint16_t)port;
@@ -502,7 +513,7 @@ int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int p
 	//unlock kernal
 	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 
-	return 1;
+	return port;
 }
 
 // returns 1 if the port is available for use, 0 if already in use
@@ -533,7 +544,7 @@ int tcp_node_next_port(tcp_node_t tcp_node){
 	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 	
 	// check that next_port not already in use -- not already in hashmap	
-	while(!tcp_node_port_unused(tcp_node, next_port)){
+	while((tcp_node_port_unused(tcp_node, next_port))<0){
 		
 		pthread_mutex_lock(&(tcp_node->kernal_mutex));
 		next_port = (uint64_t)queue_pop(tcp_node->ports_available_queue);

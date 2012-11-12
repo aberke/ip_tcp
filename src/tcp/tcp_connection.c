@@ -822,9 +822,13 @@ void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_da
 	
 	tcp_connection_queue_ip_send(connection, rst_packet);
 }
-//needed for tcp_api_read
+//needed for tcp_api_read and driver window_cmd
 recv_window_t tcp_connection_get_recv_window(tcp_connection_t connection){
 	return connection->receive_window;
+}
+// needed for driver window_cmd
+send_window_t tcp_connection_get_send_window(tcp_connection_t connection){
+	return connection->send_window;
 }
 
 /* hacky? */  //<-- yeah kinda

@@ -371,6 +371,11 @@ void _free_timers(send_window_t* send_window){
 		}	
 	}
 }
+
+// needed for driver window_cmd
+int send_window_get_size(send_window_t send_window){
+	return send_window->size;
+}
 	
 void send_window_print(send_window_t send_window){
 	printf("Left: %d\nRight: %d\nSent_left: %d\n", send_window->left, send_window->right, send_window->sent_left);

@@ -252,7 +252,9 @@ alex's questions for tas:
 	whats the deal with accept and binding?
 	why doesn't connect in the driver functions take in a socket?  which socket should we connect with??
 		-- for now I changed the arguments to take in a socket
-	
+
+TODO: TO HANDLE:
+	receiveRST when in ESTABLISHED state	
 	
 	
 

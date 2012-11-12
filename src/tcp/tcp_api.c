@@ -23,7 +23,7 @@ void tcp_api_args_destroy(tcp_api_args_t* args){
 	/* first join your thread. this will block
 		if you're not done yet */
 	pthread_join((*args)->thread, NULL);
-
+	puts("tcp_api_args_destroy 0");
 	/* For this not to go wrong we had better set args->addr to NULL at first.  See function init() */
 	if((*args)->addr != NULL)
 		free((*args)->addr);
@@ -31,6 +31,7 @@ void tcp_api_args_destroy(tcp_api_args_t* args){
 		free((*args)->buffer);
 	free(*args);
 	*args = NULL;
+	puts("tcp_api_args_destroy 1");
 }
 
 //// these verify that the desired field is present and valid in arguments
@@ -142,7 +143,7 @@ returns 0 on success or negative number on failure */
 int tcp_api_bind(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t port){
 
 	// check if port already in use
-	if(!tcp_node_port_unused(tcp_node, port))		
+	if(tcp_node_port_unused(tcp_node, port) < 0)		
 		return -EADDRINUSE;	//The given address is already in use.
 
 	// get corresponding tcp_connection
@@ -280,8 +281,9 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 	/* THIS CALL IS BLOCKING -- because the accept_queue is a bqueue -- call returns when accept_data_t dequeued */
 	tcp_connection_t new_connection = tcp_node_connection_accept(tcp_node, listening_connection, addr);
 	if(new_connection == NULL){
+		// NULL is returned when we've reached max number of file descriptors
 		tcp_connection_api_unlock(listening_connection);
-		return -1; //TODO -- HANDLE BETTER -- WHICH ERROR CODE? WHAT HAPPENED?
+		return -ENFILE;	//The system limit on the total number of open files has been reached.
 	}
 
 	// set state of this new_connection to LISTEN so that we can send it through transition LISTEN_to_SYN_RECEIVED
@@ -350,27 +352,29 @@ void* tcp_driver_accept_entry(void* _args){
 		return NULL; // this won't do anything
 	}
 	
-	// create a thread to accept each time our socket gets a listen call
+	int ret;
 	while(tcp_node_running(args->node)){
-		/* pack the args */
+		/* pack the args 
 		tcp_api_args_t t_args = tcp_api_args_init();
 		t_args->node		 = args->node;
 		t_args->socket  	 = args->socket;
 		t_args->function_call = "v_accept()";
 		t_args->addr 		 = args->addr; //reusing address we called bind with but whatever	
-		
+		*/
 		// blocks until gets new connection or bad value
-		int ret = tcp_api_accept(args->node, args->socket, args->addr);
-		if(!(tcp_node_running(args->node)))
+		ret = tcp_api_accept(args->node, args->socket, args->addr);
+		if(!(tcp_node_running(args->node))){
+			ret = 0;
 			break; //we might have broken out with an error value because tcp_node started destroying stuff already
-		
+		}
 		if(ret<0)
-			_return(args, ret);
+			break;
+		
 		printf("v_accept() returned socket: %d\n", ret);
 	}
 
 	//* we'll use the macro _return in order to return a value * //<--- nah lets have it just be successful
-	_return(args, 0);
+	_return(args, ret);
 	return NULL; // this won't do anything
 }
 
