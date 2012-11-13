@@ -189,6 +189,7 @@ int tcp_api_listen(tcp_node_t tcp_node, int socket){
 	
 	return port; // returns 0 on success
 }	
+
 /* read on an open socket (RECEIVE in the RFC)
 return num bytes read or negative number on failure or 0 on eof */
 //int v read(int socket, unsigned char *buf, uint32 t nbyte);
@@ -216,18 +217,18 @@ int tcp_api_read(tcp_node_t tcp_node, int socket, unsigned char *buffer, uint32_
 		tcp_connection_api_unlock(connection);
 		return -1; //<-- get correct error code
 	}		
-/*
-struct recv_window_chunk{
-	void* data;
-	uint32_t offset;
-	uint32_t length;
-};*/
-	recv_window_chunk_t chunk = recv_window_get_next(tcp_connection_get_recv_window(connection), nbyte);
-	int read = (int)chunk->length;
-	memcpy(buffer, (chunk->data)+(chunk->offset), read); 
+
+	memchunk_t chunk = recv_window_get_next(tcp_connection_get_recv_window(connection), nbyte);
 	
+	if(!chunk){
+		return 0;
+	}	
+
+	int read = chunk->length;
+	memcpy(buffer, chunk->data, read); 
+
 	//clean up
-	recv_window_chunk_destroy(&chunk);
+	memchunk_destroy_total(&chunk, util_free);
 	tcp_connection_api_unlock(connection);
 	
 	return read;
@@ -240,18 +241,38 @@ void* tcp_api_read_entry(void* _args){
 	_verify_socket(args);
 	_verify_buffer(args);
 	
+	if(args->num <= 0){
+		_return(args, 0);
+		return NULL;
+	}
+	
 	/* we'll use the macro thread_return in order to return a value */
 	
-	int ret = tcp_api_read(args->node, args->socket, args->buffer, args->num);
+	int ret = tcp_api_read(args->node, args->socket, (unsigned char*)args->buffer, args->num);
 	if(args->boolean){
 		// block until read in args->num bytes
 		int read;	
 		while(ret < args->num){
-			read = tcp_api_read(args->node, args->socket, (args->buffer)+ret, (args->num)-ret);
+			// ok but if the window is empty this will give a really
+			// draining infinite loop
+			read = tcp_api_read(args->node, args->socket, (unsigned char*)(args->buffer)+ret, (args->num)-ret);
+			if(read < 0){
+				_return(args, read);
+				return NULL;
+			}
+	
 			ret = ret + read;
 		}
 	}
-	printf("[read for socket %d]:\n\t%s\n", args->socket, args->buffer); 
+
+	// NOTE! You can't just print the buffer because it's not null-teriminated!
+	// On mac's this will be no problem, because the memory is nicely 0-ed out 
+	// for us, on linux this won't be the case
+	char buffer[ret+1];
+	memcpy(buffer, args->buffer, ret);
+	buffer[ret] = '\0';
+
+	printf("[read for socket %d]:\n\t%s\n", args->socket, buffer); 
 	_return(args, ret);
 	return NULL;
 }

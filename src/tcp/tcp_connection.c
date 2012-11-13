@@ -188,7 +188,7 @@ void tcp_connection_destroy(tcp_connection_t connection){
 	// take all packets off my_to_read queue and destroys queue
 	tcp_packet_data_t tcp_packet_data;
 	while(!bqueue_trydequeue(connection->my_to_read, (void**)&tcp_packet_data))
-		tcp_packet_data_destroy(tcp_packet_data);	
+		tcp_packet_data_destroy(&tcp_packet_data);	
 	
 	bqueue_destroy(connection->my_to_read);
 	free(connection->my_to_read);
@@ -270,7 +270,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	
 	// prints packet -- defined by alex in tcp_utils
 	puts("Received packet:");
-	view_packet((struct tcphdr*)tcp_packet, tcp_packet+20); //<-- (+20) my guess for data offset
+	view_packet((struct tcphdr*)tcp_packet, tcp_packet+20, tcp_packet_data->packet_size-20); //<-- (+20) my guess for data offset
 	
 	//TODO: FIGURE OUT WHEN ITS NOT APPROPRIATE TO RESET REMOTE ADDRESSES -- we don't want our connection sabotaged 
 	//reset remote ip/port in case it has changed + so that we can correctly calculate checksum	
@@ -302,11 +302,15 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	
 		/* send the ack back */
 		tcp_connection_ack(connection, recv_window_get_ack(connection->receive_window));
+
+		memchunk_destroy(&data);
 	}	
 
 	/* now check the SYN bit */
 	if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
 		tcp_connection_handle_syn_ack(connection, tcp_packet_data);	
+
+		tcp_packet_data_destroy(&tcp_packet_data);
 		return;
 	}
 	
@@ -324,19 +328,27 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		else if(connection_state == SYN_RECEIVED) //<-- Neil: why did you change that to syn_sent????
 			state_machine_transition(connection->state_machine, receiveACK);	
 
+		tcp_packet_data_destroy(&tcp_packet_data);
 		return;
 	}
 	
 	if(tcp_syn_bit(tcp_packet)){
 		tcp_connection_handle_syn(connection, tcp_packet_data);
+
+		tcp_packet_data_destroy(&tcp_packet_data);
 		return;
 	}
 
 	if(tcp_rst_bit(tcp_packet)){
 		print(("rst"),TCP_PRINT);
 		state_machine_transition(connection->state_machine, receiveRST);	
+
+		tcp_packet_data_destroy(&tcp_packet_data);
 		return;
 	}
+
+	// destroy the packet (although execution will usually not get here)
+	tcp_packet_data_destroy(&tcp_packet_data);
 }
 
 void tcp_connection_handle_syn_ack(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
@@ -436,6 +448,7 @@ void tcp_connection_ack(tcp_connection_t connection, uint32_t ack){
 	tcp_wrap_packet_send(connection, header, NULL, 0);
 }
 
+
 /*
    NOTE should probably be here just because it's really would be a method 
    if we had classes, it takes in and relies upon the tcp_connection_t implementation 
@@ -454,7 +467,7 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 	
 	//alex wrote for debugging: PRINTS PACKET
 	puts("sending packet:");
-	view_packet(header, data); // <-- defined in tcp_utils
+	view_packet(header, data, data_len); // <-- defined in tcp_utils
 	
 	uint32_t total_length = tcp_offset_in_bytes(header) + data_len;
 	
@@ -534,6 +547,8 @@ int tcp_connection_send_next(tcp_connection_t connection){
 
 		// increment bytes_sent
 		bytes_sent += next_chunk->length;
+
+		send_window_chunk_destroy(&next_chunk);
 	}	
 	return bytes_sent;
 }

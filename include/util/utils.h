@@ -125,6 +125,7 @@ int utils_startswith(const char* s, const char* starts);
 void util_free(void** ptr);
 void inspect_bytes(const char* msg, int num_bytes);
 void print_non_null_terminated(void* data, int length);
+char* null_terminate(void* data, int length);
 int fd_fgets(fd_set* fd, char* buffer, int size_of_buffer, FILE* file, struct timeval* tv);
 
 #endif // __UTILS_H__

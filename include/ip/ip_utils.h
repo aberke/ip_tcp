@@ -31,7 +31,7 @@ typedef struct tcp_packet_data* tcp_packet_data_t;
 
 
 tcp_packet_data_t tcp_packet_data_init(char* packet_data, int packet_data_size, uint32_t local_virt_ip, uint32_t remote_virt_ip);
-void tcp_packet_data_destroy(tcp_packet_data_t packet_data);
+void tcp_packet_data_destroy(tcp_packet_data_t* packet_data);
 void tcp_packet_print(tcp_packet_data_t packet);
 
 /****** End of Structs/Functions for tcp_packet **************************/

@@ -117,7 +117,9 @@ memchunk_t tcp_unwrap_data(void* packet, int length){
 	if(!(length-data_offset)) 
 		return NULL;
 
-	memchunk_t payload = memchunk_init(packet+data_offset, length-data_offset);
+	void* data = malloc(length-data_offset);
+	memcpy(data, packet+data_offset, length-data_offset);
+	memchunk_t payload = memchunk_init(data, length-data_offset);
 
 	return payload;
 }
@@ -219,7 +221,7 @@ int tcp_utils_validate_checksum(void* packet, uint16_t total_length, uint32_t sr
 		return 1;
 }
 //alex wrote for debugging: prints packet - see tcp_wrap_packet_send
-void view_packet(struct tcphdr* header, void* data){
+void view_packet(struct tcphdr* header, void* data, int data_length){
 	puts("[packet]:");
 	printf("\tsource_port: %u,  dest_port: %u\n", tcp_source_port(header), tcp_dest_port(header));
 	printf("\ttcp_seq: %u,  tcp_ack: %u\n", tcp_seqnum(header),tcp_ack(header));
@@ -227,7 +229,12 @@ void view_packet(struct tcphdr* header, void* data){
 	printf("\tsyn_bit:%i, fin_bit:%i, ack_bit:%i, rst_bit:%i, psh_bit:%i, urg_bit:%i\n", 
 		tcp_syn_bit(header), tcp_fin_bit(header), tcp_ack_bit(header), tcp_rst_bit(header), tcp_psh_bit(header), tcp_urg_bit(header));
 	printf("\twindow_size: %u\n", tcp_window_size(header));
-	printf("\tdata: %s\n", (char*)data);
+
+	char buffer[data_length+1];
+	memcpy(buffer, data, data_length);
+	buffer[data_length] = '\0';
+
+	printf("\tdata: %s\n", buffer);
 }
 
 // a tcp_connection owns a local and remote tcp_socket_address.  This pair defines the connection

@@ -19,13 +19,20 @@ void memchunk_destroy(memchunk_t* chunk){
 	free(*chunk);
 	*chunk = NULL;
 }	
+
+char* null_terminate(void* data, int length){
+	char* result = malloc(length+1);
+	memcpy(result, data, length);
+	result[length] = '\0';
+	return result;
+}
 	
 void print_non_null_terminated(void* data, int length){
 	/* print out what you got */
 	char buff[length + 1];
 	memcpy(buff, data, length);
 	buff[length] = '\0';
-	printf("data sent: %s\n", buff);
+	printf("data:  %s\n", buff);
 	fflush(stdout);
 	/*                  	  */
 }
