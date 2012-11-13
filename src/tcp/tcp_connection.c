@@ -294,6 +294,8 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
 	if(data){ 
 		recv_window_receive(connection->receive_window, data->data, data->length, tcp_seqnum(tcp_packet));
+		// if there's a blocking read, need to signal we got more data to read
+		tcp_connection_api_signal(connection, 1);
 	
 		/* send the ack back */
 		memchunk_destroy(&data);

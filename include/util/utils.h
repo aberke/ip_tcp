@@ -18,17 +18,22 @@
 #define STATES_PRINT 		6
 #define CLOSING_PRINT		7
 #define PACKET_PRINT	  	8
-#define PORT_PRINT			9
+
+#define ALEX_PRINT			9 //yup I did it.
+#define ALEXS_SEGFAULT		10
+#define PORT_PRINT			11
 
 #define mask (  0									\
 		   /*| (1<<(IP_PRINT-1))		    */		\
-		   /*| (1<<(TCP_PRINT-1)) 		*/    	\
+		   /*| (1<<(TCP_PRINT-1)) 		*/    		\
 		   /*| (1<<(WINDOW_PRINT-1)) 		*/		\
 	   	   /*| (1<<(SEND_WINDOW_PRINT-1))	*/ 		\
 		   /*| (1<<(LEAK_PRINT-1))          */		\
 		     | (1<<(STATES_PRINT-1))				\
 		   /*| (1<<(CLOSING_PRINT-1))	 	*/	    \
 		     | (1<<(PACKET_PRINT-1))				\
+		     | (1<<(ALEX_PRINT-1))					\
+		   /*| (1<<(ALEXS_SEGFAULT-1))		*/  	\
 		   /*| (1<<(PORT_PRINT-1))			*/		\
 			 )
 
