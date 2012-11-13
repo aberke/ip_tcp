@@ -19,8 +19,6 @@ void memchunk_destroy(memchunk_t* chunk){
 	free(*chunk);
 	*chunk = NULL;
 }	
-
-
 	
 void print_non_null_terminated(void* data, int length){
 	/* print out what you got */
@@ -74,6 +72,12 @@ void buffer_empty(buffer_t buffer){
 }
 
 /* FUNCTIONS */
+
+int compare_ints(int a, int b){
+	if(a<b) 	 return -1;
+	else if(a>b) return 1;
+	else 		 return 0;
+}
 
 void error(const char* msg){
 	perror(msg);

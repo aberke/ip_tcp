@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <pthread.h>
 
+
 typedef struct plain_list_el{	
 	void* data;
 	struct plain_list_el* prev;
@@ -18,21 +19,35 @@ typedef struct plain_list{
 
 plain_list_t plain_list_init();
 void plain_list_destroy(plain_list_t* list);
-
+void plain_list_destroy_total(plain_list_t* list, void (*destroy)(void**));
 void plain_list_append(plain_list_t list, void* data);
+void plain_list_insert_before(plain_list_t list, plain_list_el_t el, void* data);
+void plain_list_insert_after(plain_list_t list, plain_list_el_t el, void* data);
 void plain_list_remove(plain_list_t list, plain_list_el_t el);
-void* plain_list_pop(plain_list_t list);
+plain_list_el_t plain_list_pop(plain_list_t list);
 
 #define PLAIN_LIST_ITER(list,el)				\
 do{												\
-	plain_list_el_t next;						\
-	for(el=((list)->head);el!=NULL;el=next){	\
-		next=el->next;
+	plain_list_el_t __next__;						\
+	for(el=((list)->head);el!=NULL;el=__next__){	\
+		__next__=el->next;
 
 #define PLAIN_LIST_ITER_DONE(list)				\
 	}											\
 }												\
-while(0);
+while(0)
+
+/// sorted list
+
+typedef struct sorted_list* sorted_list_t;
+
+sorted_list_t sorted_list_init(int (*comparator)(void*, void*));
+void sorted_list_destroy(sorted_list_t* s_list);
+void sorted_list_destroy_total(sorted_list_t* s_list, void (*destructor) (void**));
+void sorted_list_insert(sorted_list_t s_list, void* data);
+void* sorted_list_peek(sorted_list_t s_list);
+void* sorted_list_pop(sorted_list_t s_list);
+plain_list_t sorted_list_get_list(sorted_list_t s_list);
 
 /**
  * This list provides a minimal set of functionality as needed
