@@ -720,14 +720,25 @@ void tcp_node_refuse_connection(tcp_node_t tcp_node, tcp_packet_data_t packet){
 	struct tcphdr* incoming_header = (struct tcphdr*)packet->packet;
 
 	// create the outgoing packet
-	struct tcphdr* outgoing_header = tcp_header_init(tcp_dest_port(incoming_header), tcp_source_port(incoming_header), 0);
+	struct tcphdr* outgoing_header = tcp_header_init(0);
+
+	/* PORTS */
+	tcp_set_dest_port(outgoing_header, tcp_source_port(incoming_header));
+	tcp_set_source_port(outgoing_header, tcp_dest_port(incoming_header));
+
+	/* RST */
 	tcp_set_rst_bit(outgoing_header);
+
+	/* CHECKSUM */
 	tcp_utils_add_checksum(outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip, TCP_DATA);
 
 	tcp_packet_data_t rst_packet = tcp_packet_data_init((char*)outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip);
-	//free(outgoing_header); now not memcpying into packet_data (just using pointer)
 	
+	/* SEND IT OFF */
 	ip_node_send_tcp(tcp_node->ip_node, rst_packet);
+
+	
+	return;
 }
 	
 

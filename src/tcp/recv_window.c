@@ -54,7 +54,7 @@ recv_window_t recv_window_init(uint16_t window_size, uint32_t ISN){
 	
 	/* the next byte you're expecting is the one after the 
 		first sequence number */
-	recv_window->read_left = recv_window->left = (ISN + 1) % MAX_SEQNUM;
+	recv_window->read_left = recv_window->left = ISN;
 
 	/* initialize your mutex */
 	pthread_mutex_init(&(recv_window->mutex), NULL);

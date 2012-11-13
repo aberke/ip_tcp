@@ -28,7 +28,7 @@
 		   /*| (1<<(LEAK_PRINT-1))          */		\
 		     | (1<<(STATES_PRINT-1))				\
 		   /*| (1<<(CLOSING_PRINT-1))	 	*/	    \
-		   /*| (1<<(PACKET_PRINT-1))		*/		\
+		     | (1<<(PACKET_PRINT-1))				\
 		   /*| (1<<(PORT_PRINT-1))			*/		\
 			 )
 

@@ -253,7 +253,6 @@ tcp_connection_handle_receive_packet
 */
 
 void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
-
 	/* 
 	  RFC 793: 
 		Although these examples do not show connection synchronization using data
@@ -268,8 +267,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	void* tcp_packet = tcp_packet_data->packet;
 	state_e connection_state = state_machine_get_state(connection->state_machine);
 	
-	// prints packet -- defined by alex in tcp_utils
-	view_packet((struct tcphdr*)tcp_packet, tcp_packet+20, tcp_packet_data->packet_size-20); //<-- (+20) my guess for data offset
+	view_packet((struct tcphdr*)tcp_packet, tcp_packet+20, tcp_packet_data->packet_size-20); 
 	
 	//TODO: FIGURE OUT WHEN ITS NOT APPROPRIATE TO RESET REMOTE ADDRESSES -- we don't want our connection sabotaged 
 	//reset remote ip/port in case it has changed + so that we can correctly calculate checksum	
@@ -295,13 +293,9 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		but what does the seqnum even mean if the ACKs haven't been synchronized? */
 	memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
 	if(data){ 
-		//print_non_null_terminated(data->data, data->length);
-	
 		recv_window_receive(connection->receive_window, data->data, data->length, tcp_seqnum(tcp_packet));
 	
 		/* send the ack back */
-		tcp_connection_ack(connection, recv_window_get_ack(connection->receive_window));
-
 		memchunk_destroy(&data);
 	}	
 
@@ -312,7 +306,6 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	/* now check the SYN bit */
 	if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
 		tcp_connection_handle_syn_ack(connection, tcp_packet_data);	
-
 		tcp_packet_data_destroy(&tcp_packet_data);
 		return;
 	}
@@ -350,7 +343,11 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		return;
 	}
 
-	// destroy the packet (although execution will usually not get here)
+	/* if you've gotten here, then just send an empty packet
+		that has the ack data in it (the ack will be set in tcp_wrap_packet_send) */
+	tcp_wrap_packet_send(connection, tcp_header_init(0), NULL, 0);
+		
+	/* Clean up */
 	tcp_packet_data_destroy(&tcp_packet_data);
 }
 
@@ -437,21 +434,6 @@ int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t 
 	return bqueue_enqueue(connection->to_send, packet);
 }
 	
-/* in order to ack a particular sequence number, this may become more
-	complicated because if we're sending data we should just add the ack 
-	onto the packet that we're sending, which would require some sort of 
-	acking queue that gets either sent by itself if there's nothing for
-	it to piggy back on (timeout?) */
-void tcp_connection_ack(tcp_connection_t connection, uint32_t ack){
-	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0);
-	tcp_set_ack_bit(header);
-	tcp_set_ack(header, ack);
-	tcp_set_window_size(header, recv_window_get_size(connection->receive_window));
-
-	tcp_wrap_packet_send(connection, header, NULL, 0);
-}
-
-
 /*
    NOTE should probably be here just because it's really would be a method 
    if we had classes, it takes in and relies upon the tcp_connection_t implementation 
@@ -460,41 +442,41 @@ void tcp_connection_ack(tcp_connection_t connection, uint32_t ack){
 */
 int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len){	
 	
-	// Neil is right: always set window size of the receive window.  Ayy I gave you credit
+	/* PORTS */
+	tcp_set_dest_port(header, connection->remote_addr.virt_port);
+	tcp_set_source_port(header, connection->local_addr.virt_port);
+
+	/* WINDOW SIZE */
 	if(connection->receive_window)
 		tcp_set_window_size(header, recv_window_get_size(connection->receive_window));
 	else
-		// what it will be as soon as we receive anything 
-		//-- shouldn't we just init the receive window at start then?
 		tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
 	
-	//alex wrote for debugging: PRINTS PACKET
-	//puts("sending packet:");
-	view_packet(header, data, data_len); // <-- defined in tcp_utils
 	
+	/* ACK */
+	if(connection->receive_window){
+		tcp_set_ack_bit(header);
+		tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
+	}
+
+	/* DATA */
 	uint32_t total_length = tcp_offset_in_bytes(header) + data_len;
-	
-	// if we're sending data, concatenate header and data into one packet
 	if((data != NULL)&&(data_len)){
-		/* data_len had better be the same size as when you called tcp_header_init()!! */
 		memcpy(((char*)header)+tcp_offset_in_bytes(header), data, data_len);
 		free(data);
 	}
 	
-	// tcp checksum calculated on BOTH header and data
-	tcp_utils_add_checksum(header, total_length, connection->local_addr.virt_ip, connection->remote_addr.virt_ip, TCP_DATA);//TCP_DATA is tcp protocol number right?
+	/* CHECKSUM */
+	tcp_utils_add_checksum(header, total_length, connection->local_addr.virt_ip, connection->remote_addr.virt_ip, TCP_DATA);
 	
-	// send off to ip_node as a tcp_packet_data_t
-	//tcp_packet_data_t packet_data = tcp_packet_data_init(packet, data_len+TCP_HEADER_MIN_SIZE, local_virt_ip, remote_virt_ip);
+	/* init the packet */
 	tcp_packet_data_t packet_data = tcp_packet_data_init(
 										(char*)header, 
 										total_length,
 										tcp_connection_get_local_ip(connection),
 										tcp_connection_get_remote_ip(connection));
 										
-	// no longer need packet
-	//free(header); no longer memcpying into the tcp_packet_data
-	
+	/* queue it */
 	if(tcp_connection_queue_ip_send(connection, packet_data) < 0){
 		//TODO: HANDLE!
 		puts("Something wrong with sending tcp_packet to_send queue--How do we want to handle this??");	
@@ -507,13 +489,8 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 
 void tcp_connection_send_next_chunk(tcp_connection_t connection, send_window_chunk_t next_chunk){
 	// mallocs enough memory for the header and the data
-	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, next_chunk->length);
-	
-	/* set the ack bit, and get the ack to send from 
-		the window. ACK's should ALWAYS be sent (if established) */
-	tcp_set_ack_bit(header);
-	tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
-	
+	struct tcphdr* header = tcp_header_init(next_chunk->length);
+		
 	/* the seqnum should be the seqnum in the next_chunk */
 	tcp_set_seq(header, next_chunk->seqnum);
 	
@@ -831,16 +808,30 @@ void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_da
 */
 	struct tcphdr* incoming_header = (struct tcphdr*)packet->packet;
 
-	// create the outgoing packet
-	struct tcphdr* outgoing_header = tcp_header_init(tcp_dest_port(incoming_header), tcp_source_port(incoming_header), 0);
-	tcp_set_rst_bit(outgoing_header);
-	tcp_utils_add_checksum(outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip, TCP_DATA);
+	struct tcphdr* outgoing_header = tcp_header_init(0);
 
-	tcp_packet_data_t rst_packet = tcp_packet_data_init((char*)outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip);
-	//free(outgoing_header); now not memcpying into tcp_packet_data
-	
-	tcp_connection_queue_ip_send(connection, rst_packet);
+	tcp_set_dest_port(outgoing_header, tcp_source_port(incoming_header));
+	tcp_set_source_port(outgoing_header, tcp_dest_port(incoming_header));
+
+	/* CHECKSUM */
+	tcp_utils_add_checksum(outgoing_header, tcp_offset_in_bytes(outgoing_header), connection->local_addr.virt_ip, connection->remote_addr.virt_ip, TCP_DATA);
+
+	/* RST */
+	tcp_set_rst_bit(outgoing_header);
+
+	tcp_packet_data_t packet_data = tcp_packet_data_init(
+										(char*)outgoing_header, 
+										tcp_offset_in_bytes(outgoing_header)+0,
+										tcp_connection_get_local_ip(connection),
+										tcp_connection_get_remote_ip(connection));
+
+	if(tcp_connection_queue_ip_send(connection, packet_data) < 0){
+		puts("Something wrong with sending tcp_packet to_send queue--How do we want to handle this??");	
+		free(packet_data);
+	}
+
 }
+
 //needed for tcp_api_read and driver window_cmd
 recv_window_t tcp_connection_get_recv_window(tcp_connection_t connection){
 	return connection->receive_window;
