@@ -187,29 +187,12 @@ int tcp_api_listen(tcp_node_t tcp_node, int socket){
 return num bytes read or negative number on failure or 0 on eof */
 //int v read(int socket, unsigned char *buf, uint32 t nbyte);
 int tcp_api_read(tcp_node_t tcp_node, int socket, char *buffer, uint32_t nbyte){
-
+	print(("tcp_api_read 0"), ALEX_PRINT);
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(connection == NULL)
 		return -EBADF;
 
-	/* Lock up api on this connection -- BLOCK  -- really we don't want to 
-		be able to call this if another api call in process */
-	tcp_connection_api_lock(connection);
-	
-	state_e state = tcp_connection_get_state(connection);
-	
-	//TODO: HANDLE CORRECT RESPONSES BASED ON STATE
-	
-	if(state == CLOSE_WAIT){
-		tcp_connection_api_unlock(connection);
-		return 0; //inform application layer that we need to close
-	}
-	
-	if(tcp_connection_get_state(connection) != ESTABLISHED){
-		//TODO: HANDLE APPROPRIATELY
-		tcp_connection_api_unlock(connection);
-		return -1; //<-- get correct error code
-	}
+	/* Don't lock because tcp_api read_entry locks up -- it needs to lock up because its the blocking call */
 /*
 struct memchunk{
 	void* data;
@@ -219,19 +202,21 @@ struct memchunk{
 	if(!chunk){
 		return 0;
 	}	
+	print(("tcp_api_read 1"), ALEX_PRINT);
 	int read = nbyte;
 	if(chunk->length > nbyte){
 		puts("Error: Alex and Neil go debug tcp_api_read");
 		exit(-1);
 	}
+	print(("tcp_api_read 2"), ALEX_PRINT);
 	if(chunk->length < nbyte)
 		read = chunk->length;
-	memcpy(buffer, chunk->data, read); 
 	
+	memcpy(buffer, chunk->data, read); 
+	print(("tcp_api_read 3"), ALEX_PRINT);
 	//clean up
 	memchunk_destroy_total(&chunk, util_free);
-	tcp_connection_api_unlock(connection);
-	
+	print(("tcp_api_read 4"), ALEX_PRINT);
 	return read;
 }
 void* tcp_api_read_entry(void* _args){
@@ -240,40 +225,81 @@ void* tcp_api_read_entry(void* _args){
 	/* verifies that these fields are valid (node != NULL, socket >=0, ...) */
 	_verify_node(args);
 	_verify_socket(args);
-	_verify_buffer(args);
 	
-	if(args->num <= 0){
-		_return(args, 0);
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
+	if(connection == NULL){
+		_return(args,-EBADF);
+		return NULL;
+	}
+	/* I think this is the correct place to check state because if we're in the connect/accept state for example,
+		we might already be blocking and then it wouldn't make sense to call lock on the connection */
+	state_e state = tcp_connection_get_state(connection);
+	
+	//TODO: HANDLE CORRECT RESPONSES BASED ON STATE
+	
+	if(state == CLOSE_WAIT){
+		tcp_connection_api_unlock(connection);
+		puts("Remote Connection Closed");
+		//inform application layer that we need to close -- is this the right way to do it?
+		_return(args,-EBADF);	//fd is not a valid file descriptor or is not open for reading.
 		return NULL;
 	}
 	
+	if(tcp_connection_get_state(connection) != ESTABLISHED){
+		//TODO: HANDLE APPROPRIATELY
+		tcp_connection_api_unlock(connection);
+		_return(args,-EBADF);	//fd is not a valid file descriptor or is not open for reading.
+		return NULL;
+	}
+	print(("recv 0"), ALEX_PRINT);
 	/* we'll use the macro thread_return in order to return a value */
+	tcp_connection_api_lock(connection);
+	print(("recv 1"), ALEX_PRINT);
 	
-	int ret = tcp_api_read(args->node, args->socket, (char*)args->buffer, args->num);
+	//tacked on an extra 1 for null character for pretty print
+	char* to_read = (char*)malloc(sizeof(char)*(args->num + 1));
+	//char to_read[args->num + 1];
+
+	int ret = tcp_api_read(args->node, args->socket, to_read, args->num);	
 	if(args->boolean){
 		// block until read in args->num bytes
-		int read;	
+		int read = ret;	
 		while(ret < args->num){
-			// ok but if the window is empty this will give a really
-			// draining infinite loop
-			read = tcp_api_read(args->node, args->socket, (char*)(args->buffer)+ret, (args->num)-ret);
+			printf("ret = %d.  args->num = %d\n", ret, args->num);
+			print(("recv 2"), ALEX_PRINT);
 			if(read < 0){
+				tcp_connection_api_unlock(connection);
+				free(to_read);
 				_return(args, read);
 				return NULL;
 			}
-	
+			print(("recv 3"), ALEX_PRINT);
+			if(read == 0){
+				// need to wait until there is something to read
+				int result = tcp_connection_api_result(connection); // will block until it gets the result
+
+				if(result<0){
+					tcp_connection_api_unlock(connection);
+					free(to_read);
+					_return(args, result);
+					return NULL;
+				}
+			}
+			print(("recv 4"), ALEX_PRINT);
+			read = tcp_api_read(args->node, args->socket, to_read+ret, (args->num)-ret);	
 			ret = ret + read;
+			print(("recv 5"), ALEX_PRINT);
 		}
 	}
-
+	print(("recv 6"), ALEX_PRINT);
 	// NOTE! You can't just print the buffer because it's not null-teriminated!
 	// On mac's this will be no problem, because the memory is nicely 0-ed out 
-	// for us, on linux this won't be the case
-	char buffer[ret+1];
-	memcpy(buffer, args->buffer, ret);
-	buffer[ret] = '\0';
-
-	printf("[read for socket %d]:\n\t%s\n", args->socket, buffer); 
+	// for us, on linux this won't be the case  <-- k thanx
+	to_read[ret] = '\0';
+	printf("[read for socket %d]:\n\t%s\n", args->socket, to_read); 
+	
+	free(to_read);
+	tcp_connection_api_unlock(connection);
 	_return(args, ret);
 	return NULL;
 }

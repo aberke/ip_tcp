@@ -13,7 +13,7 @@ typedef struct tcp_node* tcp_node_t;
 #include "tcp_api.h"
 
 /* set artificially low right now so we can make sure have no segfaults if ever reach limit */
-#define MAX_FILE_DESCRIPTORS 5 // per process limit commonly set to 1024 on mac and linux machines
+#define MAX_FILE_DESCRIPTORS 1024 // per process limit commonly set to 1024 on mac and linux machines
 
 //// some helpful static globals
 #define IP_HEADER_SIZE sizeof(struct ip)

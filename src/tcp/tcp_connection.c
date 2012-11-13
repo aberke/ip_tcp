@@ -296,8 +296,11 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
 	if(data){ 
 		//print_non_null_terminated(data->data, data->length);
+		printf("data->length: %d, data: %s\n", data->length, (char*)data->data);
 	
 		recv_window_receive(connection->receive_window, data->data, data->length, tcp_seqnum(tcp_packet));
+		// if there's a blocking read, need to signal we got more data to read
+		tcp_connection_api_signal(connection, 1);
 	
 		/* send the ack back */
 		tcp_connection_ack(connection, recv_window_get_ack(connection->receive_window));

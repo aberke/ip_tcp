@@ -218,6 +218,7 @@ void v_connect(const char *line, tcp_node_t tcp_node){
 	
 	tcp_node_thread(tcp_node, tcp_api_connect_entry, args);
 }
+
 /*
 recv/r socket numbytes y/n Try to read data from a given socket. If the last argument is y, then
 you should block until numbytes is received, or the connection closes. If n, then don’t block;
@@ -225,44 +226,45 @@ return whatever recv returns. Default is n */
 void recv_cmd(const char* line, tcp_node_t tcp_node){
 	int socket;
 	int num_bytes;
-	char block_y_n;
+	char* block_y_n;
 	int block = 0; //boolean as to whether recv should block or not
 	int ret;
 	
-	ret = sscanf(line, "recv %d %d %s", &socket, &num_bytes, &block_y_n);
+	ret = sscanf(line, "recv %d %d %s", &socket, &num_bytes, block_y_n);
 	if(ret<2 || ret>3){
 		// try again using 'r' instead of 'recv'
-		ret = sscanf(line, "r %d %d %s", &socket, &num_bytes, &block_y_n);
+		ret = sscanf(line, "r %d %d %s", &socket, &num_bytes, block_y_n);
 		if(ret<2 || ret>3){
 			fprintf(stderr, "syntax error (usage: recv [socket] [numbytes] [y/n])\n");
 			return;
 		}
 	}
 	if(ret == 3){ // if ret == 2 then we keep block as false since Default is n
-		if(block_y_n == 'y')
+		if(!strcmp(block_y_n, "y"))
 			block = 1;
-		else if(block_y_n != 'n'){
+		else if(strcmp(block_y_n, "n")){
 			fprintf(stderr, "syntax error (usage: recv [socket] [numbytes] [y/n])\n");
 			return;
 		}	
 	}
-	char* to_read = malloc(sizeof(char)*num_bytes);
-	
+	if(num_bytes < 0){
+		fprintf(stderr, "syntax error (usage: recv [socket] [numbytes] [y/n]) where numbytes is a positive integer\n");
+		return;
+	}
 	tcp_api_args_t args = tcp_api_args_init();
 	args->node = tcp_node;
 	args->socket = socket;
-	args->buffer = to_read;
 	args->function_call = "v_read";
 	args->boolean = 0;
 	args->num = num_bytes;
 		
 	if(block)
 		args->boolean = 1;
-
-	tcp_node_thread(tcp_node, tcp_api_read_entry, args);	
+	tcp_node_thread(tcp_node, tcp_api_read_entry, args);
 }
 
-
+/* write on an open socket (SEND in the RFC)
+return num bytes written or negative number on failure */
 int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint32_t num_bytes){
 
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
@@ -272,6 +274,32 @@ int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint
 	int ret;
 	ret = tcp_connection_send_data(connection, to_write, num_bytes);
 	return ret;
+}
+/*send/s/w socket data Send a string on a socket. */
+void send_cmd(const char* line, tcp_node_t tcp_node){
+
+	int num_consumed;
+	int socket;
+	const char *data;
+	int ret;
+	
+	ret = sscanf(line, "send %d %n", &socket, &num_consumed);
+	if((ret != 1)&&(sscanf(line, "s %d %n", &socket, &num_consumed)!=1)&&(sscanf(line, "w %d %n", &socket, &num_consumed)!=1)){
+		fprintf(stderr, "syntax error (usage: send [interface] [payload])\n");
+		return;
+	} 
+	data = line + num_consumed;
+	if (strlen(data) < 2){ // 1-char message, plus newline
+		fprintf(stderr, "syntax error (payload unspecified)\n");
+		return;
+	}
+	
+	ret = v_write(tcp_node, socket, (const unsigned char*)data, strlen(data)-1); // strlen()-1: stripping newline
+	if (ret < 0){
+		fprintf(stderr, "v_write() error: %s\n", strerror(-ret));
+		return;
+	}
+	printf("v_write() on %d bytes returned %d\n", strlen(data)-1, ret);
 }
 
 void vv_write(const char* line, tcp_node_t tcp_node){
@@ -404,43 +432,6 @@ void up_cmd(const char *line, tcp_node_t tcp_node){
 }
 
 
-
-void send_cmd(const char *line, tcp_node_t tcp_node){
-  /*typedef struct tcp_packet_data{
-	uint32_t local_virt_ip;
-	uint32_t remote_virt_ip;
-	char packet[MTU];
-	int packet_size;  //size of packet in bytes
-} tcp_packet_data_t;*/
-
-  
-  /* TODO: ONCE HAVE WORKING API MAKE SURE TO INSTEAD IMPLEMENT BELOW VERSION */
-	/*  
-	int num_consumed;
-	int socket;
-	const char *data;
-	int ret;
-	
-	ret = sscanf(line, "send %d %n", &socket, &num_consumed);
-	if (ret != 1){
-		fprintf(stderr, "syntax error (usage: send [interface] [payload])\n");
-		return;
-	} 
-	data = line + num_consumed;
-	if (strlen(data) < 2){ // 1-char message, plus newline
-		fprintf(stderr, "syntax error (payload unspecified)\n");
-		return;
-	}
-	
-	ret = v_write(socket, data, strlen(data)-1); // strlen()-1: stripping newline
-	if (ret < 0){
-		fprintf(stderr, "v_write() error: %s\n", strerror(-ret));
-		return;
-	}
-	printf("v_write() on %d bytes returned %d\n", strlen(data)-1, ret);
-*/
-  return;
-}
 
 /* 
 sendfile_cmd
@@ -679,10 +670,11 @@ void* _handle_tcp_node_stdin(void* node){
 					
 					else
 						printf("%s on socket %d returned value: %d\n", args->function_call, args->socket, args->result);
-					
+					print(("1"), ALEXS_SEGFAULT);
 					tcp_api_args_destroy(&args);
+					print(("2"), ALEXS_SEGFAULT);
 					plain_list_remove(list, el);
-					puts("2");
+					print( ("3"), ALEXS_SEGFAULT);
 				}			
 			PLAIN_LIST_ITER_DONE(list);
 

@@ -247,6 +247,12 @@ SET BACK TO 1024: in tcp_node.h:
 	
 alex's questions for neil:
 
+	recv window bugs:
+		loses first byte of written data
+
+	to replicate Alex's segfaults that happen at plainlist_remove:
+		set MAX_FILE_DESCRIPTORS (found in tcp_node.h) to something very low like 5.
+		open up a bunch of accepting connections.  try to connect past MAX_FILE_DESCRIPTORS limit
 
 alex's questions for tas:
 	whats the deal with accept and binding?
