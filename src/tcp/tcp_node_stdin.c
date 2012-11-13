@@ -74,7 +74,7 @@ void v_listen(const char *line, tcp_node_t tcp_node){
 	if(ret < 0)
 		printf("Error: v_listen returned: %s\n", strerror(-ret));
 	else
-		printf("Error: v_listen returned: %d\n", strerror(-ret));
+		printf("Error: v_listen returned: %s\n", strerror(-ret));
 }
 
 /*
@@ -542,7 +542,7 @@ void numbers(const char* line, tcp_node_t tcp_node){
 	}
 	strcat(to_write,"\n");
 	
-	int ret = tcp_connection_send_data(connection, (unsigned char*)to_write, strlen(to_write));
+	tcp_connection_send_data(connection, (unsigned char*)to_write, strlen(to_write));
 	// wanna do anything with that?
 	
 	return;//nah

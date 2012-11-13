@@ -185,7 +185,7 @@ int tcp_api_listen(tcp_node_t tcp_node, int socket){
 /* read on an open socket (RECEIVE in the RFC)
 return num bytes read or negative number on failure or 0 on eof */
 //int v read(int socket, unsigned char *buf, uint32 t nbyte);
-int tcp_api_read(tcp_node_t tcp_node, int socket, unsigned char *buffer, uint32_t nbyte){
+int tcp_api_read(tcp_node_t tcp_node, int socket, char *buffer, uint32_t nbyte){
 
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(connection == NULL)
@@ -210,17 +210,22 @@ int tcp_api_read(tcp_node_t tcp_node, int socket, unsigned char *buffer, uint32_
 		return -1; //<-- get correct error code
 	}		
 /*
-struct recv_window_chunk{
+struct memchunk{
 	void* data;
-	uint32_t offset;
-	uint32_t length;
+	int length;
 };*/
-	recv_window_chunk_t chunk = recv_window_get_next(tcp_connection_get_recv_window(connection), nbyte);
-	int read = (int)chunk->length;
-	memcpy(buffer, (chunk->data)+(chunk->offset), read); 
+	memchunk_t chunk = recv_window_get_next(tcp_connection_get_recv_window(connection), nbyte);
+	int read = nbyte;
+	if(chunk->length > nbyte){
+		puts("Error: Alex and Neil go debug tcp_api_read");
+		exit(-1);
+	}
+	if(chunk->length < nbyte)
+		read = chunk->length;
+	memcpy(buffer, (chunk->data), read); 
 	
 	//clean up
-	recv_window_chunk_destroy(&chunk);
+	memchunk_destroy(&chunk);
 	tcp_connection_api_unlock(connection);
 	
 	return read;

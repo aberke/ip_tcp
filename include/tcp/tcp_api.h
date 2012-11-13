@@ -54,7 +54,7 @@ void* tcp_api_accept_entry(void* args);
 /* read on an open socket (RECEIVE in the RFC)
 return num bytes read or negative number on failure or 0 on eof */
 //int v read(int socket, unsigned char *buf, uint32 t nbyte);
-int tcp_api_read(tcp_node_t tcp_node, int socket, unsigned char *buffer, uint32_t nbyte);
+int tcp_api_read(tcp_node_t tcp_node, int socket, char *buffer, uint32_t nbyte);
 void* tcp_api_read_entry(void* _args);
 
 
