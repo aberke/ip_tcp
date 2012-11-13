@@ -253,7 +253,7 @@ int ip_node_read(ip_node_t ip_node, char* packet, int packet_size, uint32_t loca
 		
 	if(bqueue_enqueue(ip_node->read_queue, tcp_packet) < 0){
 		ip_node->read_queue = NULL;
-		tcp_packet_data_destroy(tcp_packet);
+		tcp_packet_data_destroy(&tcp_packet);
 		return -1;
 	}
 
@@ -651,6 +651,8 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 	// check if send_to_vip local -- if so must just print
 	if(_is_local_ip(ip_node, send_to_vip)){
 		printf("We send a message to ourselves?  Look into how we should handle packet: %s\n", (char*)packet);
+		free(packet);
+		free(tcp_packet_data);
 		return;
 	}
 		
@@ -658,6 +660,8 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 	uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
 	if(next_hop_addr == -1){
 		printf("Cannot reach address %d.\n", send_to_vip);
+		free(packet);
+		free(tcp_packet_data);
 		return;
 	}
 
@@ -668,6 +672,8 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 	HASH_FIND(hh, ip_node->addressToInterface, &next_hop_addr, sizeof(uint32_t), address_keyed);
 	if(!address_keyed){
 		printf("Cannot reach address %d  -- TODO: MAKE SURE FIXED -- see _handle_user_command_send\n", send_to_vip);
+		free(packet);
+		free(tcp_packet_data);
 		return;
 		//continue;
 	}
@@ -675,6 +681,8 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 			
 	// wrap and send IP packet
 	ip_wrap_send_packet(packet, packet_size, TCP_DATA, send_from, send_to, next_hop_interface);	
+
+	free(packet);
 	free(tcp_packet_data);
 
 	print(("ip packet sent"), IP_PRINT);

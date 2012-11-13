@@ -7,20 +7,26 @@
 
 #define MAX_SEQNUM ((unsigned)-1)
 
-typedef struct recv_window* recv_window_t;
-
-struct recv_window_chunk{
+struct recv_chunk{
+	uint32_t seqnum;
 	void* data;
-	uint32_t offset;
-	uint32_t length;
+	int length;
 };
 
-typedef struct recv_window_chunk* recv_window_chunk_t;
-recv_window_chunk_t recv_window_chunk_init(void* data, uint32_t length);
-void recv_window_chunk_destroy(recv_window_chunk_t* rwc);
-void recv_window_chunk_destroy_total(recv_window_chunk_t* rwc, destructor_f destructor);
-void recv_window_chunk_destroy_free(recv_window_chunk_t* rwc);
+typedef struct recv_chunk* recv_chunk_t;
 
+recv_chunk_t recv_chunk_init(uint32_t seq, void* data, int l);
+
+// this destroys the data it was holding!!
+void recv_chunk_destroy(recv_chunk_t* rc);
+
+//typedef struct recv_window_chunk* recv_window_chunk_t;
+//recv_window_chunk_t recv_window_chunk_init(void* data, uint32_t length);
+//void recv_window_chunk_destroy(recv_window_chunk_t* rwc);
+//void recv_window_chunk_destroy_total(recv_window_chunk_t* rwc, destructor_f destructor);
+//void recv_window_chunk_destroy_free(recv_window_chunk_t* rwc);
+
+typedef struct recv_window* recv_window_t;
 recv_window_t recv_window_init(uint16_t window_size, uint32_t ISN);
 void recv_window_destroy(recv_window_t* recv_window);
 //FOR NEIL TO FILL IN PLEASEEE

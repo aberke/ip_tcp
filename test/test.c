@@ -405,6 +405,42 @@ void test_recv_window(){
 	recv_window_destroy(&rw);
 }
 
+void test_recv_window_1(){
+	recv_window_t rw = recv_window_init(100, 0);
+	memchunk_t got;
+
+	got = recv_window_get_next(rw, 10);
+	ASSERT(got==NULL);
+
+#define NUMBERS10 "0123456789"
+#define NUMBERS20 "012345678910111213141516171819"
+	
+	char* buffer1 = malloc(sizeof(char)*BUFFER_SIZE);
+	char* buffer2 = malloc(sizeof(char)*BUFFER_SIZE);
+	strcpy(buffer1, NUMBERS10);
+	strcpy(buffer2, NUMBERS20);
+	recv_window_receive(rw, buffer1, strlen(NUMBERS10), 1);
+	recv_window_receive(rw, buffer2, strlen(NUMBERS20), 1+strlen(NUMBERS10));
+	
+	got = recv_window_get_next(rw, strlen(NUMBERS10));
+	ASSERT(got!=NULL);
+
+	char* buffer = null_terminate(got->data, got->length);
+	
+	TEST_STR_EQ(buffer, NUMBERS10, "");
+	memchunk_destroy_total(&got, util_free);
+	free(buffer);
+	
+	got = recv_window_get_next(rw, strlen(NUMBERS20));
+	ASSERT(got!=NULL);
+
+	buffer = null_terminate(got->data, got->length);
+	TEST_STR_EQ(buffer, NUMBERS20, "");
+	memchunk_destroy_total(&got, util_free);
+	free(buffer);
+	
+	recv_window_destroy(&rw);
+}
 void test_recv_window_overlap(){
 	recv_window_t rw = recv_window_init(100, 0);
 	
@@ -855,9 +891,10 @@ int main(int argc, char** argv){
 	
 //	TEST(test_send_window);
 //	TEST(test_send_window_scale);
-
-	//TEST(test_recv_window);
-	TEST(test_recv_window_overlap);
+//
+//	TEST(test_recv_window);
+	TEST(test_recv_window_1);
+//	TEST(test_recv_window_overlap);
 
 	//TEST(test_tcp_states);	
 

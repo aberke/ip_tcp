@@ -104,7 +104,7 @@ send_window_t send_window_init(double timeout, int window_size, int send_size, i
 void send_window_destroy(send_window_t* send_window){
 	ext_array_destroy(&((*send_window)->data_queue));
 
-	plain_list_destroy_total(&((*send_window)->sent_list), send_window_chunk_destroy_free);
+	plain_list_destroy_total(&((*send_window)->sent_list), (destructor_f)send_window_chunk_destroy_free);
 	queue_destroy(&((*send_window)->timed_out_chunks));
 	pthread_mutex_destroy(&((*send_window)->mutex));
 

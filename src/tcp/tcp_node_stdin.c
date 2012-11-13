@@ -35,7 +35,6 @@ void sockets_cmd(const char *line, tcp_node_t tcp_node){
 	tcp_node_print(tcp_node);
 }
 
-
 void v_socket(const char *line, tcp_node_t tcp_node){
 	int ret = tcp_api_socket(tcp_node);	
 	printf("socket call returned value %d\n", ret);
@@ -189,20 +188,18 @@ void connect_cmd(const char *line, tcp_node_t tcp_node){
 	args->function_call = "v_connect()";
 	
 	tcp_node_thread(tcp_node, tcp_api_connect_entry, args);
-
-
-
 }
+
 // allows us to call v_connect after calling our own v_socket rather than using driver connect_cmd
 // expects: v_connect [socket] [ip address of remote connection] [remote port]
 void v_connect(const char *line, tcp_node_t tcp_node){
-	
+	/*v_connect 0 10.10.168.73 13*/
 	struct in_addr* addr = malloc(sizeof(struct in_addr));
 	char addr_buffer[INET_ADDRSTRLEN];
 	int socket, port, ret;
 	
 	ret = sscanf(line, "v_connect %d %s %d", &socket, addr_buffer, &port);
-	if(ret !=3){
+	if(ret != 3){
 		fprintf(stderr, "syntax error (usage: v_connect [socket] [ip address] [port])\n");
 		return;
 	}	
@@ -257,6 +254,7 @@ void recv_cmd(const char* line, tcp_node_t tcp_node){
 	args->buffer = to_read;
 	args->function_call = "v_read";
 	args->boolean = 0;
+	args->num = num_bytes;
 		
 	if(block)
 		args->boolean = 1;
@@ -476,7 +474,7 @@ void sendfile_cmd(const char* line, tcp_node_t tcp_node){
 
 	char input_line[BUFFER_SIZE];
 	while(fgets(input_line, BUFFER_SIZE-1, f)){
-		tcp_connection_send_data(connection, input_line, strlen(input_line));
+		tcp_connection_send_data(connection, (unsigned char*)input_line, strlen(input_line));
 	}
 
 	fclose(f);
@@ -547,6 +545,7 @@ void numbers(const char* line, tcp_node_t tcp_node){
 	
 	return;//nah
 }
+
 /* Driver specs: window socket Print the socket’s send / receive window size */
 void window_cmd(const char* line, tcp_node_t tcp_node){
 	int socket;

@@ -8,7 +8,7 @@ TCP_DIR=tcp
 UTIL_DIR=util
 
 CC=gcc
-CFLAGS=-g -Wall
+CFLAGS=-ggdb -Wall
 
 
 

@@ -16,8 +16,8 @@
 #define ACCEPT_QUEUE_DEFAULT_SIZE 10
 
 #define DEFAULT_TIMEOUT 12.0
-#define DEFAULT_WINDOW_SIZE ((uint16_t)100)
-#define DEFAULT_CHUNK_SIZE 100
+#define DEFAULT_WINDOW_SIZE ((uint16_t)10000)
+#define DEFAULT_CHUNK_SIZE 10000
 #define RAND_ISN() rand()
 
 /*// a tcp_connection in the listen state queues this triple on its accept_queue when
@@ -262,6 +262,6 @@ int tcp_utils_validate_checksum(void* packet, uint16_t total_length, uint32_t sr
 
 
 //alex wrote for debugging: prints packet - see tcp_wrap_packet_send
-void view_packet(struct tcphdr* header, void* data);
+void view_packet(struct tcphdr* header, void* data, int length);
 
 #endif

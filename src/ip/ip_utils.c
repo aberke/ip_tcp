@@ -26,24 +26,14 @@ tcp_packet_data_t tcp_packet_data_init(char* packet_data, int packet_data_size, 
 	tcp_packet->remote_virt_ip = remote_virt_ip;
 	tcp_packet->packet_size = packet_data_size;
 	tcp_packet->packet = packet_data;
-
-	/* did we talk about this ? how is this not seg-faulting, because it's trying
-		to copy MTU bytes from packet_data which is definitely NOT guaranteed to 
-		be that long?? */ //<-- want to write a quick min function?
-	/*
-	int copy_over = packet_data_size;
-	if(MTU < packet_data_size)
-		copy_over = MTU;
-			
-	memcpy(tcp_packet->packet, packet_data, copy_over);
-	*/
 	
 	return tcp_packet;
 }
 
-void tcp_packet_data_destroy(tcp_packet_data_t packet_data){
-	free(packet_data->packet);
-	free(packet_data);
+void tcp_packet_data_destroy(tcp_packet_data_t* packet_data){
+	free((*packet_data)->packet);
+	free(*packet_data);
+	*packet_data = NULL;
 }
 
 void tcp_packet_print(tcp_packet_data_t packet_data){

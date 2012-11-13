@@ -9,14 +9,6 @@
 
 #define QUEUE_CAPACITY 1024
 
-struct recv_chunk{
-	uint32_t seqnum;
-	void* data;
-	int length;
-};
-
-typedef struct recv_chunk* recv_chunk_t;
-	
 recv_chunk_t recv_chunk_init(uint32_t seq, void* data, int l){
 	recv_chunk_t rc = malloc(sizeof(struct recv_chunk));
 	rc->seqnum = seq;
@@ -95,7 +87,7 @@ static int _validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t
    	*/
 	
 	if( length == 0 ){
-		if( recv_window->size == 0){
+		if( recv_window->available_size == 0){
 			if( seqnum==recv_window->left ) 
 				return 0;
 			else 
@@ -110,7 +102,7 @@ static int _validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t
 		}
 	}
 	else{ /* length > 0 */
-		if(recv_window->size == 0)
+		if(recv_window->available_size == 0)
 			return -1;
 
 		else if (BETWEEN_WRAP(seqnum, window_min, window_max)) 
@@ -169,7 +161,7 @@ void recv_window_receive_synchronized(recv_window_t recv_window, void* data, uin
 		   free(chunk);   // good
 	*/
  	if(offset > 0){
- 		void* new_data = malloc(sizeof(to_write));
+ 		void* new_data = malloc(to_write);
  		memcpy(new_data, data+offset, to_write);
  		free(data);
  		data = new_data;
@@ -181,6 +173,7 @@ void recv_window_receive_synchronized(recv_window_t recv_window, void* data, uin
 		to_write -= already_read_overlap;
 
 		ext_array_push(recv_window->data_queue, data+already_read_overlap, to_write);
+		free(data);
 
 		recv_window->read_left      += to_write;
 		recv_window->available_size -= to_write;
@@ -216,6 +209,7 @@ void recv_window_receive_synchronized(recv_window_t recv_window, void* data, uin
 			}
 			
 			/* destroy that chunk */
+			free(next_chunk->data);
 			recv_chunk_destroy(&next_chunk);
 		}
 	}

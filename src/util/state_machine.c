@@ -14,8 +14,6 @@
 // debugging
 #include "tcp_states.h"
 
-static void _print(state_machine_t machine);
-
 /* 
 transitioning
 	joins an action with a next state 
