@@ -464,6 +464,8 @@ void sendfile_cmd(const char* line, tcp_node_t tcp_node){
 	}
 
 	char input_line[BUFFER_SIZE];
+	int written;	
+
 	while(fgets(input_line, BUFFER_SIZE-1, f)){
 		tcp_connection_send_data(connection, (unsigned char*)input_line, strlen(input_line));
 	}
