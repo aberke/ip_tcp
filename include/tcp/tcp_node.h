@@ -127,7 +127,7 @@ void tcp_node_refuse_connection(tcp_node_t tcp_node, tcp_packet_data_t packet);
 // calls on the listening_connection to dequeue its triple and node creates new connection with information
 // returned int is the new socket assigned to that new connection.  The connection finishes its handshake to get to
 // 	established state
-struct tcp_connection* tcp_node_connection_accept(tcp_node_t tcp_node, struct tcp_connection* listening_connection, struct in_addr *addr);
+struct tcp_connection* tcp_node_connection_accept(tcp_node_t tcp_node, struct tcp_connection* listening_connection);
 
 /*********** For use by tcp_node to reach ip_node items ****************/
 // returns ip address of remote side of passed in remote ip

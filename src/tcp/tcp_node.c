@@ -285,7 +285,7 @@ void tcp_node_destroy(tcp_node_t tcp_node){
      returned int is the new socket assigned to that new connection.  
    - The connection finishes its handshake to get to established state
    - Fills addr with ip address information from dequeued triple*/
-tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_connection, struct in_addr *addr){
+tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_connection){
 	
 	// dequeue from accept_queue of listening connection to get triple of information about new connection
 	/* THIS CALL IS BLOCKING  -- since the accept queue is a bqueue_t */
@@ -293,8 +293,6 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 	if(data == NULL)
 		return NULL; // means there was an error in dequeueing -- was accept_queue destroyed?
 	
-	// fill struct in_addr
-	addr->s_addr = accept_queue_data_get_remote_ip(data);
 	
 	// create new connection which will be the accepted connection 
 	// -- function will insert it into kernal array and socket hashmap
@@ -327,8 +325,13 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 // returns NULL if reached limit MAX_FILE_DESCRIPTORS
 tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 	
-	if(tcp_node->num_connections == tcp_node->connection_array_size)
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
+	
+	if(tcp_node->num_connections == tcp_node->connection_array_size){
+		pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 		return NULL;	// reached limit MAX_FILE_DESCRIPTORS
+	}
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 	
 	int socket = tcp_node_next_virt_socket(tcp_node);
 	if(socket<0) // This is from when we were using bqueue rather than your queue but your queue returns NULL when nothing to dequeue so this doesn't make sense

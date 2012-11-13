@@ -23,7 +23,6 @@ void tcp_api_args_destroy(tcp_api_args_t* args){
 	/* first join your thread. this will block
 		if you're not done yet */
 	pthread_join((*args)->thread, NULL);
-	puts("tcp_api_args_destroy 0");
 	/* For this not to go wrong we had better set args->addr to NULL at first.  See function init() */
 	if((*args)->addr != NULL)
 		free((*args)->addr);
@@ -31,7 +30,6 @@ void tcp_api_args_destroy(tcp_api_args_t* args){
 		free((*args)->buffer);
 	free(*args);
 	*args = NULL;
-	puts("tcp_api_args_destroy 1");
 }
 
 //// these verify that the desired field is present and valid in arguments
@@ -150,18 +148,13 @@ int tcp_api_bind(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t 
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(connection == NULL)
 		return -EBADF; 	//socket is not a valid descriptor
-	/* Lock up api on this connection -- BLOCK  -- really we don't want to 
-		be able to call this if another api call in process */
-	///TODO
+	
+	/* We don't call this in a thread, so no need to block */
 	
 	if(tcp_connection_get_local_port(connection)){
-		//int port = tcp_connection_get_local_port(connection);
 		return -EINVAL; 	// The socket is already bound to an address.
 	}
 	tcp_node_assign_port(tcp_node, connection, port);
-	/* All done so unlock */
-	//TODO
-	
 	return 0;
 }
 
@@ -279,7 +272,7 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 	 new socket is the socket assigned to that new connection.  This connection will then go on to finish
 	 the three-way handshake to reach ESTABLISHED state */
 	/* THIS CALL IS BLOCKING -- because the accept_queue is a bqueue -- call returns when accept_data_t dequeued */
-	tcp_connection_t new_connection = tcp_node_connection_accept(tcp_node, listening_connection, addr);
+	tcp_connection_t new_connection = tcp_node_connection_accept(tcp_node, listening_connection);
 	if(new_connection == NULL){
 		// NULL is returned when we've reached max number of file descriptors
 		tcp_connection_api_unlock(listening_connection);
@@ -293,6 +286,8 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 	if(tcp_connection_state_machine_transition(new_connection, receiveSYN)<0)
 		CRASH_AND_BURN("Alex and Neil go debug: tcp_connection_state_machine_transition(new_connection, receiveSYN)) returned negative value in tcp_node_connection_accept");
 	
+	//now set addr appropriately
+	addr->s_addr = tcp_connection_get_remote_ip(new_connection);
 	
 	/* Now wait until connection ESTABLISHED 
 		when established connection should call tcp_api_accept_help which will signal the accept_cond */
@@ -318,10 +313,10 @@ void* tcp_api_accept_entry(void* _args){
 	// verifies that these fields are valid (node != NULL, socket >=0, ...) 
 	_verify_node(args);
 	_verify_socket(args);
-	_verify_addr(args);
-
+	
+	struct in_addr addr;
 	// blocks until gets new connection or bad value
-	int ret = tcp_api_accept(args->node, args->socket, args->addr);
+	int ret = tcp_api_accept(args->node, args->socket, &addr);
 
 	_return(args, ret);
 	return NULL;
@@ -341,7 +336,6 @@ void* tcp_driver_accept_entry(void* _args){
 	/* verifying fields */
 	_verify_node(args);
 	_verify_socket(args);
-	_verify_addr(args);
 	
 	tcp_node_t tcp_node = args->node;
 		
@@ -354,15 +348,10 @@ void* tcp_driver_accept_entry(void* _args){
 	
 	int ret;
 	while(tcp_node_running(args->node)){
-		/* pack the args 
-		tcp_api_args_t t_args = tcp_api_args_init();
-		t_args->node		 = args->node;
-		t_args->socket  	 = args->socket;
-		t_args->function_call = "v_accept()";
-		t_args->addr 		 = args->addr; //reusing address we called bind with but whatever	
-		*/
+		
+		struct in_addr addr;
 		// blocks until gets new connection or bad value
-		ret = tcp_api_accept(args->node, args->socket, args->addr);
+		ret = tcp_api_accept(args->node, args->socket, &addr);
 		if(!(tcp_node_running(args->node))){
 			ret = 0;
 			break; //we might have broken out with an error value because tcp_node started destroying stuff already

@@ -92,22 +92,20 @@ void accept_cmd(const char *line, tcp_node_t tcp_node){
 	}
 	// create new socket
 	if((socket = tcp_api_socket(tcp_node))<0){
-		printf("Error: v_socket() returned: %d\n", strerror(-ret));
+		printf("Error: v_socket() returned: %s\n", strerror(-socket));
 		return;
 	}
 	// now bind
-	struct in_addr* addr = malloc(sizeof(struct in_addr));	
-	ret = tcp_api_bind(tcp_node, socket, *addr, port);
+	struct in_addr addr;	
+	ret = tcp_api_bind(tcp_node, socket, addr, port);
 	if(ret < 0){
-		printf("Error: v_bind returned: %d\n", strerror(-ret));
-		free(addr);
+		printf("Error: v_bind returned: %s\n", strerror(-ret));
 		return;
 	}
 	// now listen
 	ret = tcp_api_listen(tcp_node, socket);	
 	if(ret < 0){
-		printf("Error: v_listen returned: %d\n", strerror(-ret));
-		free(addr);	
+		printf("Error: v_listen returned: %s\n", strerror(-ret));
 		return;
 	}
 	// now accept in a loop - keep accepting	
@@ -116,7 +114,6 @@ void accept_cmd(const char *line, tcp_node_t tcp_node){
 	args->node		 = tcp_node;
 	args->socket  	 = socket;
 	args->function_call = "v_accept()";
-	args->addr 		 = addr; //reusing address we called bind with but whatever	
 
 	/* So we need to call tcp_api_accept in a loop without blocking.... so here's my solution that I've implemented:
 		We call thread the call tcp_driver_accept_entry which then goes to call tcp_api_accept_entry in a loop.
@@ -686,6 +683,7 @@ void* _handle_tcp_node_stdin(void* node){
 					
 					tcp_api_args_destroy(&args);
 					plain_list_remove(list, el);
+					puts("2");
 				}			
 			PLAIN_LIST_ITER_DONE(list);
 
