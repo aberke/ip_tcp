@@ -491,7 +491,7 @@ int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int p
 	
 	if(port<=0){
 		port = tcp_node_next_port(tcp_node);
-		printf("port = tcp_node_next_port(tcp_node) = %d\n", port);
+		print(("port = tcp_node_next_port(tcp_node) = %d\n", port), PORT_PRINT);
 	}
 		
 	if(tcp_node_port_unused(tcp_node, port)<0)
@@ -647,28 +647,28 @@ void tcp_node_start(tcp_node_t tcp_node){
 	print(("joining link interface thread"), CLOSING_PRINT);
 	rc = pthread_join(ip_link_interface_thread, NULL);
 	if (rc) {
-		printf("ERROR; return code from pthread_join() is %d\n", rc);
+		print(("ERROR; return code from pthread_join() is %d\n", rc), CLOSING_PRINT);
 		exit(-1);
 	}
 
 	print(("joining send_thread"), CLOSING_PRINT);
 	rc = pthread_join(ip_send_thread, NULL);
 	if (rc) {
-		printf("ERROR; return code from pthread_join() is %d\n", rc);
+		print(("ERROR; return code from pthread_join() is %d\n", rc), CLOSING_PRINT);
 		exit(-1);
 	}
 
 	print(("joining ip_command thread"), CLOSING_PRINT);
 	rc = pthread_join(ip_command_thread, NULL);
 	if (rc) {
-		printf("ERROR; return code from pthread_join() is %d\n", rc);
+		print(("ERROR; return code from pthread_join() is %d\n", rc), CLOSING_PRINT);
 		exit(-1);
 	}
 
 	print(("stdin thread"), CLOSING_PRINT);
 	rc = pthread_cancel(tcp_stdin_thread);
 	if (rc) {
-		printf("ERROR; return code from pthread_join() is %d\n", rc);
+		print(("ERROR; return code from pthread_join() is %d\n", rc), CLOSING_PRINT);
 		exit(-1);
 	}
 
