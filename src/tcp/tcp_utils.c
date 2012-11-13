@@ -222,19 +222,19 @@ int tcp_utils_validate_checksum(void* packet, uint16_t total_length, uint32_t sr
 }
 //alex wrote for debugging: prints packet - see tcp_wrap_packet_send
 void view_packet(struct tcphdr* header, void* data, int data_length){
-	puts("[packet]:");
-	printf("\tsource_port: %u,  dest_port: %u\n", tcp_source_port(header), tcp_dest_port(header));
-	printf("\ttcp_seq: %u,  tcp_ack: %u\n", tcp_seqnum(header),tcp_ack(header));
-	printf("\toffset in bytes: %i\n", tcp_offset_in_bytes(header));
-	printf("\tsyn_bit:%i, fin_bit:%i, ack_bit:%i, rst_bit:%i, psh_bit:%i, urg_bit:%i\n", 
-		tcp_syn_bit(header), tcp_fin_bit(header), tcp_ack_bit(header), tcp_rst_bit(header), tcp_psh_bit(header), tcp_urg_bit(header));
-	printf("\twindow_size: %u\n", tcp_window_size(header));
+	print(("[packet]:"), PACKET_PRINT);
+	print(("\tsource_port: %u,  dest_port: %u\n", tcp_source_port(header), tcp_dest_port(header)), PACKET_PRINT);
+	print(("\ttcp_seq: %u,  tcp_ack: %u\n", tcp_seqnum(header),tcp_ack(header)), PACKET_PRINT);
+	print(("\toffset in bytes: %i\n", tcp_offset_in_bytes(header)), PACKET_PRINT);
+	print(("\tsyn_bit:%i, fin_bit:%i, ack_bit:%i, rst_bit:%i, psh_bit:%i, urg_bit:%i\n", 
+		tcp_syn_bit(header), tcp_fin_bit(header), tcp_ack_bit(header), tcp_rst_bit(header), tcp_psh_bit(header), tcp_urg_bit(header)), PACKET_PRINT);
+	print(("\twindow_size: %u\n", tcp_window_size(header)), PACKET_PRINT);
 
 	char buffer[data_length+1];
 	memcpy(buffer, data, data_length);
 	buffer[data_length] = '\0';
 
-	printf("\tdata: %s\n", buffer);
+	print(("\tdata: %s\n", buffer), PACKET_PRINT);
 }
 
 // a tcp_connection owns a local and remote tcp_socket_address.  This pair defines the connection

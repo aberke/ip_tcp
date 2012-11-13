@@ -269,7 +269,6 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	state_e connection_state = state_machine_get_state(connection->state_machine);
 	
 	// prints packet -- defined by alex in tcp_utils
-	puts("Received packet:");
 	view_packet((struct tcphdr*)tcp_packet, tcp_packet+20, tcp_packet_data->packet_size-20); //<-- (+20) my guess for data offset
 	
 	//TODO: FIGURE OUT WHEN ITS NOT APPROPRIATE TO RESET REMOTE ADDRESSES -- we don't want our connection sabotaged 
@@ -296,7 +295,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		but what does the seqnum even mean if the ACKs haven't been synchronized? */
 	memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
 	if(data){ 
-		print_non_null_terminated(data->data, data->length);
+		//print_non_null_terminated(data->data, data->length);
 	
 		recv_window_receive(connection->receive_window, data->data, data->length, tcp_seqnum(tcp_packet));
 	
@@ -316,7 +315,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	
 	/* ack data if you're in a position to do so */
 	if(tcp_ack_bit(tcp_packet)){
-		puts("received packet with ack_bit set");
+		//puts("received packet with ack_bit set");
  		if(connection->send_window)
 			send_window_ack(connection->send_window, tcp_ack(tcp_packet));
 				
@@ -466,7 +465,7 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 		tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
 	
 	//alex wrote for debugging: PRINTS PACKET
-	puts("sending packet:");
+	//puts("sending packet:");
 	view_packet(header, data, data_len); // <-- defined in tcp_utils
 	
 	uint32_t total_length = tcp_offset_in_bytes(header) + data_len;
