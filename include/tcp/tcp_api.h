@@ -37,6 +37,12 @@ returns 0 on success or a negative number on failure */
 int tcp_api_connect(struct tcp_node* node, int socket, struct in_addr* addr, uint16_t port);
 void* tcp_api_connect_entry(void* args);
 
+/* write on an open socket (SEND in the RFC)
+return num bytes written or negative number on failure */
+int tcp_api_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint32_t num_bytes);
+
+void* tcp_api_sendfile_entry(void* _args);
+
 int tcp_api_socket(struct tcp_node* node);
 /* binds a socket to a port
 always bind to all interfaces - which means addr is unused.

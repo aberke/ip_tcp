@@ -189,7 +189,6 @@ void connect_cmd(const char *line, tcp_node_t tcp_node){
 	
 	tcp_node_thread(tcp_node, tcp_api_connect_entry, args);
 }
-
 // allows us to call v_connect after calling our own v_socket rather than using driver connect_cmd
 // expects: v_connect [socket] [ip address of remote connection] [remote port]
 void v_connect(const char *line, tcp_node_t tcp_node){
@@ -263,18 +262,6 @@ void recv_cmd(const char* line, tcp_node_t tcp_node){
 	tcp_node_thread(tcp_node, tcp_api_read_entry, args);
 }
 
-/* write on an open socket (SEND in the RFC)
-return num bytes written or negative number on failure */
-int v_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write, uint32_t num_bytes){
-
-	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
-	if(!connection)	
-		return -EBADF;
-	
-	int ret;
-	ret = tcp_connection_send_data(connection, to_write, num_bytes);
-	return ret;
-}
 /*send/s/w socket data Send a string on a socket. */
 void send_cmd(const char* line, tcp_node_t tcp_node){
 
@@ -294,7 +281,7 @@ void send_cmd(const char* line, tcp_node_t tcp_node){
 		return;
 	}
 	
-	ret = v_write(tcp_node, socket, (const unsigned char*)data, strlen(data)-1); // strlen()-1: stripping newline
+	ret = tcp_api_write(tcp_node, socket, (const unsigned char*)data, strlen(data)-1); // strlen()-1: stripping newline
 	if (ret < 0){
 		fprintf(stderr, "v_write() error: %s\n", strerror(-ret));
 		return;
@@ -313,7 +300,7 @@ void vv_write(const char* line, tcp_node_t tcp_node){
 		return;
 	}
 
-	int ret = v_write(tcp_node, socket, (unsigned char*)to_write, num_bytes);
+	int ret = tcp_api_write(tcp_node, socket, (unsigned char*)to_write, num_bytes);
 	printf("v_write returned value: %d\n", ret);
 
 	free(to_write);
@@ -440,35 +427,39 @@ sendfile_cmd
 	open the file and then sends it off 
 */
 void sendfile_cmd(const char* line, tcp_node_t tcp_node){
-	int ret, socket;
-	char filename_buffer[BUFFER_SIZE];
+	int ret, socket, port;
+	char* filename_buffer = (char*)malloc(sizeof(char)*BUFFER_LEN);
+
+	struct in_addr* addr = malloc(sizeof(struct in_addr));
+	char addr_buffer[INET_ADDRSTRLEN];
 	
-	//TODO: THIS ISN'T RIGHT 
-	//should be: sendﬁle f ilename ip port
-	ret = sscanf(line, "sendfile %d %s", &socket, filename_buffer);
-	if(ret != 2){
-		fprintf(stderr, "syntax error (usage: sendfile [socket] [filename])\n");
+	//TODO: ALEX IS FIXING
+	//should be: sendﬁle filename ip port
+	ret = sscanf(line, "sendfile %s %s %d", filename_buffer, addr_buffer, &port);
+	if(ret != 3){
+		fprintf(stderr, "syntax error (usage: sendfile [filename] [ip] [port])\n");
+		return;
+	}		
+	//convert string ip address to real ip address
+	if(inet_pton(AF_INET, addr_buffer, addr) <= 0){ // IPv4
+		fprintf(stderr, "syntax error - could not parse ip address (usage: connect [remote ip address] [remote port])\n");
+		return;
+	}
+	// first initialize new socket that will do the connecting
+	if((socket = tcp_api_socket(tcp_node))<0){
+		printf("Error: v_socket() returned value %d\n", socket);
 		return;
 	}
 
-	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
-	if(!connection){
-		fprintf(stderr, "Error: %s", strerror(EBADF));
-		return;
-	}	
-
-	FILE* f = fopen(filename_buffer, "r");
-	if(!f){
-		fprintf(stderr, "Unable to open given file: %s\n", filename_buffer);
-		return;
-	}
-
-	char input_line[BUFFER_SIZE];
-	while(fgets(input_line, BUFFER_SIZE-1, f)){
-		tcp_connection_send_data(connection, (unsigned char*)input_line, strlen(input_line));
-	}
-
-	fclose(f);
+	tcp_api_args_t args = tcp_api_args_init();
+	args->node = tcp_node;
+	args->socket = socket;
+	args->addr = addr;
+	args->buffer = file_name_buffer
+	args->port = port;
+	args->function_call = "sendfile()";
+	
+	tcp_node_thread(tcp_node, tcp_api_sendfile_entry, args);	
 	return;
 }
 
@@ -568,7 +559,6 @@ struct {
   void (*handler)(const char *, tcp_node_t);
 } cmd_table[] = {
   {"help", help_cmd},
-  {"send", send_cmd},
   {"interfaces", interfaces_cmd},
   {"li", interfaces_cmd},
   {"routes", routes_cmd},
@@ -580,16 +570,12 @@ struct {
   {"sockets", sockets_cmd}, 
   {"ls", sockets_cmd}, 
   {"window", window_cmd},
-  /*{"accept", accept_cmd},
-  {"a", accept_cmd}, 
-  {"connect", connect_cmd},
-  {"c", connect_cmd}, */
   {"recv", recv_cmd}, // calls tcp_api_read
   {"r", recv_cmd},	// calls tcp_api_read
-  {"sendfile", sendfile_cmd},
-  /*{"send", send_cmd},
+  {"send", send_cmd},
   {"s", send_cmd},
-  {"w", send_cmd},*/
+  {"w", send_cmd},
+  {"sendfile", sendfile_cmd},
 
   /*{"recvfile", recvfile_cmd},
   {"shutdown", shutdown_cmd},
@@ -663,7 +649,7 @@ void* _handle_tcp_node_stdin(void* node){
 				if(args->done){
 					if(args->result < 0){	
 						char* error_string = strerror(-(args->result));
-						printf("Error: %s\n", error_string);
+						printf("Error: %s returned %s\n", args->function_call, error_string);
 					}
 					else if(args->result==0)
 						printf("%s on socket %d successful.\n", args->function_call, args->socket);
