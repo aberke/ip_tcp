@@ -250,6 +250,11 @@ void* tcp_api_read_entry(void* _args){
 	/* we'll use the macro thread_return in order to return a value */
 	
 	int ret = tcp_api_read(args->node, args->socket, (char*)args->buffer, args->num);
+	if(ret < 0){
+		_return(args, ret);
+		return NULL;
+	}
+
 	if(args->boolean){
 		// block until read in args->num bytes
 		int read;	
