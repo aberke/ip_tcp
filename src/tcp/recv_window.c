@@ -238,7 +238,12 @@ recv_window_get_next
 		NULL if there is nothing
 */
 memchunk_t recv_window_get_next_synchronized(recv_window_t recv_window, int bytes){
-	return ext_array_peel(recv_window->data_queue, bytes); 
+	memchunk_t got = ext_array_peel(recv_window->data_queue, bytes); 
+	if(!got)
+		return NULL;
+	
+	recv_window->available_size+=got->length;
+	return got;
 }
 
 memchunk_t recv_window_get_next(recv_window_t recv_window, int bytes){

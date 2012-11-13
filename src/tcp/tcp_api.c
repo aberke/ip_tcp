@@ -261,6 +261,7 @@ void* tcp_api_read_entry(void* _args){
 	//char to_read[args->num + 1];
 
 	int ret = tcp_api_read(args->node, args->socket, to_read, args->num);	
+
 	if(args->boolean){
 		// block until read in args->num bytes
 		int read = ret;	

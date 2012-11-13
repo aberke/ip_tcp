@@ -438,6 +438,9 @@ void test_recv_window_1(){
 	TEST_STR_EQ(buffer, NUMBERS20, "");
 	memchunk_destroy_total(&got, util_free);
 	free(buffer);
+
+	int size = recv_window_get_size(rw);
+	TEST_EQ(size, 100, "");
 	
 	recv_window_destroy(&rw);
 }

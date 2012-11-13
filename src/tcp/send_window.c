@@ -112,7 +112,7 @@ void send_window_destroy(send_window_t* send_window){
 	*send_window = NULL;
 }
 
-void send_window_set_window_size(send_window_t send_window, uint32_t size){
+void send_window_set_size(send_window_t send_window, uint32_t size){
 	pthread_mutex_lock(&(send_window->mutex));
 	send_window->size = size;
 	pthread_mutex_unlock(&(send_window->mutex));

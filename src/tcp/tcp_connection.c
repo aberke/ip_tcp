@@ -308,6 +308,10 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		memchunk_destroy(&data);
 	}	
 
+	/* lets get the window size first */
+	if(connection->send_window)
+		send_window_set_size(connection->send_window, tcp_window_size(tcp_packet));
+
 	/* now check the SYN bit */
 	if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
 		tcp_connection_handle_syn_ack(connection, tcp_packet_data);	
@@ -632,6 +636,7 @@ void *_handle_read_send(void *tcpconnection){
 					connection->syn_count = connection->syn_count+1;
 				}
 			}
+
 		}
 
 
