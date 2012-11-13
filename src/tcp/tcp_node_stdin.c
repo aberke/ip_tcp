@@ -286,7 +286,7 @@ void send_cmd(const char* line, tcp_node_t tcp_node){
 		fprintf(stderr, "v_write() error: %s\n", strerror(-ret));
 		return;
 	}
-	printf("v_write() on %d bytes returned %d\n", strlen(data)-1, ret);
+	printf("v_write() on %d bytes returned %d\n", (int)(strlen(data)-1), ret);
 }
 
 void vv_write(const char* line, tcp_node_t tcp_node){

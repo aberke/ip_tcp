@@ -225,8 +225,8 @@ struct memchunk* tcp_unwrap_data(void* packet, int length);
 #define tcp_set_seq(header, seq) ((((struct tcphdr*)header)->th_seq) = ((uint32_t)htonl(seq)))
 #define tcp_set_offset(header) ((((struct tcphdr*)header)->th_off) = NO_OPTIONS_HEADER_LENGTH)
 #define tcp_set_checksum(header, sum) ((((struct tcphdr*)header)->th_sum) = sum)
-#define tcp_set_dest_port(header, port) ((((struct tcphdr*)header)->th_dport) = port)
-#define tcp_set_source_port(header, port) ((((struct tcphdr*)header)->th_sport) = port)
+#define tcp_set_dest_port(header, port) ((((struct tcphdr*)header)->th_dport) = htons(port))
+#define tcp_set_source_port(header, port) ((((struct tcphdr*)header)->th_sport) = htons(port))
 
 #ifdef TCP_LINUX_VERSION //instead of bitpacking lets just get/set
 	#define tcp_set_fin_bit(header) (((struct tcphdr*)header)->fin = 1) // set the fin bit to 1
@@ -245,7 +245,7 @@ struct memchunk* tcp_unwrap_data(void* packet, int length);
 	#define tcp_set_urg_bit(header) ((((struct tcphdr*)header)->th_flags) |= (1 << URG_BIT)) // set the urg bit to 1
 #endif
 
-struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_port, int data_size);
+struct tcphdr* tcp_header_init(int data_size);
 
 // takes in data and wraps data in header with correct addresses.  
 // frees parameter data and mallocs new packet  -- sets data to point to new packet

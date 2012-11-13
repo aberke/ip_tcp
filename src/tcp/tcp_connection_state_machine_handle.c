@@ -60,16 +60,16 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 		packet that made the state transition call this function */	// <-- Thanks a lot for that comment!! :)
 	connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, connection->last_seq_received);
 
-	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0);
+	struct tcphdr* header = tcp_header_init(0);
 
+	/* SYN */
 	tcp_set_syn_bit(header);
-	tcp_set_ack_bit(header);
 
-	tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
-	tcp_set_seq(header, ISN); 
-	connection->last_seq_sent = ISN;
+	/* SEQ */
+	tcp_set_seq(header, send_window_get_next_seq(connection->send_window)); 
+	connection->last_seq_sent = send_window_get_next_seq(connection->send_window);
 
-	tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
+	tcp_set_window_size(header, recv_window_get_size(connection->receive_window));
 
 	tcp_wrap_packet_send(connection, header, NULL, 0);
 
@@ -94,13 +94,13 @@ int tcp_connection_send_syn(tcp_connection_t connection){
 	//Note: Window already initialized with connection->last_seq_sent when we transitioned from CLOSED_to_SYN_SENT
 
 	/* now init the packet */
-	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0);
+	struct tcphdr* header = tcp_header_init(0);
 	
-	/* fill the syn, and set the seqnum */
+	/* SYN */
 	tcp_set_syn_bit(header);
+
+	/* SEQ */
 	tcp_set_seq(header, connection->last_seq_sent);
-	//tcp_settcp_set_window_size(header, );
-	tcp_utils_add_checksum(header, sizeof(*header), connection->local_addr.virt_ip, connection->remote_addr.virt_ip, TCP_DATA);
 	
 	// set time of when we're sending off syn
 	gettimeofday(&(connection->syn_timer), NULL);
@@ -150,12 +150,13 @@ int tcp_connection_LISTEN_to_SYN_SENT(tcp_connection_t connection){
 	uint32_t ISN = RAND_ISN();
 	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
 	
-	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0);
+	struct tcphdr* header = tcp_header_init(0);
 
+	/* SYN */
 	tcp_set_syn_bit(header);
-	tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
-	tcp_set_seq(header, ISN);
-	tcp_set_ack(header, connection->last_seq_received);
+
+	/* SEQ */
+	tcp_set_seq(header, send_window_get_next_seq(connection->send_window));
 
 	tcp_wrap_packet_send(connection, header, NULL, 0);
 	
@@ -176,16 +177,13 @@ int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection){
 	// again, last_seq_received will have been set by the packet that triggered this transition 
 	connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, connection->last_seq_received);
 
-	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0); 
+	struct tcphdr* header = tcp_header_init(0); 
 											
-	// should have been set by the last person who sent the
-	// the first syn
+	/* SEQ */
 	tcp_set_seq(header, connection->last_seq_sent);
-	tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
-	tcp_set_window_size(header, recv_window_get_size(connection->receive_window));
-	
+
+	/* SYN */
 	tcp_set_syn_bit(header);
-	tcp_set_ack_bit(header);
 	
 	tcp_wrap_packet_send(connection, header, NULL, 0);
 
@@ -204,16 +202,11 @@ int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
 		
 	connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, connection->last_seq_received);
 	
-	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port,0);
+	struct tcphdr* header = tcp_header_init(0);
 
-	// load it up!
-	tcp_set_seq(header, connection->last_seq_sent + 1);
-	tcp_set_ack_bit(header);
-	tcp_set_ack(header, ((connection->last_seq_received)+1));
+	/* SEQ */
+	tcp_set_seq(header, send_window_get_next_seq(connection->send_window));
 
-	// window size?
-	tcp_set_window_size(header, recv_window_get_size(connection->receive_window));
-		
 	// send it off 
 	tcp_wrap_packet_send(connection, header, NULL, 0);
 	
