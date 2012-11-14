@@ -55,6 +55,10 @@ returns 0 on success or a negative number on failure */
 
 int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint16_t port){
 
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(!connection)	
+		return -EBADF;
+
 	/* Make sure connection has a unique port before sending anything so that node can multiplex response */
 	if(!tcp_connection_get_local_port(connection))
 		tcp_node_assign_port(tcp_node, connection, tcp_node_next_port(tcp_node));
@@ -114,10 +118,11 @@ void* tcp_api_sendfile_entry(void* _args){
 	_verify_port(args);
 	
 	/* lock it up */	
-	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
-	if(connection == NULL)	
-		return -EBADF; 	 // = The file descriptor is not a valid index in the descriptor table.
-	
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
+	if(connection == NULL){	
+		_return(args, -EBADF); 	 // = The file descriptor is not a valid index in the descriptor table.
+		return NULL;
+	}
 	tcp_connection_api_lock(connection);// make sure no one else is messing with the socket/connection
 		
 	/* open file so we can verify valid before we open any connections that we'll then need to close */
@@ -125,32 +130,28 @@ void* tcp_api_sendfile_entry(void* _args){
 	if(!f){
 		fprintf(stderr, "Unable to open given file: %s\n", args->buffer);
 		tcp_connection_api_unlock(connection);
-		_return(args, EINVAL);	//Invalid argument passed
+		_return(args, -EINVAL);	//Invalid argument passed
 		return NULL;
 	}
 	
 	/* open connection */
 	int ret = tcp_api_connect(args->node, args->socket, args->addr, args->port);
-	if(socket<0){
+	if(ret<0){
 		args->function_call = "sendfile: v_socket()";
 		tcp_connection_api_unlock(connection);
-		_return(args, socket);
+		_return(args, ret);
 		return NULL;		
  	}
-	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
-	if(!connection){
-		puts("ALEX AND NEIL GO DEBUG tcp_api_sendfile_entry"); //this should never happen
-		exit(-1);
-		return;
-	}	
-
+	
 	char input_line[BUFFER_SIZE];
 	while(fgets(input_line, BUFFER_SIZE-1, f)){
 		ret = tcp_connection_send_data(connection, (unsigned char*)input_line, strlen(input_line));
 		if (ret < 0){
-		args->function_call = "sendfile: v_write()";
-		_return(args, ret);
-		return NULL;
+			args->function_call = "sendfile: v_write()";
+			tcp_connection_api_unlock(connection);
+			_return(args, ret);
+			return NULL;
+		}
 	}
 	
 	//clean up
@@ -160,7 +161,7 @@ void* tcp_api_sendfile_entry(void* _args){
 	tcp_connection_api_unlock(connection);
 	/* and use my macro to return it 
 		(first arg is size of retal) */
-	_return(args, re0);
+	_return(args, 0);
 	return NULL;
 }
 /* entry function for letting the above function be called by a thread
@@ -180,10 +181,11 @@ void* tcp_api_connect_entry(void* _args){
 	_verify_port(args);
 
 	/* lock it up */	
-	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
-	if(connection == NULL)	
-		return -EBADF; 	 // = The file descriptor is not a valid index in the descriptor table.
-	
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
+	if(connection == NULL){
+		_return(args,-EBADF); 	 // = The file descriptor is not a valid index in the descriptor table.
+		return NULL;
+	}
 	tcp_connection_api_lock(connection);// make sure no one else is messing with the socket/connection
 	
 	/* then get the result */

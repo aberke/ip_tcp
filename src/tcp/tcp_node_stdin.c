@@ -428,7 +428,7 @@ sendfile_cmd
 */
 void sendfile_cmd(const char* line, tcp_node_t tcp_node){
 	int ret, socket, port;
-	char* filename_buffer = (char*)malloc(sizeof(char)*BUFFER_LEN);
+	char* filename_buffer = (char*)malloc(sizeof(char)*FILE_BUF_SIZE);
 
 	struct in_addr* addr = malloc(sizeof(struct in_addr));
 	char addr_buffer[INET_ADDRSTRLEN];
@@ -455,7 +455,7 @@ void sendfile_cmd(const char* line, tcp_node_t tcp_node){
 	args->node = tcp_node;
 	args->socket = socket;
 	args->addr = addr;
-	args->buffer = file_name_buffer
+	args->buffer = filename_buffer;
 	args->port = port;
 	args->function_call = "sendfile()";
 	
