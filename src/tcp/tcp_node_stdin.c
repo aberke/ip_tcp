@@ -225,7 +225,7 @@ return whatever recv returns. Default is n */
 void recv_cmd(const char* line, tcp_node_t tcp_node){
 	int socket;
 	int num_bytes;
-	char* block_y_n;
+	char block_y_n[BUFFER_SIZE];
 	int block = 0; //boolean as to whether recv should block or not
 	int ret;
 	
