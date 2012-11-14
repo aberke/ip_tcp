@@ -161,7 +161,7 @@ ip_node_t ip_node_init(iplist_t* links){
 			puts("link_interface didn't init properly");
 			
 			// get out while you can
-			ip_node->num_interfaces--;
+			ip_node->num_interfaces = index;
 			ip_node_destroy(&ip_node);
 			free_links(links);
 			return NULL;
@@ -240,8 +240,8 @@ returns:
 */
 int ip_node_read(ip_node_t ip_node, char* packet, int packet_size, uint32_t local_virt_ip, uint32_t remote_virt_ip){
 
-	packet[packet_size] = '\0';
-	printf("In ip_node_read.  TCP_DATA packet_size: %d, packet: \n%s\n", packet_size, packet);
+	//packet[packet_size] = '\0';
+	//printf("In ip_node_read.  TCP_DATA packet_size: %d, packet: \n%s\n", packet_size, packet);
 
 	if(!ip_node->read_queue) 
 		return -1;
@@ -253,9 +253,10 @@ int ip_node_read(ip_node_t ip_node, char* packet, int packet_size, uint32_t loca
 		
 	if(bqueue_enqueue(ip_node->read_queue, tcp_packet) < 0){
 		ip_node->read_queue = NULL;
-		tcp_packet_data_destroy(tcp_packet);
+		tcp_packet_data_destroy(&tcp_packet);
 		return -1;
 	}
+
 	return 0;
 }
 
@@ -374,20 +375,28 @@ void *ip_send_thread_run(void *ipdata){
 	void* packet;
 	int ret;
 
+	int count=0,mod=10;
 	while(ip_node->running){	
+
+		if(count++%mod==0) print(("running %d", ip_node->running), IP_PRINT);
+
 		gettimeofday(&now, NULL);	
 		wait_cond.tv_sec = now.tv_sec+PTHREAD_COND_TIMEOUT_SEC;
 		wait_cond.tv_nsec = 1000*now.tv_usec+PTHREAD_COND_TIMEOUT_NSEC;
 		
 		/* try to get the next thing on queue */
 		ret = bqueue_timed_dequeue_abs(to_send, &packet, &wait_cond);
-		if (ret != 0) 
-			/* should probably check at this point WHY we failed (for instance perhaps the queue
-				was destroyed */
+		if (ret==-ETIMEDOUT) 
 			continue;
+		else if(ret==-EINVAL)
+			print(("EINVAL returned from dequeueing"), IP_PRINT);
+		
 			
 		/* otherwise there's a packet waiting for you! */
+		print(("["), IP_PRINT);
 		_handle_to_send_queue(ip_node, packet);
+		print(("]"), IP_PRINT);
+
 	}
 	pthread_exit(NULL);
 }
@@ -603,6 +612,7 @@ static void _handle_user_command_down(ip_node_t ip_node, char* buffer){
 		link_interface_bringdown(interface);
 	}		
 }
+
 /* _handle_user_command_up is a helper to _handle_user_command for handling 'up <interface>' command */
 static void _handle_user_command_up(ip_node_t ip_node, char* buffer){
 	char up[50];
@@ -621,6 +631,7 @@ static void _handle_user_command_up(ip_node_t ip_node, char* buffer){
 		link_interface_bringup(interface);
 	}		
 }
+
 /* _handle_user_command_send iterates through to_send queue to handle each packet that has been wrapped by tcp_node */
 static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 	
@@ -640,17 +651,20 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 	// check if send_to_vip local -- if so must just print
 	if(_is_local_ip(ip_node, send_to_vip)){
 		printf("We send a message to ourselves?  Look into how we should handle packet: %s\n", (char*)packet);
+		free(packet);
+		free(tcp_packet_data);
 		return;
-		//continue;
 	}
 		
 	// get next hop for sending message to send_to_vip
 	uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
 	if(next_hop_addr == -1){
 		printf("Cannot reach address %d.\n", send_to_vip);
+		free(packet);
+		free(tcp_packet_data);
 		return;
-		//continue;
 	}
+
 	// get struct in_addr corresponding to next_hop_addr
 	send_from.s_addr = next_hop_addr;
 	// get interface to send out packet on -- interface corresponding to next_hop_addr
@@ -658,6 +672,8 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 	HASH_FIND(hh, ip_node->addressToInterface, &next_hop_addr, sizeof(uint32_t), address_keyed);
 	if(!address_keyed){
 		printf("Cannot reach address %d  -- TODO: MAKE SURE FIXED -- see _handle_user_command_send\n", send_to_vip);
+		free(packet);
+		free(tcp_packet_data);
 		return;
 		//continue;
 	}
@@ -665,7 +681,11 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 			
 	// wrap and send IP packet
 	ip_wrap_send_packet(packet, packet_size, TCP_DATA, send_from, send_to, next_hop_interface);	
+
+	free(packet);
 	free(tcp_packet_data);
+
+	print(("ip packet sent"), IP_PRINT);
 }
 
 /* 
@@ -779,7 +799,9 @@ static void _handle_selected_RIP(ip_node_t ip_node, link_interface_t interface, 
 	else{
 		printf("Bad RIP packet: command=%d\n", ntohs(info->command));
 	}
- }
+
+	free(packet_unwrapped);
+}
 
 
 /* _handle_selected is a dummy function for testing the functionality of the rest
@@ -797,6 +819,7 @@ static void _handle_selected(ip_node_t ip_node, link_interface_t interface){
 		return;
 	}
 
+	/* packet_data_size is the size of the payload */
 	int packet_data_size = 	ip_check_valid_packet(packet_buffer, bytes_read);	
  	if(packet_data_size < 0){
  		puts("Discarding packet");
@@ -860,6 +883,36 @@ void ip_node_print(ip_node_t ip_node){
 int ip_node_running(ip_node_t ip_node){
 	return ip_node->running;
 }
+
+// returns ip address of remote side of passed in remote ip
+// returns 0 if remote ip unreachable
+uint32_t tcp_ip_node_get_local_ip(ip_node_t ip_node, uint32_t remote_ip){
+	
+	// get next hop for sending message to send_to_vip
+	uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, remote_ip);
+	if(next_hop_addr == -1){
+		puts("couldn't find next_hop to remote_ip");
+		return 0;
+	}
+	
+	// get interface corresponding to next_hop_addr
+	interface_ip_keyed_t address_keyed;
+	HASH_FIND(hh, ip_node->addressToInterface, &next_hop_addr, sizeof(uint32_t), address_keyed);
+	if(!address_keyed){
+		return 0;
+	}
+	link_interface_t interface = address_keyed->interface;
+	
+	uint32_t local_ip = link_interface_get_local_virt_ip(interface);
+	
+	print(("local_ip = %u", local_ip), IP_PRINT);
+	
+	// just to double check:
+	if(!_is_local_ip(ip_node, local_ip))
+		return 0;
+		
+	return local_ip;
+}	
 
 /****** FOR TESTING *******/
 

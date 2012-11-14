@@ -4,6 +4,7 @@
 #include "stdio.h"
 #include "utils.h"
 
+
 /* STRUCTS */
 
 ///// MEMCHUNK
@@ -18,6 +19,23 @@ void memchunk_destroy(memchunk_t* chunk){
 	free(*chunk);
 	*chunk = NULL;
 }	
+
+char* null_terminate(void* data, int length){
+	char* result = malloc(length+1);
+	memcpy(result, data, length);
+	result[length] = '\0';
+	return result;
+}
+	
+void print_non_null_terminated(void* data, int length){
+	/* print out what you got */
+	char buff[length + 1];
+	memcpy(buff, data, length);
+	buff[length] = '\0';
+	printf("data:  %s\n", buff);
+	fflush(stdout);
+	/*                  	  */
+}
 
 void memchunk_destroy_total(memchunk_t* chunk, destructor_f destructor){
 	if(destructor)
@@ -62,10 +80,59 @@ void buffer_empty(buffer_t buffer){
 
 /* FUNCTIONS */
 
+int compare_ints(int a, int b){
+	if(a<b) 	 return -1;
+	else if(a>b) return 1;
+	else 		 return 0;
+}
+
 void error(const char* msg){
 	perror(msg);
 	if (DEBUG) exit(1);
 }
+
+void inspect_bytes(const char* msg, int length){
+	int i;	
+	for(i=0;i<length;i++)
+		printf("[%d %d %c] ", i, (int)msg[i], msg[i]);		
+	
+	puts("");
+}
+
+/*
+ used for reading from stdin without blocking (for long periods of time).
+	returns:
+		0  if nothing read
+		1  if something read
+		-1 if error (fgets returned NULL)
+*/
+int fd_fgets(fd_set* set, char* buff, int size_of_buff, FILE* file_stream, struct timeval* tv){
+															
+	/* set up for the call */									
+	FD_ZERO(set); 											
+	int fd = fileno(file_stream);								
+	FD_SET(fd, set);											
+															
+	/* get the result */										
+	int ret = select(fd+1, set, NULL, NULL, tv);						
+	if(ret < 0)
+		return ret;
+
+	else if(ret==0)
+		return 0;
+															
+	if(FD_ISSET(fd, set)){
+		char* ret = fgets(buff, size_of_buff, file_stream);					
+		if(!ret)
+			return -1;
+		else
+			return 1;
+	}
+	else{
+		CRASH_AND_BURN("how did execution get here!!");
+	}
+}
+
 
 /* takes in a string and a character and returns true
    only if the character is in the string (an empty string

@@ -4,7 +4,6 @@
 #include <time.h>
 #include <sys/time.h>
 
-#include "tcp_utils.h"
 #include "tcp_node_stdin.h"
 #include "util/utils.h"
 #include "util/list.h"
@@ -33,16 +32,6 @@ static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t* tcp_stdin_thread)
 // returns number of connections in array
 static int _insert_connection_array(tcp_node_t tcp_node, tcp_connection_t connection);
 
-// a tcp_connection in the listen state queues this triple on its accept_queue when
-// it receives a syn.  Nothing further happens until the user calls accept at which point
-// this triple is dequeued and a connection is initiated with this information
-// the connection should then set its state to listen and go through the LISTEN_to_SYN_RECEIVED transition
-struct accept_queue_triple{
-	uint32_t remote_ip;
-	uint16_t remote_port;
-	uint32_t last_seq_received;
-};
-
 
 /*********************** Hash Table Maintenance ****************************/
 
@@ -62,7 +51,7 @@ struct connection_virt_socket_keyed{
 
 struct connection_port_keyed{
 	tcp_connection_t connection;
-	int port;
+	uint16_t port;
 
 	UT_hash_handle hh;
 };
@@ -107,23 +96,34 @@ void connection_port_keyed_destroy(connection_port_keyed_t* port_keyed){
 struct tcp_node{
 	int running; // 0 for not running, 1 for running // mimics ip_node
 	ip_node_t ip_node;	// owns an ip_node_t that it keeps running to send/receive/listen on its interfaces
-	bqueue_t *to_send;	//--- tcp data for ip to send
-	bqueue_t *to_read;	//--- tcp data that ip pushes on to queue for tcp to handle
-	bqueue_t *stdin_commands;	//---  way for tcp_node to pass user input commands to ip_node
 	
 	// owns table of tcp_connections
 		// each tcp_connection owns a statemachine to keep track of its state
 
+	/****** Kernal Related *********/
+	 //This mtx should be locked any time we are accessing/changing kernal
+	 // where kernal is any of the data structures/ints in this 'kernal related' section
+	pthread_mutex_t kernal_mutex;
+	
 	int num_connections; //number of current tcp_connections
-	int connection_array_size; // will need to realloc if don't initially create enough room in array kernal
+	int connection_array_size; // = MAX_FILE_DESCRIPTORS;
 	
 	tcp_connection_t* connections;
 	connection_virt_socket_keyed_t virt_socketToConnection;
-	connection_port_keyed_t portToConnection;
-	
-	// For now have silly way of making sure we don't repeat a virt_socket or port number.  TODO: FIX!!!!!
-	int virt_socket_count;	//TODO: Instead of increasing virt_socket by one at each new connection, create system of storing available socket Id's
-	int port_count;	//TODO: same as directly above, but with ports
+	connection_port_keyed_t portToConnection;	
+	// used to systematically keep track of available file descriptors/ports and to reuse them after socket closed
+	// each time need new unique socket/port, call dequeue and item is pointer to int to use as socket/port
+	queue_t sockets_available_queue;
+	queue_t ports_available_queue;
+	/****** End of Kernal Related *********/
+
+	/******* Thread Related **************/
+	bqueue_t *to_send;	//--- tcp data for ip to send
+	bqueue_t *to_read;	//--- tcp data that ip pushes on to queue for tcp to handle
+	bqueue_t *stdin_commands;	//---  way for tcp_node to pass user input commands to ip_node
+
+	plain_list_t thread_list;
+	/******* End of Thread Related **************/
 };
 
 tcp_node_t tcp_node_init(iplist_t* links){
@@ -151,22 +151,39 @@ tcp_node_t tcp_node_init(iplist_t* links){
 	bqueue_init(stdin_commands);	
 	tcp_node->stdin_commands = stdin_commands;
 	/************ Queues Created *****************/
-		
 	/*********** create kernal table  ************/
-	tcp_node->connection_array_size = START_NUM_INTERFACES;  
+	pthread_mutex_init(&(tcp_node->kernal_mutex), NULL);
+	tcp_node->connection_array_size = MAX_FILE_DESCRIPTORS;  
 	tcp_node->num_connections = 0; // no connections at start
 	tcp_node->connections = (tcp_connection_t*)malloc(sizeof(tcp_connection_t)*(tcp_node->connection_array_size));
 	
 	tcp_node->virt_socketToConnection = NULL;
 	tcp_node->portToConnection = NULL;
 	
-	tcp_node->virt_socket_count = 0;
-	tcp_node->port_count = 0;
+	/* Initialize sockets/ports available queues */
+	queue_t sockets_available_queue = queue_init();
+	queue_t ports_available_queue = queue_init();
+	
+	queue_set_size(sockets_available_queue, MAX_FILE_DESCRIPTORS);
+	queue_set_size(ports_available_queue, MAX_FILE_DESCRIPTORS);
+	
+	void* i;
+	for(i=0; i<(void*)MAX_FILE_DESCRIPTORS; i++){		
+		/* We're just queueing the integers we want to use as sockets/ports */
+		queue_push(sockets_available_queue, i);
+		queue_push(ports_available_queue, (i+1)); // tcp_connection with port = 0 signifies that port hasn't been set	
+	}
+	
+	tcp_node->sockets_available_queue = sockets_available_queue;
+	tcp_node->ports_available_queue = ports_available_queue;
 	/************ Kernal Table Created ***********/
+
+	/* thread queue */
+	tcp_node->thread_list = plain_list_init();
 	
 	//// you're still running right? right
 	tcp_node->running = 1;
-	
+
 	return tcp_node;
 }
 
@@ -176,7 +193,38 @@ void tcp_node_stop(tcp_node_t tcp_node){
 }
 
 void tcp_node_destroy(tcp_node_t tcp_node){
-
+	tcp_node->running = 0;
+	
+	/*****************************/
+	plain_list_t list = tcp_node->thread_list;
+	plain_list_el_t el;
+	tcp_api_args_t args;
+	PLAIN_LIST_ITER(list, el)
+	args = (tcp_api_args_t)el->data;
+	if(args->done){
+		if(args->result < 0){	
+			char* error_string = strerror(-(args->result));
+			printf("Error: %s\n", error_string);
+		}
+		else if(args->result==0)
+			printf("successful.");
+		
+		else
+			printf("got result: %d!\n", args->result);
+		
+		tcp_api_args_destroy(&args);
+		plain_list_remove(list, el);
+	}			
+	PLAIN_LIST_ITER_DONE(list);
+	/*****************************/
+	
+	
+	// gracefully CLOSE all connections
+	// this blocks for a little until all connections CLOSED - and presumably kernal empty?
+	tcp_node_close_all_connections(tcp_node);
+	
+	// wait for mutex so we can ensure we destroy e'erthang
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 	//// iterate through the hash maps and destroy all of the keys/values,
 	//// this will NOT destroy the connections
 	connection_virt_socket_keyed_t socket_keyed, tmp_sock_keyed;
@@ -195,11 +243,17 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	//// NOW destroy all the connections
 	int i;
 	for(i=0; i<(tcp_node->num_connections); i++){
+		// use void tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection) instead??
 		tcp_connection_destroy(tcp_node->connections[i]);
 	}
 	// free the array itself
 	free(tcp_node->connections);
-	
+	// get rid of kernal mutex
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+	pthread_mutex_destroy(&(tcp_node->kernal_mutex));
+
+
+
 	// destroy ip_node and queues
 	ip_node_t ip_node = tcp_node->ip_node;
 	ip_node_destroy(&ip_node);
@@ -207,13 +261,19 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	// destroy bqueues
 	bqueue_destroy(tcp_node->to_send);
 	free(tcp_node->to_send);
+
 	bqueue_destroy(tcp_node->to_read);
 	free(tcp_node->to_read);
 
 	bqueue_destroy(tcp_node->stdin_commands);
 	free(tcp_node->stdin_commands);
 	
-		
+	// destroy socket/port queues -- they just hold ints so i don't think we need to destroy each item inside
+	queue_destroy(&(tcp_node->sockets_available_queue));
+	queue_destroy(&(tcp_node->ports_available_queue));
+	
+	plain_list_destroy(&(tcp_node->thread_list));
+	
 	free(tcp_node);
 	tcp_node = NULL;
 }
@@ -225,64 +285,180 @@ void tcp_node_destroy(tcp_node_t tcp_node){
      returned int is the new socket assigned to that new connection.  
    - The connection finishes its handshake to get to established state
    - Fills addr with ip address information from dequeued triple*/
-int tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_connection, struct in_addr *addr){
-	
-	if(tcp_connection_get_state(listening_connection) != LISTEN)
-		return -EINVAL; //Socket is not listening for connections, or addrlen is invalid (e.g., is negative).
+tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_t listening_connection){
 	
 	// dequeue from accept_queue of listening connection to get triple of information about new connection
-	accept_queue_triple_t triple = tcp_connection_accept_queue_dequeue(listening_connection);
-	if(triple == NULL)
-		return -1;
+	/* THIS CALL IS BLOCKING  -- since the accept queue is a bqueue_t */
+	accept_queue_data_t data = tcp_connection_accept_queue_dequeue(listening_connection);
+	if(data == NULL)
+		return NULL; // means there was an error in dequeueing -- was accept_queue destroyed?
 	
-	// fill struct in_addr
-	addr->s_addr = triple->remote_ip;
 	
 	// create new connection which will be the accepted connection 
 	// -- function will insert it into kernal array and socket hashmap
 	tcp_connection_t new_connection = tcp_node_new_connection(tcp_node);
+	if(new_connection == NULL){
+		// reached limit MAX_FILE_DESCRIPTORS
+		accept_queue_data_destroy(&data);
+		return NULL; 
+	}
 	
-	// assign values from triple to that connection
-	tcp_connection_set_remote(new_connection, triple->remote_ip, triple->remote_port);
-	tcp_connection_set_last_seq_received(new_connection, triple->last_seq_received);
+	// assign values from triple to that connection (tcp_node_new_connection assigned it a unique port)
+	tcp_connection_set_local_ip(new_connection, accept_queue_data_get_local_ip(data));
+	tcp_connection_set_remote(new_connection, accept_queue_data_get_remote_ip(data), accept_queue_data_get_remote_port(data));
+	tcp_connection_set_last_seq_received(new_connection, accept_queue_data_get_seq(data));
+
+	// don't we need to set the local port? because it needs to receive data
+	int port = tcp_node_assign_port(tcp_node, new_connection, -1); //-1 just assigns to next port
 	
-	// assign new port to new_connection
-	int port = tcp_node_next_port(tcp_node);
-	tcp_node_assign_port(tcp_node, new_connection, port);
+	//to test:
+	print(("port = tcp_node_assign_port(tcp_node, new_connection, -1) = %d\n", port), PORT_PRINT);
+	print(("tcp_connection_get_local_port(new_connection) = %d\n", tcp_connection_get_local_port(new_connection)), PORT_PRINT);
 	
-	// set state of this new_connection to LISTEN so that we can send it through transition LISTEN_to_SYN_RECEIVED
-	tcp_connection_set_state(new_connection, LISTEN);
+	// destroy data -- all done with it
+	accept_queue_data_destroy(&data);
 	
-	// have connection transition from LISTEN to SYN_RECEIVED
-	if(tcp_connection_state_machine_transition(new_connection, receiveSYN)<0)
-		puts("Alex and Neil go debug: tcp_connection_state_machine_transition(new_connection, receiveSYN)) returned negative value in tcp_node_connection_accept");
-	// destroy triple
-	accept_queue_triple_destroy(triple);
-	
-	return tcp_connection_get_socket(new_connection);
+	return new_connection;
 }
-// creates a new tcp_connection and properly places it in kernal table -- ports and ips initialized to 0
+
+// creates a new tcp_connection and properly places it in kernal table -- ports initialized to unique value, ip to 0
+// returns NULL if reached limit MAX_FILE_DESCRIPTORS
 tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
-
+	
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
+	
+	if(tcp_node->num_connections == tcp_node->connection_array_size){
+		pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+		return NULL;	// reached limit MAX_FILE_DESCRIPTORS
+	}
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+	
 	int socket = tcp_node_next_virt_socket(tcp_node);
+	if(socket<0) // This is from when we were using bqueue rather than your queue but your queue returns NULL when nothing to dequeue so this doesn't make sense
+		return NULL;
+		
 	// init new tcp_connection
-	tcp_connection_t connection = tcp_connection_init(socket, tcp_node->to_send);
-
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
+	tcp_connection_t connection = tcp_connection_init(tcp_node, socket, tcp_node->to_send);
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+	
 	// place connection in array
 	_insert_connection_array(tcp_node, connection);
+
+	/*
+	commented out because if we call bind() on a new socket, an error
+	is given (correctly?) because the connection that we're trying to 
+	bind already has a port (because of the below)
 	
 	// place connection in hashmaps
+	int port = tcp_node_next_port(tcp_node);
+	tcp_node_assign_port(tcp_node, connection, port);
+	*/
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 	connection_virt_socket_keyed_t socket_keyed = connection_virt_socket_keyed_init(connection);
-	HASH_ADD_INT(tcp_node->virt_socketToConnection, virt_socket, socket_keyed);
+	HASH_ADD(hh, tcp_node->virt_socketToConnection, virt_socket, sizeof(int), socket_keyed);
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 
 	return connection;
 }
-
-// returns tcp_connection corresponding to socket
-tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int socket){
+//needs to be called when close connection so that we can return port/socket to available queue for reuse
+void tcp_node_return_socket_to_kernal(tcp_node_t tcp_node, int socket){
+	
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
+	// return socket to available queue
+	queue_push_front(tcp_node->sockets_available_queue, (void*)((uint64_t)socket));
 	
 	connection_virt_socket_keyed_t socket_keyed;
-	HASH_FIND_INT(tcp_node->virt_socketToConnection, &socket, socket_keyed);
+	HASH_FIND(hh, tcp_node->virt_socketToConnection, &socket, sizeof(int), socket_keyed);
+	if(!socket_keyed){
+		puts("Error: Alex Neil see tcp_node_close_connection -- this SHOULD be in table");
+		return;
+	}
+
+	HASH_DEL(tcp_node->virt_socketToConnection, socket_keyed);
+	connection_virt_socket_keyed_destroy(&socket_keyed);
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+}
+
+//needs to be called when close connection so that we can return port/socket to available queue for reuse
+void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, int port){
+	
+	// port of zero means port wasn't actually set for that connection -- not a valid port
+	if(!port) 
+		return;
+		
+	// return port to available queue
+	if(port<=MAX_FILE_DESCRIPTORS)
+		queue_push_front(tcp_node->ports_available_queue, (void*)((uint64_t)port));
+	
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
+		
+	connection_port_keyed_t port_keyed;
+	HASH_FIND(hh, tcp_node->portToConnection, &port, sizeof(uint16_t), port_keyed);
+	if(!port_keyed){
+		puts("Error: Alex Neil see tcp_node_close_connection -- this SHOULD be in table");
+		pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+		return;
+	}
+
+	HASH_DEL(tcp_node->portToConnection, port_keyed);
+	connection_port_keyed_destroy(&port_keyed);
+	
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+}
+//ALEX TODO:
+// gracefully CLOSE all connections
+void tcp_node_close_all_connections(tcp_node_t tcp_node){
+	puts("ALEX TODO: GRACEFULLY CLOSE ALL CONNECTIONS BEFORE DESTROYING NODE");
+}
+//###TODO: FINISH LOGIC ####
+//needs to be called when close connection so that we can return port/socket to available queue for reuse
+// returns new number of connections in kernal
+int tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection){
+	puts("in tcp_node_close_connection");
+	//TODO: CONNECTION CLOSING LOGIC
+	tcp_connection_state_machine_transition(connection, CLOSE);
+	//int num_connections = tcp_node_remove_connection_kernal(tcp_node);
+	//return num_connections;
+	return 0;
+}	
+	
+int tcp_node_remove_connection_kernal(tcp_node_t tcp_node, tcp_connection_t connection){
+	
+	// return port and socket to available queue for reuse
+	int port = (int)tcp_connection_get_local_port(connection);
+	int socket = tcp_connection_get_socket(connection);
+	
+	// remove from kernal	- these calls lock/unlock kernal
+	tcp_node_return_socket_to_kernal(tcp_node, socket);
+	if(tcp_connection_get_local_port(connection))
+		tcp_node_return_port_to_kernal(tcp_node, port);
+	
+	// lock kernal
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
+	tcp_connection_destroy(connection);
+		
+	tcp_node->connections[socket] = NULL;
+	tcp_node->num_connections = (tcp_node->num_connections) - 1;
+	
+	//unlock kernal
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+	
+	return tcp_node->num_connections;
+}
+// returns tcp_connection corresponding to socket -- locks/unlocks kernal
+tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int socket){
+	
+	//lock kernal
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
+	
+	connection_virt_socket_keyed_t socket_keyed;
+
+	HASH_FIND(hh, tcp_node->virt_socketToConnection, &socket, sizeof(int), socket_keyed);
+	
+	//unlock kernal
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+	
 	if(!socket_keyed)
 		return NULL;
 	else
@@ -291,8 +467,16 @@ tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int sock
 
 // returns tcp_connection corresponding to port
 tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t port){
+
+	//lock kernal
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
+
 	connection_port_keyed_t port_keyed;
-	HASH_FIND_INT(tcp_node->portToConnection, &port, port_keyed);
+	HASH_FIND(hh, tcp_node->portToConnection, &port, sizeof(uint16_t), port_keyed);
+	
+	//unlock kernal
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+	
 	if(!port_keyed)
 		return NULL;
 	else
@@ -301,25 +485,53 @@ tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t p
 
 // assigns port to tcp_connection and puts entry in hash table that hashes ports to tcp_connections
 // returns 1 if port successfully assigned, 0 otherwise
+
+/* just a note, I feel like 0 is traditional used to indicate success */
 int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int port){
 	
+	if(port<=0){
+		port = tcp_node_next_port(tcp_node);
+		print(("port = tcp_node_next_port(tcp_node) = %d\n", port), PORT_PRINT);
+	}
+		
+	if(tcp_node_port_unused(tcp_node, port)<0)
+		return -1; // port already in use
+	
+	// return previous port to kernal if it was previously set
+	if(tcp_connection_get_local_port(connection))
+		tcp_node_return_port_to_kernal(tcp_node, tcp_connection_get_local_port(connection));
+		
 	// set connection's port
 	uint16_t uport = (uint16_t)port;
 	tcp_connection_set_local_port(connection, uport);
 	
 	// put port to connection in kernal
-	connection_port_keyed_t port_keyed = connection_port_keyed_init(connection);
-	HASH_ADD_INT(tcp_node->portToConnection, port, port_keyed);	
+	//lock kernal
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 	
-	return 1;
+	// put port to connection in kernel
+	connection_port_keyed_t port_keyed = connection_port_keyed_init(connection);
+	HASH_ADD(hh, tcp_node->portToConnection, port, sizeof(uint16_t), port_keyed);
+	
+	//unlock kernal
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+
+	return port;
 }
 
 // returns 1 if the port is available for use, 0 if already in use
 int tcp_node_port_unused(tcp_node_t tcp_node, int port){	
+
+	//lock kernal
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 	
 	connection_port_keyed_t port_keyed;
 	// check that port not already in hashmap
-	HASH_FIND_INT(tcp_node->portToConnection, &port, port_keyed);
+	HASH_FIND(hh, tcp_node->portToConnection, &port, sizeof(uint16_t), port_keyed);
+	
+	//unlock kernal
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));	
+	
 	if(!port_keyed)
 		return 1;
 	else
@@ -328,20 +540,34 @@ int tcp_node_port_unused(tcp_node_t tcp_node, int port){
 
 // returns next available, currently unused, port to bind or connect/accept a new tcp_connection with
 int tcp_node_next_port(tcp_node_t tcp_node){
-	int next_port = tcp_node->port_count + 1;
+
+	//lock kernal when popping off queue of available ports
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
+	int next_port = (uint64_t)queue_pop(tcp_node->ports_available_queue);
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 	
 	// check that next_port not already in use -- not already in hashmap	
-	while(!tcp_node_port_unused(tcp_node, next_port)){
-		next_port ++;
+	while((tcp_node_port_unused(tcp_node, next_port))<0){
+		
+		pthread_mutex_lock(&(tcp_node->kernal_mutex));
+		next_port = (uint64_t)queue_pop(tcp_node->ports_available_queue);
+		pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 	}
-	tcp_node->port_count = next_port;
+	
 	return next_port;
 }
 
 // returns next available, currently unused, virtual socket file descriptor to initiate a new tcp_connection with
 int tcp_node_next_virt_socket(tcp_node_t tcp_node){
-	int next_socket = (tcp_node->virt_socket_count)+1;
-	tcp_node->virt_socket_count = next_socket;
+
+	//lock kernal
+	pthread_mutex_lock(&(tcp_node->kernal_mutex));
+
+	int next_socket = (uint64_t)queue_pop(tcp_node->sockets_available_queue);
+	
+	//unlock kernal
+	pthread_mutex_unlock(&(tcp_node->kernal_mutex));	
+	
 	return next_socket;
 }
 /**************** End of functions that deal with Kernal Table *******************/
@@ -390,7 +616,10 @@ void tcp_node_start(tcp_node_t tcp_node){
 	struct timeval now;
 	void* packet;
 	int ret;
+	int i=0,mod=10;
 	while((tcp_node->running)&&(tcp_node_ip_running(tcp_node))){	
+		if(i++%mod==0)
+			print(("tcp_node still running"), TCP_PRINT); //<-- just to spite you I commented it out rather than setting that print stuff
 
 		/* get the time of the day so that we are passing in to bqueue_timed_dequeue_abs
 			the absolute time when we want the timeout to occur (the docs in bqueue.c say
@@ -410,32 +639,40 @@ void tcp_node_start(tcp_node_t tcp_node){
 		/* otherwise there's a packet waiting for you! */
 		_handle_packet(tcp_node, (tcp_packet_data_t)packet);
 	}
+	print(("broke tcp_node handling loop"), CLOSING_PRINT);
 	
 	ip_node_stop(tcp_node->ip_node);
 
 	int rc;
+	print(("joining link interface thread"), CLOSING_PRINT);
 	rc = pthread_join(ip_link_interface_thread, NULL);
 	if (rc) {
-		printf("ERROR; return code from pthread_join() is %d\n", rc);
-		exit(-1);
-	}
-	rc = pthread_join(ip_send_thread, NULL);
-	if (rc) {
-		printf("ERROR; return code from pthread_join() is %d\n", rc);
-		exit(-1);
-	}
-	rc = pthread_join(ip_command_thread, NULL);
-	if (rc) {
-		printf("ERROR; return code from pthread_join() is %d\n", rc);
-		exit(-1);
-	}
-	rc = pthread_cancel(tcp_stdin_thread);
-	if (rc) {
-		printf("ERROR; return code from pthread_join() is %d\n", rc);
+		print(("ERROR; return code from pthread_join() is %d\n", rc), CLOSING_PRINT);
 		exit(-1);
 	}
 
-	puts("finished.");
+	print(("joining send_thread"), CLOSING_PRINT);
+	rc = pthread_join(ip_send_thread, NULL);
+	if (rc) {
+		print(("ERROR; return code from pthread_join() is %d\n", rc), CLOSING_PRINT);
+		exit(-1);
+	}
+
+	print(("joining ip_command thread"), CLOSING_PRINT);
+	rc = pthread_join(ip_command_thread, NULL);
+	if (rc) {
+		print(("ERROR; return code from pthread_join() is %d\n", rc), CLOSING_PRINT);
+		exit(-1);
+	}
+
+	print(("stdin thread"), CLOSING_PRINT);
+	rc = pthread_cancel(tcp_stdin_thread);
+	if (rc) {
+		print(("ERROR; return code from pthread_join() is %d\n", rc), CLOSING_PRINT);
+		exit(-1);
+	}
+
+	print(("finished."), CLOSING_PRINT);
 }
 
 // puts command on to stdin_commands queue
@@ -450,8 +687,6 @@ int tcp_node_queue_ip_cmd(tcp_node_t tcp_node, char* buffered_cmd){
 	return 1;
 }
 
-
-
 // returns tcp_node->running
 int tcp_node_running(tcp_node_t tcp_node){
 	return tcp_node->running;
@@ -465,35 +700,51 @@ void tcp_node_command_ip(tcp_node_t tcp_node, const char* cmd){
 	ip_node_command(tcp_node->ip_node, cmd);
 }
 
-
-
-/* num_butes>0 indicates there is data and therefore to_write must be pushed to window 
-int tcp_node_send(tcp_node_t tcp_node, char* to_write, int socket, uint32_t num_bytes){
-
-	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
-	if(!connection)	
-		return -EBADF;
-	
-	int ret;
-	ret = tcp_connection_send(connection, to_write, num_bytes);
-	return ret;
-}*/
-
 /*
 tcp_node_invalid_port
 	handles the case where a packet is received to which there is no open 
 	port. Should inform the sender?
 */
 void tcp_node_invalid_port(tcp_node_t tcp_node, tcp_packet_data_t packet){
-	// let's just not do anything. That'll show em -- that's ridiculous
-	puts("tcp_node_invalid_port -- are we going to handle this?? TODO");
-	// this might be appropriate: ECONNREFUSED = No-one listening on the remote address.
+	/* anything else? */
+	tcp_node_refuse_connection(tcp_node, packet);
+	puts("invalid port. sent RST");
+}
+
+void tcp_node_refuse_connection(tcp_node_t tcp_node, tcp_packet_data_t packet){
+/*  
+	RFC 793: pg 35
+    In particular, SYNs addressed to a non-existent connection are rejected
+    by this means.
+*/
+	struct tcphdr* incoming_header = (struct tcphdr*)packet->packet;
+
+	// create the outgoing packet
+	struct tcphdr* outgoing_header = tcp_header_init(0);
+
+	/* PORTS */
+	tcp_set_dest_port(outgoing_header, tcp_source_port(incoming_header));
+	tcp_set_source_port(outgoing_header, tcp_dest_port(incoming_header));
+
+	/* RST */
+	tcp_set_rst_bit(outgoing_header);
+
+	/* CHECKSUM */
+	tcp_utils_add_checksum(outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip, TCP_DATA);
+
+	tcp_packet_data_t rst_packet = tcp_packet_data_init((char*)outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip);
+	
+	/* SEND IT OFF */
+	ip_node_send_tcp(tcp_node->ip_node, rst_packet);
+
+	
+	return;
 }
 	
 
 /************************** Internal Functions Below ********************************************/
 
-// inserts connection in array of connections -- grows the array if necessary
+// inserts connection in array of connections -- sfd id is the index
 // returns number of connections in array
 static int _insert_connection_array(tcp_node_t tcp_node, tcp_connection_t connection){
 	
@@ -501,22 +752,11 @@ static int _insert_connection_array(tcp_node_t tcp_node, tcp_connection_t connec
 	int connection_array_size = tcp_node->connection_array_size;
 	
 	if(num_connections+1 > connection_array_size){
-		// need to create larger array of tcp_connections
-		tcp_connection_t* orig_connections = tcp_node->connections;
-		connection_array_size = connection_array_size*2;
-		tcp_connection_t* new_connections = (tcp_connection_t*)realloc(tcp_node->connections, connection_array_size*sizeof(tcp_connection_t));
-		// iterate through new array to put old function pointers into new array
-		int i;
-		for(i = 0; i<num_connections; i++){
-			new_connections[i] = orig_connections[i];
-		}
-		// set new array 
-		tcp_node->connections = new_connections;
-		tcp_node->connection_array_size = connection_array_size;
+		return -1; // reached max size
 	}
 	// insert new connection in array
 	tcp_node->connections[num_connections] = connection;
-	tcp_node->num_connections = num_connections + 1;
+	tcp_node->num_connections++;
 	
 	return tcp_node->num_connections;
 }
@@ -529,27 +769,17 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 		return;
 	}
 
-	/* validating the checksum happens in handle_receive_packet in tcp_connection,
-		because it's dependent on the ip of the sender/receiver, and why does the
-		node care if its gonna get discarded 
-	
-	if(tcp_utils_validate_checksum(tcp_packet->packet) < 0){
-		puts("Bad checksum -- discarding packet");
-		free(tcp_packet);
-		return;
-	}
-	*/
-		
 	uint16_t dest_port   = tcp_dest_port(tcp_packet->packet);
 
 	tcp_connection_t connection = tcp_node_get_connection_by_port(tcp_node, dest_port);
 	if(!connection){
+		printf("invalid port: %u\n", dest_port);
 		tcp_node_invalid_port(tcp_node, tcp_packet);
 		free(tcp_packet);
 		return;
 	}
-
-	tcp_connection_handle_receive_packet(connection, tcp_packet);
+	// put it on that connection's my_to_read queue
+	tcp_connection_queue_to_read(connection, tcp_packet);
 }
 
 
@@ -621,18 +851,32 @@ static int _start_ip_threads(tcp_node_t tcp_node,
     pthread_attr_destroy(&attr);
 	return 1;
 }
+
+/* for threading */
+void tcp_node_thread(tcp_node_t node, void *(*start_routine)(void*), tcp_api_args_t arg){
+	pthread_create(&(arg->thread),NULL,start_routine,arg);
+	plain_list_append(node->thread_list, arg);
+}	
+
+plain_list_t tcp_node_thread_list(tcp_node_t node){
+	return node->thread_list;
+}
+
+/*********** For use by tcp_node to reach ip_node items ****************/
+// returns ip address of remote side of passed in remote ip
+// returns 0 if remote ip unreachable
+uint32_t tcp_node_get_local_ip(tcp_node_t tcp_node, uint32_t remote_ip){
+	return tcp_ip_node_get_local_ip(tcp_node->ip_node, remote_ip);
+}
+
 /***************** FOR TESTING *********************/
 
 uint32_t tcp_node_get_interface_remote_ip(tcp_node_t tcp_node, int interface_num){
-	uint32_t ip_addr;
-	ip_addr = ip_node_get_interface_remote_ip(tcp_node->ip_node, interface_num);
-	return ip_addr;
+	return ip_node_get_interface_remote_ip(tcp_node->ip_node, interface_num);
 }
 
 uint32_t tcp_node_get_interface_local_ip(tcp_node_t tcp_node, int interface_num){
-	uint32_t ip_addr;
-	ip_addr = ip_node_get_interface_local_ip(tcp_node->ip_node, interface_num);
-	return ip_addr;
+	return ip_node_get_interface_local_ip(tcp_node->ip_node, interface_num);
 }	
 
 

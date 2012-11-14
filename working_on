@@ -1,3 +1,114 @@
+THINGS NEIL WANTS ALEX TO USE
+
+bin/find thing 
+
+printf("hello %d", num)
+print( ("hello %d", num), TCP_PRINT)
+
+STDIN thread
+
+linked_list<thread> threads;
+while(1){
+	
+	select(STDIN, .01 seconds);
+	command = get_command(input);
+	if(command == "accept"){
+		tcp_node_accept(command_line, node);
+	}
+	
+	whenever you call a blocking call (api call)
+	thread = new thread()
+	thread.call(blocking_call)
+	threads.append(thread);
+
+	for each thread_waiting:
+		int result;
+		try:
+			thread.join(thread, &result);
+		except:	
+
+		if thread is done
+			do something with result
+			threads.remove(thread)
+
+}
+
+functions written by 
+
+void tcp_connection_api_signal(tcp_connection_t connection);
+void tcp_connection_api_lock(tcp_connection_t connection);
+void tcp_connection_api_unlock(tcp_connection_t connection);
+void tcp_connection_api_wait(tcp_connection_t connection);
+
+I'll also write the mutex for the send window
+
+give to tcp_connection:
+
+	tcp_connection	
+		int ret_value; // return value for the calling tcp_api function
+		pthread_mutex_t api_mutex
+		pthread_cond_t api_cond
+		// now when a tcp_api function calls, it will lock the mutex, and wait on the api_cond for the 
+		//tcp connection to finish its duties
+		
+// calls pthread_cond_signal(api_cond) so that the waiting tcp_api function can stop waiting and take a look at the 
+// return value		
+tcp_connection_api_signal(connection); 
+
+
+Thread-heavy solution
+
+TCP_NODE
+-----------------------------
+
+has array of connections
+hashmap: virt_socketToConnection
+hashmap: portToConnection
+
+when demultiplexes a packet calls 
+	connection = portToConnection(port)
+	tcp_connection_queue_to_read(connection, packet)
+	
+	each tcp_connection runs a thread to handle packets on to_read
+
+threads will be handled within the TCP_CONNECTION itself and will not
+be known about anywhere
+
+
+TCP_CONNECTION
+------------------------------
+#include <sys/time.h>
+
+
+
+
+int syn_count=0;
+time_t connect_accept_timer;
+
+time_t now;
+
+runs the following thread:
+
+while(tcp_connection->running){
+	bqueue_dequeue(my to_read, .001);
+
+	gettimeofday(&now, NULL);
+	if(syn_sent){	
+		if(difftime(now, connect_accept_timer) > 2**syn_count * SYN_TIMEOUT){
+			resend (my syn);
+			my syn ++;
+		}
+	}
+	if(established){
+		check_timers(my to_send);
+		chunk_t chunk;
+		while(chunk = get_next(my to_send)){
+			send(chunk);
+		}
+	}
+}
+
+
 LISTEN TO SYN_RECEIVED:
 	so when we receive a syn we need to create a new connection!  It is that connection that must set the 
 		seq_num in the received packet as its last_seq_received
@@ -112,9 +223,14 @@ tcp_node runs ip_node in 3 separate threads that handle different responsibiliti
 	ip_command_thread: calls p_thread_cond_wait(&stdin_commands) and handles ip commands loaded on to queue
 	
 	
+checksum:
+	for this to work: only pass in tcp_connection_get_local_ip/remote_ip
+	only set remote/local_ip when first establish connection
+
 			
 NEIL:
-	write tcp checksum
+	write tcp checksum -- and write it for linux too!
+
 ALEX:
 
 	TODO:	
@@ -124,19 +240,27 @@ ALEX:
 		
 	DEAL WITH ESTABLISHED STATE AND TEAR-DOWN	
 	fix states.c to deal with corner conditions
-	
-	perhaps connections array should be of fixed size?
-	ENFILE: The system limit on the total number of open files has been reached.
-	
+
+SET BACK TO 1024: in tcp_node.h:	
+/* set artificially low right now so we can make sure have no segfaults if ever reach limit */
+#define MAX_FILE_DESCRIPTORS 5 // per process limit commonly set to 1024 on mac and linux machines
 	
 alex's questions for neil:
 
+	recv window bugs:
+		loses first byte of written data
+
+	to replicate Alex's segfaults that happen at plainlist_remove:
+		set MAX_FILE_DESCRIPTORS (found in tcp_node.h) to something very low like 5.
+		open up a bunch of accepting connections.  try to connect past MAX_FILE_DESCRIPTORS limit
 
 alex's questions for tas:
 	whats the deal with accept and binding?
 	why doesn't connect in the driver functions take in a socket?  which socket should we connect with??
 		-- for now I changed the arguments to take in a socket
-	
+
+TODO: TO HANDLE:
+	receiveRST when in ESTABLISHED state	
 	
 	
 

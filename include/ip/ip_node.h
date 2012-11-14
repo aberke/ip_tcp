@@ -13,8 +13,6 @@
 //// some helpful static globals
 #define STDIN fileno(stdin)
 #define SELECT_TIMEOUT 1
-#define PTHREAD_COND_TIMEOUT_NSEC 5000000
-#define PTHREAD_COND_TIMEOUT_SEC 1 //WAY TOO LONG RIGHT??
 
 typedef struct ip_node* ip_node_t; 
 
@@ -45,6 +43,11 @@ void *ip_command_thread_run(void *ip_data);
 
 // returns 1 if true, 0 if false
 int ip_node_running(ip_node_t ip_node);
+
+/*********** For use by tcp_node ****************/
+// returns ip address of remote side of passed in remote ip
+// returns 0 if remote ip unreachable
+uint32_t tcp_ip_node_get_local_ip(ip_node_t ip_node, uint32_t remote_ip);
 
 /****** FOR TESTING *******/
 

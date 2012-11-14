@@ -167,6 +167,22 @@ void debug_update_routing_table(routing_table_t rt, forwarding_table_t ft, struc
 }
 /////////////////////////////////////////////////////////////////////////////////////////
 
+void test_sorted_list(){
+	sorted_list_t s_list = sorted_list_init((comparator_f)compare_ints);
+	
+	sorted_list_insert(s_list, (void*)(long)1);
+	sorted_list_insert(s_list, (void*)(long)20);
+	sorted_list_insert(s_list, (void*)(long)3);
+	
+	plain_list_t list = sorted_list_get_list(s_list);
+	plain_list_el_t el;
+	PLAIN_LIST_ITER(list, el)
+		printf("got: %lu\n", (long)el->data);
+	PLAIN_LIST_ITER_DONE(list);
+
+	sorted_list_destroy(&(s_list));
+}
+	
 
 void test_array(){
 	ARRAY_DEF(int);
@@ -194,7 +210,7 @@ void test_array(){
 void test_tcp_states(){
 	state_machine_t machine = state_machine_init();
 
-	tcp_connection_t connection = tcp_connection_init(1, NULL);
+	tcp_connection_t connection = tcp_connection_init(NULL, 1, NULL);
 	state_machine_set_argument(machine, connection);
 	
 	state_machine_print_state(machine);
@@ -346,22 +362,23 @@ void test_recv_window(){
 
 	TEST_EQ(recv_window_get_ack(rw), 1, "");
 	
-	recv_window_chunk_t got;
+	memchunk_t got;
 
-	got = recv_window_get_next(rw);
+	got = recv_window_get_next(rw, 10);
 	ASSERT(got==NULL);
 	
-	char buffer[BUFFER_SIZE];
-	strcpy(buffer, "hello world");
-	recv_window_receive(rw, buffer, strlen("hello world"), 0);
+	char* buffer1 = malloc(sizeof(char)*BUFFER_SIZE);
+	strcpy(buffer1, "hello world");
+	recv_window_receive(rw, buffer1, strlen("hello world"), 0);
 	
-	got = recv_window_get_next(rw);
+	got = recv_window_get_next(rw, strlen("hello world"));
 	ASSERT(got!=NULL);
-	TEST_EQ(got->offset, 1, "");
-	memcpy(buffer, got->data+got->offset, got->length);
+
+	char buffer[BUFFER_SIZE];
+	memcpy(buffer, got->data, got->length);
 	buffer[got->length] = '\0';
 	TEST_STR_EQ(buffer, "ello world", "");
-	recv_window_chunk_destroy_free(&got);
+	memchunk_destroy_total(&got, util_free);
 	
 	recv_window_destroy(&rw);
 
@@ -370,21 +387,102 @@ void test_recv_window(){
 
 	TEST_EQ(recv_window_get_ack(rw), 1, "");
 	
-	got = recv_window_get_next(rw);
+	got = recv_window_get_next(rw, 10);
 	ASSERT(got==NULL);
 	
-	strcpy(buffer, "hello world");
-	recv_window_receive(rw, buffer, strlen("hello world"), 1);
+	char* buffer2 = malloc(sizeof(char)*BUFFER_SIZE);
+	strcpy(buffer2, "hello world");
+	recv_window_receive(rw, buffer2, strlen("hello world"), 1);
 	
-	got = recv_window_get_next(rw);
+	got = recv_window_get_next(rw, strlen("hello world"));
 	ASSERT(got!=NULL);
-	TEST_EQ(got->offset, 0, "");
-	memcpy(buffer, got->data+got->offset, got->length);
+
+	memcpy(buffer, got->data, got->length);
 	buffer[got->length] = '\0';
 	TEST_STR_EQ(buffer, "hello world", "");
-	recv_window_chunk_destroy_free(&got);
+	memchunk_destroy_total(&got, util_free);
 	
 	recv_window_destroy(&rw);
+}
+
+void test_recv_window_1(){
+	recv_window_t rw = recv_window_init(100, 0);
+	memchunk_t got;
+
+	got = recv_window_get_next(rw, 10);
+	ASSERT(got==NULL);
+
+#define NUMBERS10 "0123456789"
+#define NUMBERS20 "012345678910111213141516171819"
+	
+	char* buffer1 = malloc(sizeof(char)*BUFFER_SIZE);
+	char* buffer2 = malloc(sizeof(char)*BUFFER_SIZE);
+	strcpy(buffer1, NUMBERS10);
+	strcpy(buffer2, NUMBERS20);
+	recv_window_receive(rw, buffer1, strlen(NUMBERS10), 1);
+	recv_window_receive(rw, buffer2, strlen(NUMBERS20), 1+strlen(NUMBERS10));
+	
+	got = recv_window_get_next(rw, strlen(NUMBERS10));
+	ASSERT(got!=NULL);
+
+	char* buffer = null_terminate(got->data, got->length);
+	
+	TEST_STR_EQ(buffer, NUMBERS10, "");
+	memchunk_destroy_total(&got, util_free);
+	free(buffer);
+	
+	got = recv_window_get_next(rw, strlen(NUMBERS20));
+	ASSERT(got!=NULL);
+
+	buffer = null_terminate(got->data, got->length);
+	TEST_STR_EQ(buffer, NUMBERS20, "");
+	memchunk_destroy_total(&got, util_free);
+	free(buffer);
+
+	int size = recv_window_get_size(rw);
+	TEST_EQ(size, 100, "");
+	
+	recv_window_destroy(&rw);
+}
+void test_recv_window_overlap(){
+	recv_window_t rw = recv_window_init(100, 0);
+	
+	char *buffer1 = malloc(sizeof(char)*BUFFER_SIZE),
+		 *buffer2 = malloc(sizeof(char)*BUFFER_SIZE),
+		 *buffer3 = malloc(sizeof(char)*BUFFER_SIZE);
+
+#define S1 "12345"
+#define S2 "34567"
+#define S3 "56789"
+
+	strcpy(buffer1, S1);
+	strcpy(buffer2, S2);
+	strcpy(buffer3, S3);
+
+	recv_window_receive(rw, buffer2, strlen(S1), 3);
+	
+	TEST_EQ(recv_window_get_ack(rw), 1, "");
+
+	recv_window_receive(rw, buffer3, strlen(S3), 5);
+	
+	TEST_EQ(recv_window_get_ack(rw), 1, "");
+	TEST_EQ(recv_window_get_size(rw), 100, "");
+		
+	recv_window_receive(rw, buffer1, strlen(S1), 1);
+	
+	TEST_EQ(recv_window_get_ack(rw), 10, "");
+	TEST_EQ(recv_window_get_size(rw), 91, "");
+
+	memchunk_t got = recv_window_get_next(rw, 20);
+	ASSERT(got!=NULL);
+	
+	char buffer[256];
+	memcpy(buffer, got->data, got->length);
+	buffer[got->length] = '\0';
+	TEST_STR_EQ(buffer, "123456789", "");
+	memchunk_destroy_total(&got, util_free);
+	
+	recv_window_destroy(&rw);	
 }
 
 void test_wrapping(){
@@ -792,15 +890,20 @@ int main(int argc, char** argv){
 	TEST(test_ext_array_scale);
 	
 	TEST(test_wrapping);
+	*/
 	
-	TEST(test_send_window);
-	TEST(test_send_window_scale);*/
+//	TEST(test_send_window);
+//	TEST(test_send_window_scale);
+//
+//	TEST(test_recv_window);
+	TEST(test_recv_window_1);
+//	TEST(test_recv_window_overlap);
 
-	TEST(test_recv_window);
-
-	TEST(test_tcp_states);	
+	//TEST(test_tcp_states);	
 
 	//TEST(test_array);
+
+	//TEST(test_sorted_list);
 
 	/* RETURN */
 	return(0);

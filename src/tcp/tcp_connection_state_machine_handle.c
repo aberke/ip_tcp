@@ -1,36 +1,3 @@
-/*
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
-#include <netinet/tcp.h>
-#include <inttypes.h>
-
-#include "tcp_connection_state_machine_handle.h"
-*/
-
-/* 
-
-I understand why these are now in a new function and I agreed with it, 
-but I didn't realize that we would now have to add helper functions for
-EVERYTHING, which I think can significantly bloat our code and also 
-potentially decrease efficiency. I don't know if there's anything we
-can do about that, but we should consiter it, because it now seems
-really kind weird. One thing that we could do, in order to make these
-separate files but to retain the ability to access directly members
-of the tcp_connection struct, is that we could use the preprocessor
-to paste the files together. I'm gonna go ahead and do it and see if
-it works like I think it will (I'm just gonna try to add an include at 
-the bottom of tcp_connection that #includes this file.
-
-Ok I did it and it works and I think we should just to it this way, it'll make
-the code much cleaner
-
-NOTE: I've saved the old file as tcp_connection_state_machine_handle.c.old for 
-	reference 
-
-*/
-
 
 /***********************************************/
 /*** #included from tcp_connection.c ***********/
@@ -55,8 +22,12 @@ tcp_connection_transition_passive_open
 	transition
 */
 int tcp_connection_CLOSED_to_LISTEN(tcp_connection_t connection){
-	puts("CLOSED --> LISTEN");
-	tcp_connection_accept_queue_init(connection);
+	print(("CLOSED --> LISTEN"), STATES_PRINT);
+	// init accept_queue
+	bqueue_t *accept_queue = (bqueue_t*) malloc(sizeof(bqueue_t));
+	bqueue_init(accept_queue);
+
+	connection->accept_queue = accept_queue;
 	return 1;	
 }
 
@@ -67,7 +38,7 @@ tcp_connection_LISTEN_to_SYN_RECEIVED
 	send that off. The sending window should have been NULL before this point, if it
 	wasn't then it was init()ed somewhere else, which is probably a mistake */
 int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){	
-	puts("LISTEN --> SYN_RECEIVED");
+	print(("LISTEN --> SYN_RECEIVED"), STATES_PRINT);
 
 	/* Must create new connection that will handle the rest of the connection establishment.  This connection will sit on
 		the queue rather than being inserted into the connections array of the node.*/
@@ -76,12 +47,11 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 	    2. send your own SEQ number */
 
 	if(connection->send_window != NULL){
-		puts("sending window is not null when we're trying to send a SYN/ACK in tcp_connection_LISTEN_to_SYN_RECEIVED. why?");
-		exit(1); // CRASH AND BURN  <-- doesn't that seem a bit drastic?
+		CRASH_AND_BURN("sending window is not null when we're trying to send a SYN/ACK in tcp_connection_LISTEN_to_SYN_RECEIVED. why?");
 	}
 
 	uint32_t ISN = RAND_ISN();	
-	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
+	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, ISN);
 
 	// function does exactly that:
 	//connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
@@ -90,16 +60,16 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 		packet that made the state transition call this function */	// <-- Thanks a lot for that comment!! :)
 	connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, connection->last_seq_received);
 
-	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0);
+	struct tcphdr* header = tcp_header_init(0);
 
+	/* SYN */
 	tcp_set_syn_bit(header);
-	tcp_set_ack_bit(header);
 
-	tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
-	tcp_set_seq(header, ISN); 
-	connection->last_seq_sent = ISN;
+	/* SEQ */
+	tcp_set_seq(header, send_window_get_next_seq(connection->send_window)); 
+	connection->last_seq_sent = send_window_get_next_seq(connection->send_window);
 
-	tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
+	tcp_set_window_size(header, recv_window_get_size(connection->receive_window));
 
 	tcp_wrap_packet_send(connection, header, NULL, 0);
 
@@ -110,42 +80,57 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 /* this function should actually be called ONLY by tcp_node, because 
 	don't we need to first verify that this is a valid IP? */
 int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, uint16_t port){
-	printf("in tcp_connection_active_open.  remote_ip: %u\n", ip_addr);
+
+	/* set the remote and then transition */
 	tcp_connection_set_remote(connection, ip_addr, port);
+	int result = state_machine_transition(connection->state_machine, activeOPEN);
 
-	state_machine_transition(connection->state_machine, activeOPEN);
-
-	return 1;
+	return result;
 }
+
+/* helper to CLOSED_to_SYN_SENT as well as in the _handle_read_write thread for resending syn */
+int tcp_connection_send_syn(tcp_connection_t connection){
+
+	//Note: Window already initialized with connection->last_seq_sent when we transitioned from CLOSED_to_SYN_SENT
+
+	/* now init the packet */
+	struct tcphdr* header = tcp_header_init(0);
+	
+	/* SYN */
+	tcp_set_syn_bit(header);
+
+	/* SEQ */
+	tcp_set_seq(header, connection->last_seq_sent);
+	
+	// set time of when we're sending off syn
+	gettimeofday(&(connection->syn_timer), NULL);
+
+	/*  that should be good? send it off. Note: NULL because I'm assuming there's
+		to send when initializing a connection, but that's not necessarily true */
+	tcp_wrap_packet_send(connection, header, NULL, 0);
+	return 1;
+}	
+
 /*
 tcp_connection_CLOSED_to_SYN_SENT 
 	should handle sending the SYN when a connection is actively opened, ie trying
 	to actively connect to someone. 
 */
 int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection){
-	puts("CLOSED --> SYN_SENT");
-
-	/* first pick a syn to send */
-	uint32_t ISN = rand(); // only up to RAND_MAX, don't know what that is, but probably < SEQNUM_MAX
-
-	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
-
-	/* now init the packet */
-	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0);
 	
-	/* fill the syn, and set the seqnum */
-	tcp_set_syn_bit(header);
-	tcp_set_seq(header, ISN);
-	connection->last_seq_sent = ISN;
+	/* first pick a syn to send */
+	uint32_t ISN = rand(); // only up to RAND_MAX, don't know what that is, but probably < SEQNUM_MAX	
+	connection->last_seq_sent = ISN; //seq for syn about to be sent
+	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, ISN);
 
-	/*  that should be good? send it off. Note: NULL because I'm assuming there's
-		to send when initializing a connection, but that's not necessarily true */
-	tcp_wrap_packet_send(connection, header, NULL, 0);
+	connection->syn_count = 1;
+	tcp_connection_send_syn(connection);
 
 	return 1;
 }
+
 int tcp_connection_LISTEN_to_SYN_SENT(tcp_connection_t connection){
-	puts("LISTEN --> SYN_SENT");
+	print(("LISTEN --> SYN_SENT"), STATES_PRINT);
 
 	// should we destroy the accept queue?  Like are we all done listening? -- lets check the RFC at some point...
 	tcp_connection_accept_queue_destroy(connection);
@@ -163,21 +148,23 @@ int tcp_connection_LISTEN_to_SYN_SENT(tcp_connection_t connection){
         However, if a SEND is attempted before the foreign socket
         becomes specified, an error will be returned*/
 	uint32_t ISN = RAND_ISN();
-	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
+	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, ISN);
 	
-	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0);
+	struct tcphdr* header = tcp_header_init(0);
 
+	/* SYN */
 	tcp_set_syn_bit(header);
-	tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
-	tcp_set_seq(header, ISN);
-	tcp_set_ack(header, connection->last_seq_received);
+
+	/* SEQ */
+	tcp_set_seq(header, send_window_get_next_seq(connection->send_window));
 
 	tcp_wrap_packet_send(connection, header, NULL, 0);
 	
 	return 1;
 }
+
 int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection){
-	puts("SYN_SENT --> SYN_RECEIVED");
+	print(("SYN_SENT --> SYN_RECEIVED"), STATES_PRINT);
 
 	/* I may be wrong, but if you sent a SYN and you received a SYN (and not
 		a SYN/ACK, then this is a simultaneous connection. Send back a SYN/ACK */  //<-- yup exactly
@@ -190,23 +177,21 @@ int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection){
 	// again, last_seq_received will have been set by the packet that triggered this transition 
 	connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, connection->last_seq_received);
 
-	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port, 0); 
+	struct tcphdr* header = tcp_header_init(0); 
 											
-	// should have been set by the last person who sent the
-	// the first syn
+	/* SEQ */
 	tcp_set_seq(header, connection->last_seq_sent);
-	tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
-	tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
-	
+
+	/* SYN */
 	tcp_set_syn_bit(header);
-	tcp_set_ack_bit(header);
 	
 	tcp_wrap_packet_send(connection, header, NULL, 0);
 
 	return 1;
 }
+
 int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
-	puts("SYN_SENT --> ESTABLISHED");
+	print(("SYN_SENT --> ESTABLISHED"), STATES_PRINT);
 
 	/* just got a SYN/ACK, so send back a ACK, and that's it */
 
@@ -217,27 +202,24 @@ int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
 		
 	connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, connection->last_seq_received);
 	
-	struct tcphdr* header = tcp_header_init(connection->local_addr.virt_port, connection->remote_addr.virt_port,0);
+	struct tcphdr* header = tcp_header_init(0);
 
-	// load it up!
-	tcp_set_seq(header, connection->last_seq_sent + 1);
-	tcp_set_ack_bit(header);
-	printf("setting ack to connection->last_seq_receved+1 = %u\n", ((connection->last_seq_received)+1));
-	tcp_set_ack(header, ((connection->last_seq_received)+1));
-	//tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
+	/* SEQ */
+	tcp_set_seq(header, send_window_get_next_seq(connection->send_window));
 
-	// window size?
-	tcp_set_window_size(header, recv_window_get_size(connection->receive_window));
-		
 	// send it off 
 	tcp_wrap_packet_send(connection, header, NULL, 0);
+	
+	/* We can return from connect with success! */
+	tcp_connection_api_signal(connection, 0); //sets api_ret to 0 for success
 	
 	return 1;
 }
 
 int tcp_connection_SYN_RECEIVED_to_ESTABLISHED(tcp_connection_t connection){
-
-	
+	print(("SYN_RECEIVED->ESTABLISHED"), STATES_PRINT);
+	//signal successfully tcp_api_accept to successfully return
+	tcp_connection_api_signal(connection, tcp_connection_get_socket(connection)); 
 
 	return 1;
 }
@@ -292,6 +274,10 @@ int tcp_connection_close(tcp_connection_t connection){
 // transition occurs when in established state user commands to CLOSE
 int tcp_connection_ESTABLISHED_to_FIN_WAIT_1(tcp_connection_t connection){
 	puts("HANDLE tcp_connection_ESTABLISHED_to_FIN_WAIT_1");
+	/* RFC: Queue this until all preceding SENDs have been segmentized, then
+      form a FIN segment and send it.  In any case, enter FIN-WAIT-1
+      state.
+	*/
 	return 1;	
 }
 
@@ -306,9 +292,14 @@ int tcp_connection_FIN_WAIT_1_to_CLOSING(tcp_connection_t connection){
 /* 0o0o0oo0o0o0o0o0o0o0o0o0o0o0o0o0o0o Closing Connection 0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o */
 /* 0o0o0oo0o0o0o0o0o0o0o0o0o0o0o0o0o0o Closing Connection 0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o */
 
-
+//TODO
 int tcp_connection_LISTEN_to_CLOSED(tcp_connection_t connection){	
-	puts("LISTEN --> CLOSED");
+	print(("LISTEN --> CLOSED"), STATES_PRINT);
+	
+	//TODO:
+	
+	/* RFC:   Any outstanding RECEIVEs are returned with "error:  closing"
+      responses.  Delete TCB, enter CLOSED state, and return. */
 	
 	tcp_connection_accept_queue_destroy(connection);
 	
@@ -319,19 +310,66 @@ int tcp_connection_LISTEN_to_CLOSED(tcp_connection_t connection){
 }
 										
 
+/* I don't think this is right, because I think you could close the 
+	connection after a syn sent without timing out (the user just 
+	decides to close it and not wait for a response). This is the 
+	function that should occur at THAT point */
 int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection){
-	puts("SYN_SENT --> CLOSED");
-	send_window_destroy(&(connection->send_window));
-	recv_window_destroy(&(connection->receive_window));
-	/* you're just closing up, there's nothing to do */
-	return 1;
-}
-int tcp_connection_SYN_RECEIVED_to_FIN_WAIT_1(tcp_connection_t connection){
 	
+	/* RFC: Delete the TCB and return "error:  closing" responses to any
+      queued SENDs, or RECEIVEs. */
+
+	print(("SYN_SENT --> CLOSED"), STATES_PRINT);
+
+	if(connection->send_window)
+		send_window_destroy(&(connection->send_window));
+	if(connection->receive_window)
+		recv_window_destroy(&(connection->receive_window));
+	
+	tcp_connection_api_signal(connection, -ETIMEDOUT); // return from connect() api call with timeout error
+	//tcp_node_remove_connection_kernal(connection->tcp_node, connection); //<-- put it in api call
+
 	return 1;
 }
 
+int tcp_connection_SYN_RECEIVED_to_FIN_WAIT_1(tcp_connection_t connection){
+
+	/*  RFC: If no SENDs have been issued and there is no pending data to send,
+      then form a FIN segment and send it, and enter FIN-WAIT-1 state;
+      otherwise queue for processing after entering ESTABLISHED state.*/
+
+	return 1;
+}
+
+/* When we close the connection, we want to relinquish its resources, which
+	means we want to talk to the node (free its port for reuse, reset its
+	ip addresses) */
+int tcp_connection_SYN_SENT_to_CLOSED_by_RST(tcp_connection_t connection){
+	print(("SYN_SENT --> CLOSED by RST"), STATES_PRINT);
+	if(connection->send_window)
+		send_window_destroy(&(connection->send_window));
+	if(connection->receive_window)
+		recv_window_destroy(&(connection->receive_window));
+	
+	tcp_connection_api_signal(connection, -ECONNREFUSED);
+
+	/* just closing up, nothing to do */
+	return -ECONNREFUSED;
+}
+// there are times when the CLOSE call is illegal given the state - we should reflect this to user, yes? 
+// and not pthread_cond_wait indefinitely?
+int tcp_connection_CLOSING_error(tcp_connection_t connection){
+	/*RFC: Respond with "error:  connection closing". */
+	puts("TODO: make transition to handle: RFC: Respond with 'error:  connection closing'");
+	tcp_connection_api_signal(connection, -EBADF); //fd isn't a valid open file descriptor.
+	return -1;
+}
 
 /********** End of State Changing Functions *******/
 
-
+// invalid transition
+int tcp_connection_invalid_transition(tcp_connection_t connection){
+	print(("invalid transition"), STATES_PRINT);
+	tcp_connection_api_signal(connection, INVALID_TRANSITION);
+	return INVALID_TRANSITION;
+}

@@ -14,8 +14,6 @@
 // debugging
 #include "tcp_states.h"
 
-static void _print(state_machine_t machine);
-
 /* 
 transitioning
 	joins an action with a next state 
@@ -101,23 +99,7 @@ state_e state_machine_get_state(state_machine_t machine){
 void state_machine_set_state(state_machine_t machine, state_e state){
 	machine->current_state = state;
 }
-//// INTERNAL FUNCTIONS ////
-static void _print(state_machine_t machine){
-	int i,j;
-	transitioning_t transition;
-	for(i=0;i<1;i++){//NUM_STATES;i++){
-		for(j=0;j<NUM_TRANSITIONS;j++){
-			transition = ARRAY_GET(machine->transition_matrix, (state_e)i, (transition_e)j);
-			print_transition((transition_e)j);
-			printf(",");
-			print_state((state_e)i);
-			printf("-->");
-			print_state(transition->next_state);
-			printf("    ");
-		}
-		printf("\n");
-	}
-}
+
 /* set state iterates through the states/transitions and for each
 	calls the function get_next_state which will give the state that 
 	should be at TransitionMatrix<state,transition>. Again, 
@@ -140,10 +122,7 @@ void _init(state_machine_t machine){
 			
 /* wraps around the ARRAY functionality that we're using here */
 void _set_transitioning(state_machine_t machine, state_e state, transition_e transition, transitioning_t t){
-
 	ARRAY_PUT(machine->transition_matrix, state, transition, t);
-	
-	transitioning_t t1 = ARRAY_GET(machine->transition_matrix, (state_e)0, (transition_e)1);
 }	
 
 void state_machine_print_state(state_machine_t state_machine){

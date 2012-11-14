@@ -13,13 +13,17 @@
 #define ROUTING_INFO_HEADER_SIZE 4
 #define MTU (UDP_PACKET_MAX_SIZE - IP_HEADER_SIZE)
 
+
+#define PTHREAD_COND_TIMEOUT_NSEC 5000000
+#define PTHREAD_COND_TIMEOUT_SEC 1 //WAY TOO LONG RIGHT??
+
 /****** Structs/Functions for tcp_packet **************************/
 
 // data type that to_send and to_read queues will store (ie queue and dequeue) -- need vip's associated with packet
 struct tcp_packet_data{
 	uint32_t local_virt_ip;
 	uint32_t remote_virt_ip;
-	char packet[MTU];
+	char* packet;//char packet[MTU];
 	int packet_size;  //size of packet in bytes
 };
 
@@ -27,7 +31,7 @@ typedef struct tcp_packet_data* tcp_packet_data_t;
 
 
 tcp_packet_data_t tcp_packet_data_init(char* packet_data, int packet_data_size, uint32_t local_virt_ip, uint32_t remote_virt_ip);
-void tcp_packet_data_destroy(tcp_packet_data_t packet_data);
+void tcp_packet_data_destroy(tcp_packet_data_t* packet_data);
 void tcp_packet_print(tcp_packet_data_t packet);
 
 /****** End of Structs/Functions for tcp_packet **************************/
