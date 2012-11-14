@@ -43,20 +43,29 @@ void v_socket(const char *line, tcp_node_t tcp_node){
 void vv_bind(const char *line, tcp_node_t tcp_node){
 	
 	int socket;
-	struct in_addr* addr = malloc(sizeof(struct in_addr));
+	char* addr_str = malloc(sizeof(char)*INET_ADDRSTRLEN);
 	int port;
 	
-	int ret = sscanf(line, "v_bind %d %s %d", &socket, (char*)addr, &port);
+	int ret = sscanf(line, "v_bind %d %s %d", &socket, addr_str, &port);
 	if (ret != 3){
 		fprintf(stderr, "syntax error (usage: v_bind [socket] [address] [port])\n");
-		free(addr);
+		free(addr_str);
 		return;
 	} 	
-	ret = tcp_api_bind(tcp_node, socket, *addr, port);
+	
+		
+	/* convert the given string into an address structure */
+	struct in_addr* addr = malloc(sizeof(struct in_addr));
+	inet_pton(AF_INET, addr_str, addr);
+	free(addr_str);
+
+	ret = tcp_api_bind(tcp_node, socket, addr, port);
 	if(ret < 0)
 		printf("v_bind returned error: %d\n", ret);
 	else
 		printf("v_bind returned: %d\n", ret);
+
+	/* free it, hopefully tcp_api_bind didn't want to hang onto it */
 	free(addr);
 }
 
@@ -72,8 +81,8 @@ void v_listen(const char *line, tcp_node_t tcp_node){
 	
 	if(ret < 0)
 		printf("Error: v_listen returned: %s\n", strerror(-ret));
-	else
-		printf("Error: v_listen returned: %s\n", strerror(-ret));
+
+	printf("v_listen returned %d\n", ret);
 }
 
 /*
@@ -96,7 +105,7 @@ void accept_cmd(const char *line, tcp_node_t tcp_node){
 	}
 	// now bind
 	struct in_addr addr;	
-	ret = tcp_api_bind(tcp_node, socket, addr, port);
+	ret = tcp_api_bind(tcp_node, socket, &addr, port);
 	if(ret < 0){
 		printf("Error: v_bind returned: %s\n", strerror(-ret));
 		return;
@@ -225,7 +234,7 @@ return whatever recv returns. Default is n */
 void recv_cmd(const char* line, tcp_node_t tcp_node){
 	int socket;
 	int num_bytes;
-	char* block_y_n;
+	char block_y_n[BUFFER_SIZE];
 	int block = 0; //boolean as to whether recv should block or not
 	int ret;
 	
@@ -693,7 +702,7 @@ void* _handle_tcp_node_stdin(void* node){
 			}
 		}
 	}
-	puts("exiting stdin thread");
+	print(("exiting stdin thread"), CLOSING_PRINT);
 	pthread_exit(NULL);
 }
 

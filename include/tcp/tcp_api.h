@@ -47,7 +47,7 @@ int tcp_api_socket(struct tcp_node* node);
 /* binds a socket to a port
 always bind to all interfaces - which means addr is unused.
 returns 0 on success or negative number on failure */
-int tcp_api_bind(struct tcp_node* tcp_node, int socket,  struct in_addr addr, uint16_t port);
+int tcp_api_bind(struct tcp_node* tcp_node, int socket,  struct in_addr* addr, uint16_t port);
 int tcp_api_listen(struct tcp_node* tcp_node, int socket);
 
 /* accept a requested connection (behave like unix socket’s accept)

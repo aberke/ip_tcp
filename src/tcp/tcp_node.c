@@ -113,8 +113,8 @@ struct tcp_node{
 	connection_port_keyed_t portToConnection;	
 	// used to systematically keep track of available file descriptors/ports and to reuse them after socket closed
 	// each time need new unique socket/port, call dequeue and item is pointer to int to use as socket/port
-	queue_t sockets_available_queue;
-	queue_t ports_available_queue;
+	int_queue_t sockets_available_queue;
+	int_queue_t ports_available_queue;
 	/****** End of Kernal Related *********/
 
 	/******* Thread Related **************/
@@ -161,17 +161,17 @@ tcp_node_t tcp_node_init(iplist_t* links){
 	tcp_node->portToConnection = NULL;
 	
 	/* Initialize sockets/ports available queues */
-	queue_t sockets_available_queue = queue_init();
-	queue_t ports_available_queue = queue_init();
+	int_queue_t sockets_available_queue = int_queue_init();
+	int_queue_t ports_available_queue = int_queue_init();
 	
-	queue_set_size(sockets_available_queue, MAX_FILE_DESCRIPTORS);
-	queue_set_size(ports_available_queue, MAX_FILE_DESCRIPTORS);
+	int_queue_set_size(sockets_available_queue, MAX_FILE_DESCRIPTORS);
+	int_queue_set_size(ports_available_queue, MAX_FILE_DESCRIPTORS);
 	
-	void* i;
-	for(i=0; i<(void*)MAX_FILE_DESCRIPTORS; i++){		
+	int i;
+	for(i=0; i<MAX_FILE_DESCRIPTORS; i++){		
 		/* We're just queueing the integers we want to use as sockets/ports */
-		queue_push(sockets_available_queue, i);
-		queue_push(ports_available_queue, (i+1)); // tcp_connection with port = 0 signifies that port hasn't been set	
+		int_queue_push(sockets_available_queue, i);
+		int_queue_push(ports_available_queue, (i+1)); // tcp_connection with port = 0 signifies that port hasn't been set	
 	}
 	
 	tcp_node->sockets_available_queue = sockets_available_queue;
@@ -269,8 +269,8 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	free(tcp_node->stdin_commands);
 	
 	// destroy socket/port queues -- they just hold ints so i don't think we need to destroy each item inside
-	queue_destroy(&(tcp_node->sockets_available_queue));
-	queue_destroy(&(tcp_node->ports_available_queue));
+	int_queue_destroy(&(tcp_node->sockets_available_queue));
+	int_queue_destroy(&(tcp_node->ports_available_queue));
 	
 	plain_list_destroy(&(tcp_node->thread_list));
 	
@@ -334,7 +334,7 @@ tcp_connection_t tcp_node_new_connection(tcp_node_t tcp_node){
 	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 	
 	int socket = tcp_node_next_virt_socket(tcp_node);
-	if(socket<0) // This is from when we were using bqueue rather than your queue but your queue returns NULL when nothing to dequeue so this doesn't make sense
+	if(socket<0) // EMPTY_QUEUE --no more available sockets
 		return NULL;
 		
 	// init new tcp_connection
@@ -366,7 +366,7 @@ void tcp_node_return_socket_to_kernal(tcp_node_t tcp_node, int socket){
 	
 	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 	// return socket to available queue
-	queue_push_front(tcp_node->sockets_available_queue, (void*)((uint64_t)socket));
+	int_queue_push_front(tcp_node->sockets_available_queue, socket);
 	
 	connection_virt_socket_keyed_t socket_keyed;
 	HASH_FIND(hh, tcp_node->virt_socketToConnection, &socket, sizeof(int), socket_keyed);
@@ -389,7 +389,7 @@ void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, int port){
 		
 	// return port to available queue
 	if(port<=MAX_FILE_DESCRIPTORS)
-		queue_push_front(tcp_node->ports_available_queue, (void*)((uint64_t)port));
+		int_queue_push_front(tcp_node->ports_available_queue, port);
 	
 	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 		
@@ -543,14 +543,14 @@ int tcp_node_next_port(tcp_node_t tcp_node){
 
 	//lock kernal when popping off queue of available ports
 	pthread_mutex_lock(&(tcp_node->kernal_mutex));
-	int next_port = (uint64_t)queue_pop(tcp_node->ports_available_queue);
+	int next_port = int_queue_pop(tcp_node->ports_available_queue);
 	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 	
 	// check that next_port not already in use -- not already in hashmap	
 	while((tcp_node_port_unused(tcp_node, next_port))<0){
 		
 		pthread_mutex_lock(&(tcp_node->kernal_mutex));
-		next_port = (uint64_t)queue_pop(tcp_node->ports_available_queue);
+		next_port = int_queue_pop(tcp_node->ports_available_queue);
 		pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 	}
 	
@@ -563,7 +563,7 @@ int tcp_node_next_virt_socket(tcp_node_t tcp_node){
 	//lock kernal
 	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 
-	int next_socket = (uint64_t)queue_pop(tcp_node->sockets_available_queue);
+	int next_socket = int_queue_pop(tcp_node->sockets_available_queue);
 	
 	//unlock kernal
 	pthread_mutex_unlock(&(tcp_node->kernal_mutex));	
@@ -666,7 +666,7 @@ void tcp_node_start(tcp_node_t tcp_node){
 	}
 
 	print(("stdin thread"), CLOSING_PRINT);
-	rc = pthread_cancel(tcp_stdin_thread);
+	rc = pthread_join(tcp_stdin_thread, NULL);
 	if (rc) {
 		print(("ERROR; return code from pthread_join() is %d\n", rc), CLOSING_PRINT);
 		exit(-1);

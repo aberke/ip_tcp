@@ -32,7 +32,7 @@ void transitioning_destroy(transitioning_t* t){
 
 /* Some internal functions: */
 void _set_transitioning(state_machine_t machine, state_e s, transition_e t, transitioning_t transitioning);
-void _init(state_machine_t machine); 
+void _state_machine_initialize(state_machine_t machine); 
 
 /* The transition matrix = M has the property that M[i,j]
    is the state transitioned from when CURRENTLY in state i 
@@ -53,7 +53,7 @@ state_machine_t state_machine_init(){
 	ARRAY_INIT(state_machine->transition_matrix, transitioning_t, NUM_STATES, NUM_TRANSITIONS, START_STATE);
 	state_machine->argument = NULL;
 	state_machine->current_state = START_STATE;
-	_init(state_machine);
+	_state_machine_initialize(state_machine);
 	
 	return state_machine;
 }
@@ -107,7 +107,7 @@ void state_machine_set_state(state_machine_t machine, state_e state){
 	NEXT STATE that the machine should move to if it is currently in
 	state i and receives transition j */ 
 
-void _init(state_machine_t machine){
+void _state_machine_initialize(state_machine_t machine){
 	int i,j;
 	transitioning_t transition;
 	for(i=0;i<NUM_STATES;i++){

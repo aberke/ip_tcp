@@ -247,7 +247,7 @@ int ip_node_read(ip_node_t ip_node, char* packet, int packet_size, uint32_t loca
 		return -1;
 	
 	if(packet_size > MTU)
-		printf("Received tcp packet of size %d which is larger than the tcp MTU %ld.  Will only keep MTU bytes\n", packet_size, MTU);
+		printf("Received tcp packet of size %d which is larger than the tcp MTU %u.  Will only keep MTU bytes\n", packet_size, MTU);
 	
 	tcp_packet_data_t tcp_packet = tcp_packet_data_init(packet, packet_size, local_virt_ip, remote_virt_ip);
 		
@@ -295,7 +295,7 @@ int ip_node_command(ip_node_t ip_node, const char* cmd){
 	if(!ip_node->stdin_queue) return -1;
 	
 	
-	char* cmd_copied = malloc(sizeof(char)*strlen(cmd));	
+	char* cmd_copied = malloc(sizeof(char)*(strlen(cmd)+1));	
 	strcpy(cmd_copied, cmd);
 
 	if(bqueue_enqueue(ip_node->stdin_queue, (void*)cmd_copied) < 0){
