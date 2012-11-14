@@ -546,11 +546,13 @@ void window_cmd(const char* line, tcp_node_t tcp_node){
 	int r_size = 0;	
 	send_window_t s = tcp_connection_get_send_window(connection);
 	recv_window_t r = tcp_connection_get_recv_window(connection);
-	
-	if(s)
+
+	if(s){
 	 	s_size = send_window_get_size(s);
-	if(r)	
+	}
+	if(r){
 		r_size = (int)recv_window_get_size(r);
+	}
 
 	printf("[socket %d]:\n\t send window size: %d\n\t receive window size: %d\n", socket, s_size, r_size);
 }
