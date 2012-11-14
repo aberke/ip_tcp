@@ -577,12 +577,14 @@ void tcp_node_print(tcp_node_t tcp_node){
 
 	//char* buffer = malloc(sizeof(char)*INET_ADDRSTRLEN);
 	tcp_connection_t connection;
-	
+	int i=0;
 	connection_virt_socket_keyed_t socket_keyed, tmp;
 	HASH_ITER(hh, tcp_node->virt_socketToConnection, socket_keyed, tmp){
 		connection = socket_keyed->connection;
 		tcp_connection_print_sockets(connection);
-	}	
+	}
+	if(i==0)
+		puts("No Open File Descriptors");	
 }
 
 void tcp_node_start(tcp_node_t tcp_node){
