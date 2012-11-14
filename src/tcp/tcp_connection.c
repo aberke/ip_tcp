@@ -284,12 +284,22 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 											tcp_packet_data->local_virt_ip,// our address right now, 
 																			// and this is still valid?
 											TCP_DATA);
+	/* CHECKSUM */
 	if(checksum_result < 0){
 		puts("Bad checksum! what happened? not discarding");
 		return;
 	}
 	
-	/* check if there's any data, and if there is push it to the window,
+	/* this boolean just decides whether we need
+		to update our peer (just call tcp_wrap_packet_send) with
+		our current state, at this point this only involves sending
+		an ack back which we will always do whenever we send a packet,
+		but if we receive data and then don't need to send a packet, 
+		this boolean will make sure we send one just for that reason */
+	int update_peer = 0;
+
+	/* DATA 
+	    check if there's any data, and if there is push it to the window,
 		but what does the seqnum even mean if the ACKs haven't been synchronized? */
 	memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
 	if(data){ 
@@ -299,6 +309,9 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	
 		/* send the ack back */
 		memchunk_destroy(&data);
+
+		/* we want to update our peer what we've acked */
+		update_peer = 1;
 	}	
 
 	/* lets get the window size first */
@@ -308,46 +321,40 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	/* now check the SYN bit */
 	if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
 		tcp_connection_handle_syn_ack(connection, tcp_packet_data);	
-		tcp_packet_data_destroy(&tcp_packet_data);
-		return;
+		update_peer = 0;
 	}
 	
 	/* ack data if you're in a position to do so */
-	if(tcp_ack_bit(tcp_packet)){
+	else if(tcp_ack_bit(tcp_packet)){
 		//puts("received packet with ack_bit set");
  		if(connection->send_window)
 			send_window_ack(connection->send_window, tcp_ack(tcp_packet));
 				
-		if(connection_state == ESTABLISHED)
+		if(connection_state == ESTABLISHED){
 			//send next chunks of data
-			tcp_connection_send_next(connection);
+			if(tcp_connection_send_next(connection) > 0)
+				update_peer = 0;
+		}	
 		
 		// do we want an else? that was a bad ACK (its not acking anything), or we fucked up
 		else if(connection_state == SYN_RECEIVED) //<-- Neil: why did you change that to syn_sent????
 			state_machine_transition(connection->state_machine, receiveACK);	
-
-		tcp_packet_data_destroy(&tcp_packet_data);
-		return;
 	}
 	
-	if(tcp_syn_bit(tcp_packet)){
+	else if(tcp_syn_bit(tcp_packet)){
 		tcp_connection_handle_syn(connection, tcp_packet_data);
-
-		tcp_packet_data_destroy(&tcp_packet_data);
-		return;
+		update_peer = 0;
 	}
 
-	if(tcp_rst_bit(tcp_packet)){
+	else if(tcp_rst_bit(tcp_packet)){
 		print(("rst"),TCP_PRINT);
 		state_machine_transition(connection->state_machine, receiveRST);	
-
-		tcp_packet_data_destroy(&tcp_packet_data);
-		return;
+		update_peer = 0;
 	}
 
-	/* if you've gotten here, then just send an empty packet
-		that has the ack data in it (the ack will be set in tcp_wrap_packet_send) */
-	tcp_wrap_packet_send(connection, tcp_header_init(0), NULL, 0);
+	/* now update that peer because friends don't let friends send unacknowledged bytes*/
+	if(update_peer)
+		tcp_wrap_packet_send(connection, tcp_header_init(0), NULL, 0);
 		
 	/* Clean up */
 	tcp_packet_data_destroy(&tcp_packet_data);

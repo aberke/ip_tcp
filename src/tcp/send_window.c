@@ -113,6 +113,8 @@ void send_window_destroy(send_window_t* send_window){
 }
 
 void send_window_set_size(send_window_t send_window, uint32_t size){
+	printf("%u\n", size);
+
 	pthread_mutex_lock(&(send_window->mutex));
 	send_window->size = size;
 	pthread_mutex_unlock(&(send_window->mutex));
@@ -259,7 +261,7 @@ int send_window_get_size(send_window_t send_window){
 }
 
 void send_window_print(send_window_t send_window){
-	printf("Left: %d\nsize: %d\nSent_left: %d\n", send_window->left, send_window->size, send_window->sent_left);
+	print(("Left: %d\nsize: %d\nSent_left: %d\n", send_window->left, send_window->size, send_window->sent_left), SEND_WINDOW_PRINT);
 }
 
 
