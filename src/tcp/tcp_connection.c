@@ -267,6 +267,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	void* tcp_packet = tcp_packet_data->packet;
 	state_e connection_state = state_machine_get_state(connection->state_machine);
 	
+	print(("Received Packet of size %d", tcp_packet_data->packet_size), PACKET_PRINT);
 	view_packet((struct tcphdr*)tcp_packet, tcp_packet+20, tcp_packet_data->packet_size-20); 
 	
 	//TODO: FIGURE OUT WHEN ITS NOT APPROPRIATE TO RESET REMOTE ADDRESSES -- we don't want our connection sabotaged 
@@ -484,6 +485,10 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 										total_length,
 										tcp_connection_get_local_ip(connection),
 										tcp_connection_get_remote_ip(connection));
+	
+	/* print it */
+	print(("Sending Packet of length %u", total_length), PACKET_PRINT);
+	view_packet(header, data, data_len);
 										
 	/* queue it */
 	if(tcp_connection_queue_ip_send(connection, packet_data) < 0){

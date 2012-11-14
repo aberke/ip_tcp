@@ -312,8 +312,8 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 	int port = tcp_node_assign_port(tcp_node, new_connection, -1); //-1 just assigns to next port
 	
 	//to test:
-	printf("port = tcp_node_assign_port(tcp_node, new_connection, -1) = %d\n", port);
-	printf("tcp_connection_get_local_port(new_connection) = %d\n", tcp_connection_get_local_port(new_connection));
+	print(("port = tcp_node_assign_port(tcp_node, new_connection, -1) = %d\n", port), PORT_PRINT);
+	print(("tcp_connection_get_local_port(new_connection) = %d\n", tcp_connection_get_local_port(new_connection)), PORT_PRINT);
 	
 	// destroy data -- all done with it
 	accept_queue_data_destroy(&data);
