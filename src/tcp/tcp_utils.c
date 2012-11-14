@@ -41,7 +41,7 @@ struct memchunk{  --- define in utils.h
 */
 memchunk_t tcp_unwrap_data(void* packet, int length){
 	struct tcphdr* header = (struct tcphdr*)packet;
-	unsigned int data_offset = 4*header->th_off; /* because it's the length in 32-bit words */
+	unsigned int data_offset = 4*header->doff; /* because it's the length in 32-bit words */
 	
 	/* if there's no data, just return NULL */
 	if(!(length-data_offset)) 
@@ -54,8 +54,8 @@ memchunk_t tcp_unwrap_data(void* packet, int length){
 struct tcphdr* tcp_header_init(unsigned short host_port, unsigned short dest_port, int data_size){
 	struct tcphdr* header = malloc(sizeof(struct tcphdr) + data_size);
 	memset(header, 0, sizeof(struct tcphdr)+data_size);
-	header->th_sport = htons(host_port);
-	header->th_dport = htons(dest_port);
+	header->source = htons(host_port);
+	header->dest = htons(dest_port);
 	tcp_set_offset(header);
 	return header;
 }
