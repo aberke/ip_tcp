@@ -445,6 +445,7 @@ void sendfile_cmd(const char* line, tcp_node_t tcp_node){
 		fprintf(stderr, "syntax error - could not parse ip address (usage: connect [remote ip address] [remote port])\n");
 		return;
 	}
+
 	// first initialize new socket that will do the connecting
 	if((socket = tcp_api_socket(tcp_node))<0){
 		printf("Error: v_socket() returned value %d\n", socket);
