@@ -213,7 +213,7 @@ int tcp_api_socket(tcp_node_t tcp_node){
 always bind to all interfaces - which means addr is unused.
 returns 0 on success or negative number on failure */
 //int v bind(int socket, struct in addr addr, uint16 t port);
-int tcp_api_bind(tcp_node_t tcp_node, int socket, struct in_addr addr, uint16_t port){
+int tcp_api_bind(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint16_t port){
 
 	// check if port already in use
 	if(tcp_node_port_unused(tcp_node, port) < 0)		
@@ -250,7 +250,7 @@ int tcp_api_listen(tcp_node_t tcp_node, int socket){
 	}
 	
 	if(tcp_connection_passive_open(connection) < 0){ // returns -1 on failure
-		return -1;
+		return -EBADF;
 	}
 	
 	port = (int)tcp_connection_get_local_port(connection);

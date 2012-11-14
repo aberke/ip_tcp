@@ -666,7 +666,7 @@ void tcp_node_start(tcp_node_t tcp_node){
 	}
 
 	print(("stdin thread"), CLOSING_PRINT);
-	rc = pthread_cancel(tcp_stdin_thread);
+	rc = pthread_join(tcp_stdin_thread, NULL);
 	if (rc) {
 		print(("ERROR; return code from pthread_join() is %d\n", rc), CLOSING_PRINT);
 		exit(-1);
