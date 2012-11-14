@@ -580,6 +580,7 @@ void tcp_node_print(tcp_node_t tcp_node){
 	int i=0;
 	connection_virt_socket_keyed_t socket_keyed, tmp;
 	HASH_ITER(hh, tcp_node->virt_socketToConnection, socket_keyed, tmp){
+		i++;
 		connection = socket_keyed->connection;
 		tcp_connection_print_sockets(connection);
 	}
