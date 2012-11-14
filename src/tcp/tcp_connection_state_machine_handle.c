@@ -51,7 +51,7 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 	}
 
 	uint32_t ISN = RAND_ISN();	
-	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
+	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, ISN);
 
 	// function does exactly that:
 	//connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
@@ -121,7 +121,7 @@ int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection){
 	/* first pick a syn to send */
 	uint32_t ISN = rand(); // only up to RAND_MAX, don't know what that is, but probably < SEQNUM_MAX	
 	connection->last_seq_sent = ISN; //seq for syn about to be sent
-	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
+	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, ISN);
 
 	connection->syn_count = 1;
 	tcp_connection_send_syn(connection);
@@ -148,7 +148,7 @@ int tcp_connection_LISTEN_to_SYN_SENT(tcp_connection_t connection){
         However, if a SEND is attempted before the foreign socket
         becomes specified, an error will be returned*/
 	uint32_t ISN = RAND_ISN();
-	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
+	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, ISN);
 	
 	struct tcphdr* header = tcp_header_init(0);
 

@@ -9,15 +9,15 @@
 #define TCP_HEADER_MIN_SIZE 20
 
 #define WINDOW_DEFAULT_TIMEOUT 3.0
-#define WINDOW_DEFAULT_SEND_WINDOW_SIZE 100
-#define WINDOW_DEFAULT_SEND_SIZE 2000
+//#define WINDOW_DEFAULT_SEND_WINDOW_SIZE 100
+//#define WINDOW_DEFAULT_SEND_SIZE 2000
 #define WINDOW_DEFAULT_ISN 0  // don't actually use this
 
 #define ACCEPT_QUEUE_DEFAULT_SIZE 10
 
 #define DEFAULT_TIMEOUT 12.0
 #define DEFAULT_WINDOW_SIZE ((uint16_t)10000)
-#define DEFAULT_CHUNK_SIZE 10000
+#define DEFAULT_WINDOW_CHUNK_SIZE 1000
 #define RAND_ISN() rand()
 
 /*// a tcp_connection in the listen state queues this triple on its accept_queue when
