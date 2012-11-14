@@ -12,7 +12,7 @@
 #include "ip_utils.h"
 #include "tcp_utils.h" */
 #include "tcp_node.h"
-#include "queue.h"
+#include "int_queue.h"
 
 #define SIGNAL_CRASH_AND_BURN -777
 #define SIGNAL_DESTROYING -666

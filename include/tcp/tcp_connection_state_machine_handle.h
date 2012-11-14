@@ -6,7 +6,7 @@
 #include "state_machine.h"
 #include "send_window.h"
 #include "recv_window.h"
-#include "queue.h"
+#include "int_queue.h"
 
 
 /********** State Changing Functions *************/
