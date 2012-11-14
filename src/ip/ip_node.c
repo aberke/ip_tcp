@@ -295,7 +295,7 @@ int ip_node_command(ip_node_t ip_node, const char* cmd){
 	if(!ip_node->stdin_queue) return -1;
 	
 	
-	char* cmd_copied = malloc(sizeof(char)*strlen(cmd));	
+	char* cmd_copied = malloc(sizeof(char)*(strlen(cmd)+1));	
 	strcpy(cmd_copied, cmd);
 
 	if(bqueue_enqueue(ip_node->stdin_queue, (void*)cmd_copied) < 0){
