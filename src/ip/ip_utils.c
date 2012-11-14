@@ -7,6 +7,7 @@
 
 #include "ip_utils.h"
 #include "ipsum.h"
+#include "utils.h"
 
 /****** Structs/Functions for tcp_packet **************************/
 
@@ -59,22 +60,19 @@ int ip_check_valid_packet(char* buffer, int bytes_read){
 		return -1;
 	}
 
-	u_short checksum;
 	struct ip* ip_header = (struct ip*)buffer;
 
-	//run checksum
-	checksum = ntohs(ip_header->ip_sum);
 	ip_header->ip_sum = 0; // !! because we're computing it! 
-	int ttl = ip_header->ip_ttl;
-	ip_header->ip_ttl = 0;
-	
-	if(checksum != ip_sum((char*)ip_header, IP_HEADER_SIZE)){  
-		puts("Packet ip_sum != actually checksum");
+
+	/* if what you get isn't what they got, then that's not good */
+	if( ip_header->ip_sum != ip_sum((char*)ip_header, IP_HEADER_SIZE)){  
+		print(("Packet ip_sum != actually checksum"), IP_PRINT);
 		return -1;
 	}
 
-	ip_header->ip_sum = htons(checksum); // set it back
-	ip_header->ip_ttl = ttl;
+	ip_header->ip_ttl--; 
+	ip_header->ip_sum = ip_sum((char*)ip_header, IP_HEADER_SIZE); // set it back
+
 	u_short ip_len = ntohs(ip_header->ip_len);
 
 	if(bytes_read < ip_len){

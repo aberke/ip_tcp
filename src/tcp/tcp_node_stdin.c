@@ -700,6 +700,8 @@ void* _handle_tcp_node_stdin(void* node){
 				fprintf(stderr, "error: no valid command specified\n");
 				continue;
 			}
+
+		puts("1");
 		}
 	}
 	print(("exiting stdin thread"), CLOSING_PRINT);
