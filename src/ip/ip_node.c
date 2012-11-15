@@ -714,9 +714,15 @@ static void _handle_user_command(ip_node_t ip_node, char* buffer){//bqueue_t *st
 		else if(!strcmp(buffer, "interfaces"))
 			ip_node_print_interfaces(ip_node);
 	
+		else if(!strcmp(buffer, "li"))
+			ip_node_print_interfaces(ip_node);
+
 		else if(!strcmp(buffer, "routes"))
 			routing_table_print(ip_node->routing_table);
 			
+		else if(!strcmp(buffer, "lr"))
+			routing_table_print(ip_node->routing_table);
+
 		else if(buffer[0] == 'd')
 			_handle_user_command_down(ip_node, buffer);
 		
