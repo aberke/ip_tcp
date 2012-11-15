@@ -188,9 +188,13 @@ plain_list_el_t plain_list_pop(plain_list_t list){
 
 void plain_list_remove(plain_list_t list, plain_list_el_t el){
 	pthread_mutex_lock(&(list->lock));
+    if(el==NULL)
+       puts("plain_list_remove*********************el NULL**********************");
 	list->length--;
 	if(!el->prev){
 		list->head = el->next;
+        if(el->next)
+            el->next->prev = NULL;
 		free(el);
 	}
 	else{

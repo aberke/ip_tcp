@@ -697,7 +697,6 @@ accept_queue_data_t tcp_connection_accept_queue_dequeue(tcp_connection_t connect
         if(ret!= -ETIMEDOUT)
             break;
     }
-    printf("accept queue ret = %d\n", ret);
     if(ret != 0)
         return NULL;
 

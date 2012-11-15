@@ -199,12 +199,10 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	plain_list_t list = tcp_node->thread_list;
 	plain_list_el_t el;
 	tcp_api_args_t args;
-    puts("tcp_node_destroy 0");
+  
 	PLAIN_LIST_ITER(list, el)
-        puts("tcp_node_destroy 1");
         args = (tcp_api_args_t)el->data;
         int result = tcp_api_args_destroy(&args);
-        puts("tcp_node_destroy 2");
 		if(result < 0){	
 			char* error_string = strerror(-result);
 			printf("Error: %s\n", error_string);
@@ -624,7 +622,7 @@ void tcp_node_start(tcp_node_t tcp_node){
 	int i=0,mod=10;
 	while((tcp_node->running)&&(tcp_node_ip_running(tcp_node))){	
 		if(i++%mod==0)
-			print(("tcp_node still running"), TCP_PRINT); //<-- just to spite you I commented it out rather than setting that print stuff
+			print(("tcp_node still running"), TCP_PRINT); 
 
 		/* get the time of the day so that we are passing in to bqueue_timed_dequeue_abs
 			the absolute time when we want the timeout to occur (the docs in bqueue.c say
