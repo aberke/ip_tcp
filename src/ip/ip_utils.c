@@ -102,6 +102,7 @@ int ip_decrement_TTL(char* packet){
 	ip_header->ip_ttl = ip_ttl - 1;
 	return 1;
 }
+
 // returns source address of packet
 uint32_t ip_get_src_addr(char* buffer){
 	char header[sizeof(struct ip)];
@@ -180,8 +181,10 @@ int ip_wrap_send_packet(void* data, int data_len, int protocol, struct in_addr i
 	ip_header->ip_src = ip_src;
 	ip_header->ip_dst = ip_dst;
 	ip_header->ip_sum = 0;
-	ip_header->ip_sum = htons(ip_sum((char *)ip_header, IP_HEADER_SIZE));
+
 	ip_header->ip_ttl = 15;
+
+	ip_header->ip_sum = ip_sum((char *)ip_header, IP_HEADER_SIZE);
 	
 	char* to_send = (char*) malloc(sizeof(char)*(data_len + IP_HEADER_SIZE));
 	//copy header and data into to_send
