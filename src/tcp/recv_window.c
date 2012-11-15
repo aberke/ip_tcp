@@ -54,7 +54,7 @@ recv_window_t recv_window_init(uint16_t window_size, uint32_t ISN){
 	
 	/* the next byte you're expecting is the one after the 
 		first sequence number */
-	recv_window->read_left = recv_window->left = ISN;
+	recv_window->read_left = recv_window->left = (ISN+1)%MAX_SEQNUM;
 
 	/* initialize your mutex */
 	pthread_mutex_init(&(recv_window->mutex), NULL);
@@ -72,7 +72,10 @@ returns
 	-1 otherwise
 */
 static int _validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t length){
-	uint32_t window_min = recv_window->left,
+	if(seqnum==(recv_window->left+1) || seqnum==(recv_window->left) || seqnum==(recv_window->left-1))
+        return 0;
+    
+    uint32_t window_min = recv_window->left,
 			 window_max = (recv_window->left+recv_window->size) % MAX_SEQNUM;
 		
 	/*  A segment is judged to occupy a portion of valid receive sequence
