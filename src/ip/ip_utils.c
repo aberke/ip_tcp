@@ -68,9 +68,12 @@ int ip_check_valid_packet(char* buffer, int bytes_read){
 	u_short expected_sum = ip_sum((char*)ip_header, IP_HEADER_SIZE);
 
 	/* if what you get isn't what they got, then that's not good */
-	if( got_sum != ip_sum((char*)ip_header, IP_HEADER_SIZE)){  
+	if( got_sum != expected_sum ){  
 		print(("Packet ip_sum != actually checksum"), IP_PRINT);
 		return -1;
+	}
+	else{
+		puts("ip sum valid.");
 	}
 
 	ip_header->ip_ttl--; 
@@ -105,27 +108,29 @@ int ip_decrement_TTL(char* packet){
 
 // returns source address of packet
 uint32_t ip_get_src_addr(char* buffer){
-	char header[sizeof(struct ip)];
-	memcpy(header, buffer, IP_HEADER_SIZE);
-	struct ip *ip_header = (struct ip *)header;
-	
-	struct in_addr src_ip;
-	uint32_t src_addr;
-	src_ip = ip_header->ip_src;
-	src_addr = ntohl(src_ip.s_addr);
-	return src_addr;
+	//char header[sizeof(struct ip)];
+	//memcpy(header, buffer, IP_HEADER_SIZE);
+	struct ip *ip_header = (struct ip *)buffer;
+	return ip_header->ip_src.s_addr;
+//	
+//	struct in_addr src_ip;
+//	uint32_t src_addr;
+//	src_ip = ip_header->ip_src;
+//	src_addr = ntohl(src_ip.s_addr);
+//	return src_addr;
 }
 // returns destination address of packet
 uint32_t ip_get_dest_addr(char* buffer){
-	char header[sizeof(struct ip)];
-	memcpy(header, buffer, IP_HEADER_SIZE);
-	struct ip *ip_header = (struct ip *)header;
+	//char header[sizeof(struct ip)];
+	//memcpy(header, buffer, IP_HEADER_SIZE);
+	struct ip *ip_header = (struct ip *)buffer;
+	return ip_header->ip_dst.s_addr;
 	
-	struct  in_addr dest_ip;
-	uint32_t d_addr;
-	dest_ip = ip_header->ip_dst;
-	d_addr = ntohl(dest_ip.s_addr);
-	return d_addr;
+//	struct in_addr dest_ip;
+//	uint32_t d_addr;
+//	dest_ip = ip_header->ip_dst;
+//	d_addr = ntohl(dest_ip.s_addr);
+//	return d_addr;
 }
 
 // int is type: RIP vs other  --return -1 if bad packet
@@ -166,9 +171,10 @@ int ip_wrap_send_packet(void* data, int data_len, int protocol, struct in_addr i
 		data_len = UDP_PACKET_MAX_SIZE - IP_HEADER_SIZE;
 		puts("packet too long -- truncating data");
 	}
+
 	// convert addresses to network byte order
-	ip_src.s_addr = htonl(ip_src.s_addr);
-	ip_dst.s_addr = htonl(ip_dst.s_addr);
+	//ip_src.s_addr = htonl(ip_src.s_addr);
+	//ip_dst.s_addr = htonl(ip_dst.s_addr);
 
 	// fill in header
 	struct ip* ip_header = (struct ip*)malloc(IP_HEADER_SIZE);
@@ -176,8 +182,8 @@ int ip_wrap_send_packet(void* data, int data_len, int protocol, struct in_addr i
 	ip_header->ip_v = 4;
 	ip_header->ip_hl = 5;
 	ip_header->ip_len = htons(data_len + IP_HEADER_SIZE); //add header length to packet length
-	// wait to set ip_ttl for sake of computing checksum
-	ip_header->ip_p = protocol;
+
+	ip_header->ip_p   = protocol;
 	ip_header->ip_src = ip_src;
 	ip_header->ip_dst = ip_dst;
 	ip_header->ip_sum = 0;

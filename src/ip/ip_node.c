@@ -769,7 +769,13 @@ static void _handle_selected_forward(ip_node_t ip_node, uint32_t dest_addr, char
 	interface_ip_keyed_t address_keyed;
 	HASH_FIND_INT(ip_node->addressToInterface, &next_hop, address_keyed);
 	if(!address_keyed){
+		
+		char addr_str[INET_ADDRSTRLEN+1];
+		inet_ntop(AF_INET, &dest_addr, addr_str, INET_ADDRSTRLEN);
+
+		printf("Cannot forward to address: %s\n", addr_str);
 		puts("Cannot forward packet to destination -- cannot reach destination");
+
 		return;
 	}
 	link_interface_t next_hop_interface = address_keyed->interface;
