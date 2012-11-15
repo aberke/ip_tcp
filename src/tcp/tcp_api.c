@@ -22,9 +22,7 @@ tcp_api_args_t tcp_api_args_init(){
 int tcp_api_args_destroy(tcp_api_args_t* args){
 	/* first join your thread. this will block
 		if you're not done yet */    
-	puts("tcp_api_destroy 0");
     pthread_join((*args)->thread, NULL);
-    puts("tcp_api_destroy 1");
     int result = (*args)->result;
 	/* For this not to go wrong we had better set args->addr to NULL at first.  See function init() */
 	if((*args)->addr != NULL)
@@ -330,10 +328,8 @@ void* tcp_api_read_entry(void* _args){
 		_return(args,-EBADF);	//fd is not a valid file descriptor or is not open for reading.
 		return NULL;
 	}
-	print(("recv 0"), ALEX_PRINT);
 	/* we'll use the macro thread_return in order to return a value */
 	tcp_connection_api_lock(connection);
-	print(("recv 1"), ALEX_PRINT);
 	
 	//tacked on an extra 1 for null character for pretty print
 	char* to_read = (char*)malloc(sizeof(char)*(args->num + 1));
@@ -345,15 +341,12 @@ void* tcp_api_read_entry(void* _args){
 		// block until read in args->num bytes
 		int read = ret;	
 		while(ret < args->num){
-			printf("ret = %d.  args->num = %d\n", ret, args->num);
-			print(("recv 2"), ALEX_PRINT);
 			if(read < 0){
 				tcp_connection_api_unlock(connection);
 				free(to_read);
 				_return(args, read);
 				return NULL;
 			}
-			print(("recv 3"), ALEX_PRINT);
 			if(read == 0){
 				// need to wait until there is something to read
 				int result = tcp_connection_api_result(connection); // will block until it gets the result
@@ -365,13 +358,10 @@ void* tcp_api_read_entry(void* _args){
 					return NULL;
 				}
 			}
-			print(("recv 4"), ALEX_PRINT);
 			read = tcp_api_read(args->node, args->socket, to_read+ret, (args->num)-ret);	
 			ret = ret + read;
-			print(("recv 5"), ALEX_PRINT);
 		}
 	}
-	print(("recv 6"), ALEX_PRINT);
 	// NOTE! You can't just print the buffer because it's not null-teriminated!
 	// On mac's this will be no problem, because the memory is nicely 0-ed out 
 	// for us, on linux this won't be the case  <-- k thanx

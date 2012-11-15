@@ -120,7 +120,10 @@ runC: rebuild
 
 runValgrind:
 	valgrind --leak-check=full ./$(EXEC_FILE) $(NODE_A)
-	
+
+runBValgrind:
+	valgrind --leak-check=full ./$(EXEC_FILE) $(NODE_B)
+
 runNetwork: rebuild
 	cp node test/ip/helper_files/
 	cd test/ip/helper_files; ./runNetwork ABC.net
