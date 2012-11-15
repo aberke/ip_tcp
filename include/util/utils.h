@@ -24,8 +24,8 @@
 #define PORT_PRINT			11
 
 #define mask (  0									\
-		   | (1<<(IP_PRINT-1))		    		\
-		   /*| (1<<(TCP_PRINT-1)) 		*/    		\
+		   /*| (1<<(IP_PRINT-1)) */		    		\
+		   | (1<<(TCP_PRINT-1)) 		    		\
 		   /*| (1<<(WINDOW_PRINT-1)) 		*/		\
 	   	   /*  | (1<<(SEND_WINDOW_PRINT-1))	*/ 		\
 		   /*| (1<<(LEAK_PRINT-1))          */		\
