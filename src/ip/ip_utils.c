@@ -62,10 +62,13 @@ int ip_check_valid_packet(char* buffer, int bytes_read){
 
 	struct ip* ip_header = (struct ip*)buffer;
 
+	u_short got_sum = ip_header->ip_sum;
 	ip_header->ip_sum = 0; // !! because we're computing it! 
 
+	u_short expected_sum = ip_sum((char*)ip_header, IP_HEADER_SIZE);
+
 	/* if what you get isn't what they got, then that's not good */
-	if( ip_header->ip_sum != ip_sum((char*)ip_header, IP_HEADER_SIZE)){  
+	if( got_sum != ip_sum((char*)ip_header, IP_HEADER_SIZE)){  
 		print(("Packet ip_sum != actually checksum"), IP_PRINT);
 		return -1;
 	}
