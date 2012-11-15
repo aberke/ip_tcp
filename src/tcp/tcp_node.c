@@ -766,6 +766,7 @@ static int _insert_connection_array(tcp_node_t tcp_node, tcp_connection_t connec
 }
 
 static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
+		
 	int packet_size = tcp_packet->packet_size;
 	if( packet_size < TCP_HEADER_MIN_SIZE ){
 		puts("packet received is less than header size, discarding...");

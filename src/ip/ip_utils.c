@@ -72,9 +72,6 @@ int ip_check_valid_packet(char* buffer, int bytes_read){
 		print(("Packet ip_sum != actually checksum"), IP_PRINT);
 		return -1;
 	}
-	else{
-		puts("ip sum valid.");
-	}
 
 	ip_header->ip_ttl--; 
 	ip_header->ip_sum = ip_sum((char*)ip_header, IP_HEADER_SIZE); // set it back
