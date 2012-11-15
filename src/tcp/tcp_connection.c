@@ -684,7 +684,10 @@ accept_queue_data_t tcp_connection_accept_queue_dequeue(tcp_connection_t connect
         
         gettimeofday(&now, NULL);   
         wait_cond.tv_sec = now.tv_sec+0;
-        wait_cond.tv_nsec = 1000*now.tv_usec+TCP_CONNECTION_DEQUEUE_TIMEOUT_NSECS;
+        wait_cond.tv_nsec = (1000*now.tv_usec+TCP_CONNECTION_DEQUEUE_TIMEOUT_NSECS);
+        
+        wait_cond.tv_sec += wait_cond.tv_nsec/1000000000;
+        wait_cond.tv_nsec %= 1000000000;
     
         ret = bqueue_timed_dequeue_abs(q, (void*)&data, &wait_cond);
         
