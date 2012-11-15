@@ -681,7 +681,6 @@ void* _handle_tcp_node_stdin(void* node){
 			/* didn't read anything */
 			if(fgets_ret == 0)
 				continue;
-            puts("1");
 			/* otherwise line has been set by fgets in fd_fgets() */
 			ret = sscanf(line, "%s", cmd);
 			if (ret != 1){
@@ -690,7 +689,6 @@ void* _handle_tcp_node_stdin(void* node){
 			}
 				
 			for (i=0; i < sizeof(cmd_table) / sizeof(cmd_table[0]); i++){
-                puts("2");
 				if (!strcmp(cmd, cmd_table[i].command)){
 					cmd_table[i].handler(line, tcp_node);
 					break;
@@ -701,7 +699,6 @@ void* _handle_tcp_node_stdin(void* node){
 				fprintf(stderr, "error: no valid command specified\n");
 				continue;
 			}
-			puts("end of stdin loop");
 		}
 	}
 	print(("exiting stdin thread"), CLOSING_PRINT);

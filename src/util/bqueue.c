@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <pthread.h>
 
+#if __APPLE__
 /*
 	http://lists.apple.com/archives/xcode-users/2007/Apr/msg00331.html
 */
@@ -35,6 +36,7 @@ int pthread_mutex_timedlock(pthread_mutex_t* mutex, const struct timespec* abs_t
 
  	return result;
 }
+#endif
 
 static int __bqueue_dequeue( bqueue_t *q, void **data,
                              const struct timespec *rel_timeout );
@@ -109,7 +111,7 @@ int bqueue_enqueue( bqueue_t *q, void *data ) {
 /* dequeues an item from the queue... if the queue has been destroyed or
  * is destroyed while we're blocked, returns -EINVAL */
 int bqueue_dequeue( bqueue_t *q, void **data ) {
-    return bqueue_timed_dequeue_abs( q, data, NULL );
+    return bqueue_timed_dequeue_abs( q, data, NULL);
 }
 
 void bqueue_calc_abs_timespec(const struct timespec *rel_timeout,
@@ -129,18 +131,16 @@ void bqueue_calc_abs_timespec(const struct timespec *rel_timeout,
    returns 0 otherwise 
    */
 int bqueue_timed_dequeue_abs( bqueue_t *q, void ** data,
-                              const struct timespec *abs_ts) {
+                              const struct timespec *abs_ts) { 
   int ret;
   if (abs_ts != NULL) {
     ret = pthread_mutex_timedlock( &q->q_mtx, abs_ts );
     if (ret == ETIMEDOUT) 
       return -ETIMEDOUT;
-
     ret = __bqueue_dequeue( q, data , abs_ts );
     pthread_mutex_unlock( &q->q_mtx );
     return ret;
   }
-
   pthread_mutex_lock( &q->q_mtx );
   ret = __bqueue_dequeue( q, data , NULL );
   pthread_mutex_unlock( &q->q_mtx );
@@ -195,7 +195,6 @@ int __bqueue_dequeue( bqueue_t *q, void **data,
     bqueue_item_t *qi;
 
     q->q_count++;
-
     while( list_empty( &q->q_list ) && !q->q_status )
     {
       if (abs_timeout != NULL) 
@@ -209,6 +208,10 @@ int __bqueue_dequeue( bqueue_t *q, void **data,
           q->q_count--; //ADDED BY ALEX -- HELLS YES ALEX FOUND THAT BUG -- STEP IT UP TAS BAHAHHA
           return -ETIMEDOUT;
         }
+        if (ret == EINVAL){ //ADDED BY ALEX -- LETS MAKE SURE THERE ISN'T ACTUALLY SOMETHING OF OURS BROKEN, JUST THEIR BQUEUE
+          q->q_count --; //ADDED BY ALEX  
+          return -EINVAL;
+        }
       }
       else
       {
@@ -218,7 +221,6 @@ int __bqueue_dequeue( bqueue_t *q, void **data,
     }
 
     q->q_count--;
-
     /* the queue is being destroyed */
     if( q->q_status ) {
         if( q->q_count == 0 )
