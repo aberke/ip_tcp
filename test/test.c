@@ -530,18 +530,28 @@ void test_queue(){
 void test_ext_array_scale(){
 	ext_array_t ar = ext_array_init(10);
 
-	char buffer[256];
-	strcpy(buffer, "Hey there you person who are something other than whatever");
-	int strLength = strlen(buffer);
+	char buffer[4096];
+	int strLength = 4096;
 	
-	int i, r;
-	for(i=0;i<1000;i++){
+	int i, j, r;
+	srand(time(NULL));
+	memchunk_t chunk;
+	for(i=0;i<10000;i++){
 		r = rand() % strLength;
 		ext_array_push(ar, buffer, r);
+
+		if (i%100==0){
+			for(j=0;j<10;j++){
+				r = rand() % strLength;
+				chunk = ext_array_peel(ar, r);
+				if(chunk)
+					memchunk_destroy_total(&chunk, util_free);
+			}
+		}
+				
 	}
 	
-	memchunk_t chunk;
-	for(i=0;i<1000;i++){
+	for(i=0;i<5000;i++){
 		r = rand() % strLength;
 		chunk = ext_array_peel(ar, r);
 		if(chunk)
@@ -885,10 +895,10 @@ int main(int argc, char** argv){
 	TEST(test_overflow);
 
 	TEST(test_queue); 
-	
+	*/
 	TEST(test_ext_array);
 	TEST(test_ext_array_scale);
-	
+	/*	
 	TEST(test_wrapping);
 	*/
 	
@@ -896,7 +906,7 @@ int main(int argc, char** argv){
 //	TEST(test_send_window_scale);
 //
 //	TEST(test_recv_window);
-	TEST(test_recv_window_1);
+//	TEST(test_recv_window_1);
 //	TEST(test_recv_window_overlap);
 
 	//TEST(test_tcp_states);	
