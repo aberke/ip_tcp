@@ -690,6 +690,7 @@ void* _handle_tcp_node_stdin(void* node){
 			}
 				
 			for (i=0; i < sizeof(cmd_table) / sizeof(cmd_table[0]); i++){
+                puts("2");
 				if (!strcmp(cmd, cmd_table[i].command)){
 					cmd_table[i].handler(line, tcp_node);
 					break;
