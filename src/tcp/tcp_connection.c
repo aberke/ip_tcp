@@ -601,7 +601,10 @@ void *_handle_read_send(void *tcpconnection){
 		gettimeofday(&now, NULL);	
 		wait_cond.tv_sec = now.tv_sec+0;
 		wait_cond.tv_nsec = 1000*now.tv_usec+TCP_CONNECTION_DEQUEUE_TIMEOUT_NSECS;
-	
+
+        wait_cond.tv_sec += wait_cond.tv_nsec/1000000000;
+        wait_cond.tv_nsec %= 1000000000;
+        
 		ret = bqueue_timed_dequeue_abs(connection->my_to_read, &packet, &wait_cond);
 
 		/* check if you're waiting for an ACK to come back */

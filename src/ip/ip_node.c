@@ -345,9 +345,10 @@ void *ip_command_thread_run(void *ipdata){
 		gettimeofday(&now, NULL);	
 		wait_cond.tv_sec = now.tv_sec+PTHREAD_COND_TIMEOUT_SEC;
 		wait_cond.tv_nsec = 1000*now.tv_usec+PTHREAD_COND_TIMEOUT_NSEC;
-		
+
+        wait_cond.tv_sec += wait_cond.tv_nsec/1000000000;
+        wait_cond.tv_nsec %= 1000000000;		
 		/* try to get the next thing on queue */
-        //ret = bqueue_timed_dequeue_abs(stdin_commands, &cmd, &wait_cond);
 		ret = bqueue_timed_dequeue_abs(stdin_commands, &cmd, &wait_cond);
 		if (ret != 0) 
 			/* should probably check at this point WHY we failed (for instance perhaps the queue
@@ -384,9 +385,11 @@ void *ip_send_thread_run(void *ipdata){
 		gettimeofday(&now, NULL);	
 		wait_cond.tv_sec = now.tv_sec+PTHREAD_COND_TIMEOUT_SEC;
 		wait_cond.tv_nsec = 1000*now.tv_usec+PTHREAD_COND_TIMEOUT_NSEC;
-		
+
+        wait_cond.tv_sec += wait_cond.tv_nsec/1000000000;
+        wait_cond.tv_nsec %= 1000000000;
+        
 		/* try to get the next thing on queue */
-		//ret = bqueue_timed_dequeue_abs(to_send, &packet, &wait_cond);
 		ret = bqueue_timed_dequeue_abs(to_send, &packet, &wait_cond);
         if (ret==-ETIMEDOUT) 
 			continue;
