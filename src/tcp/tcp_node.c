@@ -409,7 +409,7 @@ void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, int port){
 //ALEX TODO:
 // gracefully CLOSE all connections
 void tcp_node_close_all_connections(tcp_node_t tcp_node){
-	puts("ALEX TODO: GRACEFULLY CLOSE ALL CONNECTIONS BEFORE DESTROYING NODE");
+	print(("ALEX TODO: GRACEFULLY CLOSE ALL CONNECTIONS BEFORE DESTROYING NODE"),ALEX_PRINT);
 }
 //###TODO: FINISH LOGIC ####
 //needs to be called when close connection so that we can return port/socket to available queue for reuse

@@ -48,8 +48,8 @@ void ext_array_push(ext_array_t ext_array, void* data, int length){
 
 	/* if there's no room at the end, but that's due to all the garbage at the beginning, 
 	   then get rid of all the garbage */
-	if(ext_array->capacity - ext_array->right < length 
-		&& (ext_array->capacity - (ext_array->right - ext_array->left) > length)){
+	if(ext_array->capacity - ext_array->right <= length 
+		&& (ext_array->capacity - (ext_array->right - ext_array->left) >= length)){
 		/* shift everything over */
 		_shift(ext_array);
 	
@@ -58,7 +58,7 @@ void ext_array_push(ext_array_t ext_array, void* data, int length){
 	}
 	else{
 		/* otherwise it looks like you need to start scaling up */
-		while(ext_array->capacity - ext_array->right < length)	_scale_up(ext_array);
+		while(ext_array->capacity - ext_array->right <= length)	_scale_up(ext_array);
 
 		memcpy(ext_array->data+ext_array->right, data, length);
 		ext_array->right += length;
@@ -126,10 +126,11 @@ void _shift(ext_array_t ar){
 	int data_size = ar->right - ar->left;
 
 	/* if the ratio of data to capacity is too small, then shrink */
-	if(data_size/(float)ar->capacity < MINIMUM_RATIO) ar->capacity /= SCALE_FACTOR;
+	if(data_size/(float)ar->capacity < MINIMUM_RATIO) 
+        ar->capacity /= SCALE_FACTOR;
 
 	void* new_data = malloc(ar->capacity);
-	memcpy(new_data, ar->data, data_size);
+	memcpy(new_data, ar->data+ar->left, data_size);
 	
 	/* free the old data */
 	free(ar->data);

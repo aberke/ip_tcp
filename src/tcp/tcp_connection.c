@@ -158,7 +158,6 @@ tcp_connection_t tcp_connection_init(tcp_node_t tcp_node, int socket, bqueue_t *
 void tcp_connection_destroy(tcp_connection_t connection){
 	
 	connection->running = 0;
-	puts("0");
 	// >> do this immediately! because it depends on the things you're destroying! <<
 	// cancel read_thread
 	int rc = pthread_join(connection->read_send_thread, NULL);
@@ -166,7 +165,6 @@ void tcp_connection_destroy(tcp_connection_t connection){
 		printf("ERROR; return code from pthread_cancel() for tcp_connection of socket %d is %d\n", connection->socket_id, rc);
 		exit(-1);
 	}
-	puts("1");
 	// tell everyone who is waiting on this thread that
 	// the connection is being destroyed
 	tcp_connection_api_signal(connection, SIGNAL_DESTROYING);
@@ -468,9 +466,13 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 		tcp_set_ack_bit(header);
 		tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
 	}
-
 	/* DATA */
 	uint32_t total_length = tcp_offset_in_bytes(header) + data_len;
+    
+    /* print it */
+    print(("Sending Packet of length %u", total_length), PACKET_PRINT);
+    view_packet(header, data, data_len);    
+    
 	if((data != NULL)&&(data_len)){
 		memcpy(((char*)header)+tcp_offset_in_bytes(header), data, data_len);
 		free(data);
@@ -484,12 +486,7 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 										(char*)header, 
 										total_length,
 										tcp_connection_get_local_ip(connection),
-										tcp_connection_get_remote_ip(connection));
-	
-	/* print it */
-	print(("Sending Packet of length %u", total_length), PACKET_PRINT);
-	view_packet(header, data, data_len);
-										
+										tcp_connection_get_remote_ip(connection));										
 	/* queue it */
 	if(tcp_connection_queue_ip_send(connection, packet_data) < 0){
 		//TODO: HANDLE!
