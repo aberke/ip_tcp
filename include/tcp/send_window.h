@@ -23,6 +23,8 @@ void send_window_chunk_destroy(send_window_chunk_t* wc);
 void send_window_chunk_destroy_total(send_window_chunk_t* wc, destructor_f destructor);
 void send_window_chunk_destroy_free(send_window_chunk_t* wc);
 
+void send_window_set_seq(send_window_t sc, uint32_t seq);
+
 send_window_t send_window_init(double timeout, int send_window_size, int send_size, int ISN);
 void send_window_destroy(send_window_t* send_window);
 

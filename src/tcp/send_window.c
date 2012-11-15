@@ -121,6 +121,9 @@ void send_window_set_size(send_window_t send_window, uint32_t size){
 }
 
 int send_window_validate_ack(send_window_t send_window, uint32_t ack){
+    if(ack==(send_window->left) || ack==(send_window->left+1))
+        return 0;
+    
 	if( BETWEEN_WRAP(ack, send_window->left, (send_window->left+send_window->size)%MAX_SEQNUM) 
 		|| ack==((send_window->left+send_window->size+1)%MAX_SEQNUM)){
 		return 0;
@@ -132,6 +135,10 @@ void send_window_push_synchronized(send_window_t send_window, void* data, int le
 	ext_array_push(send_window->data_queue, data, length);
 }
 
+void send_window_set_seq(send_window_t send_window, uint32_t seq){
+     send_window->left = send_window->sent_left = seq;
+}
+     
 void send_window_push(send_window_t sw, void* d, int l){
 	pthread_mutex_lock(&(sw->mutex));
 	send_window_push_synchronized(sw, d, l);

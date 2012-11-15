@@ -285,8 +285,8 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 											TCP_DATA);
 	/* CHECKSUM */
 	if(checksum_result < 0){
-		puts("Bad checksum! what happened? not discarding");
-		return;
+		//puts("Bad checksum! what happened? not discarding");
+		//return;
 	}
 	
 	/* this boolean just decides whether we need
@@ -325,7 +325,6 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	
 	/* ack data if you're in a position to do so */
 	else if(tcp_ack_bit(tcp_packet)){
-		//puts("received packet with ack_bit set");
  		if(connection->send_window)
 			send_window_ack(connection->send_window, tcp_ack(tcp_packet));
 				
@@ -341,8 +340,15 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	}
 	
 	else if(tcp_syn_bit(tcp_packet)){
-		tcp_connection_handle_syn(connection, tcp_packet_data);
-		update_peer = 0;
+        if(connection_state == SYN_SENT){
+            // we think the TA implementation is WRONG and now we have to deal with it WTF
+            tcp_connection_handle_syn_ack(connection, tcp_packet_data);
+            update_peer = 0;
+        }
+        else{
+            tcp_connection_handle_syn(connection, tcp_packet_data);
+            update_peer = 0;
+        }
 	}
 
 	else if(tcp_rst_bit(tcp_packet)){
@@ -360,6 +366,8 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 }
 
 void tcp_connection_handle_syn_ack(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
+    send_window_set_seq(connection->send_window, tcp_ack(tcp_packet_data->packet));
+    
 	print(("syn/ack"),TCP_PRINT);
 
 	void* tcp_packet = tcp_packet_data->packet;
@@ -369,7 +377,7 @@ void tcp_connection_handle_syn_ack(tcp_connection_t connection, tcp_packet_data_
 		/* then you sent a syn with a seqnum that wasn't faithfully returned. 
 			what should we do? for now, let's discard */
 		puts("Received invalid ack with SYN/ACK. Discarding.");
-		return;
+		//return;
 	}
 	
 	/* we need to reset the port that we're using on the remote 
