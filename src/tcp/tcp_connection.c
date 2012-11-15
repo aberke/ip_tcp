@@ -597,19 +597,18 @@ void *_handle_read_send(void *tcpconnection){
 	int ret;
 
 	while(connection->running){	
-
+        
 		gettimeofday(&now, NULL);	
 		wait_cond.tv_sec = now.tv_sec+0;
 		wait_cond.tv_nsec = 1000*now.tv_usec+TCP_CONNECTION_DEQUEUE_TIMEOUT_NSECS;
-		
+	
 		ret = bqueue_timed_dequeue_abs(connection->my_to_read, &packet, &wait_cond);
 
-		
 		/* check if you're waiting for an ACK to come back */
 		if(tcp_connection_get_state(connection)==SYN_SENT){	
 			time_elapsed = now.tv_sec - connection->syn_timer.tv_sec;
 			time_elapsed += now.tv_usec/1000000.0 - connection->syn_timer.tv_usec/1000000.0;
-
+         
 			if(time_elapsed > (1 << ((connection->syn_count)-1))*SYN_TIMEOUT){
 				// we timeout connect or resend
 
@@ -624,7 +623,6 @@ void *_handle_read_send(void *tcpconnection){
 					connection->syn_count = connection->syn_count+1;
 				}
 			}
-
 		}
 
 
@@ -633,11 +631,11 @@ void *_handle_read_send(void *tcpconnection){
 			send_window_check_timers(connection->send_window);
 			tcp_connection_send_next(connection);
 		}
-
 		/* now check if there's something to read */
 		if (ret != 0) 
 			/* should probably check at this point WHY we failed (for instance perhaps the queue
 				was destroyed */
+            // should be EINVAL(ask alex about that linux issue we found and she victoriously debugged) or ETIMEDOUT
 			continue;
 
 		//handle to read packet

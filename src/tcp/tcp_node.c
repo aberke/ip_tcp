@@ -633,7 +633,8 @@ void tcp_node_start(tcp_node_t tcp_node){
 		wait_cond.tv_nsec = 1000*now.tv_usec+PTHREAD_COND_TIMEOUT_NSEC;
 		
 		/* try to get the next thing on queue */
-		ret = bqueue_timed_dequeue_abs(to_read, &packet, &wait_cond);
+		//ret = bqueue_timed_dequeue_abs(to_read, &packet, &wait_cond);
+        ret = bqueue_timed_dequeue_abs(to_read, &packet, &wait_cond);
 		if (ret != 0) 
 			/* should probably check at this point WHY we failed (for instance perhaps the queue
 				was destroyed */

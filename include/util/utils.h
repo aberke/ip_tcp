@@ -30,7 +30,7 @@
 	   	   /*  | (1<<(SEND_WINDOW_PRINT-1))	*/ 		\
 		   /*| (1<<(LEAK_PRINT-1))          */		\
 		   /*| (1<<(STATES_PRINT-1))		*/		\
-		   /*| (1<<(CLOSING_PRINT-1))	 	*/	    \
+		   | (1<<(CLOSING_PRINT-1))	 		    \
 		    | (1<<(PACKET_PRINT-1))				\
 		    /* | (1<<(ALEX_PRINT-1))		*/			\
 		   /*| (1<<(ALEXS_SEGFAULT-1))		*/  	\
