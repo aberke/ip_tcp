@@ -199,22 +199,24 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	plain_list_t list = tcp_node->thread_list;
 	plain_list_el_t el;
 	tcp_api_args_t args;
+    puts("tcp_node_destroy 0");
 	PLAIN_LIST_ITER(list, el)
-	args = (tcp_api_args_t)el->data;
-	if(args->done){
-		if(args->result < 0){	
-			char* error_string = strerror(-(args->result));
+        puts("tcp_node_destroy 1");
+        args = (tcp_api_args_t)el->data;
+        int result = tcp_api_args_destroy(&args);
+        puts("tcp_node_destroy 2");
+		if(result < 0){	
+			char* error_string = strerror(-result);
 			printf("Error: %s\n", error_string);
 		}
-		else if(args->result==0)
+        
+		else if(result==0)
 			printf("successful.");
 		
 		else
-			printf("got result: %d!\n", args->result);
-		
-		tcp_api_args_destroy(&args);
-		plain_list_remove(list, el);
-	}			
+			printf("got result: %d!\n", result);
+        		
+		plain_list_remove(list, el);			
 	PLAIN_LIST_ITER_DONE(list);
 	/*****************************/
 	
