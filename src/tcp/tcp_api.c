@@ -18,11 +18,14 @@ tcp_api_args_t tcp_api_args_init(){
 	args->buffer = NULL;
 	return args;
 }
-
-void tcp_api_args_destroy(tcp_api_args_t* args){
+/* returns result */
+int tcp_api_args_destroy(tcp_api_args_t* args){
 	/* first join your thread. this will block
-		if you're not done yet */
-	pthread_join((*args)->thread, NULL);
+		if you're not done yet */    
+	puts("tcp_api_destroy 0");
+    pthread_join((*args)->thread, NULL);
+    puts("tcp_api_destroy 1");
+    int result = (*args)->result;
 	/* For this not to go wrong we had better set args->addr to NULL at first.  See function init() */
 	if((*args)->addr != NULL)
 		free((*args)->addr);
@@ -30,6 +33,7 @@ void tcp_api_args_destroy(tcp_api_args_t* args){
 		free((*args)->buffer);
 	free(*args);
 	*args = NULL;
+    return result;
 }
 
 //// these verify that the desired field is present and valid in arguments

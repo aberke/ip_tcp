@@ -118,6 +118,8 @@ runB:
 runC: rebuild
 	@./$(EXEC_FILE) $(NODE_C)
 
+runValgrind:
+	valgrind --leak-check=full ./$(EXEC_FILE) $(NODE_A)
 	
 runNetwork: rebuild
 	cp node test/ip/helper_files/

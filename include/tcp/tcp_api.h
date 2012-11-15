@@ -30,7 +30,7 @@ struct tcp_api_args{
 
 typedef struct tcp_api_args* tcp_api_args_t; 
 tcp_api_args_t tcp_api_args_init();
-void tcp_api_args_destroy(tcp_api_args_t* args);
+int tcp_api_args_destroy(tcp_api_args_t* args);
 
 /* connects a socket to an address (active OPEN in the RFC)
 returns 0 on success or a negative number on failure */

@@ -674,10 +674,27 @@ accept_queue_data_t tcp_connection_accept_queue_dequeue(tcp_connection_t connect
 		puts("Error in tcp_connection_accept_queue_dequeue: SEE CODE");
 		return NULL;
 	}
-	accept_queue_data_t data;
-	int ret = bqueue_dequeue(q, (void**)&data);
-	if(ret<0)
-		return NULL;
+    struct timespec wait_cond;  
+    struct timeval now; 
+
+    accept_queue_data_t data;
+    int ret;
+
+    while((connection->running)&&(tcp_node_running(connection->tcp_node))){ 
+        
+        gettimeofday(&now, NULL);   
+        wait_cond.tv_sec = now.tv_sec+0;
+        wait_cond.tv_nsec = 1000*now.tv_usec+TCP_CONNECTION_DEQUEUE_TIMEOUT_NSECS;
+    
+        ret = bqueue_timed_dequeue_abs(q, (void*)&data, &wait_cond);
+        
+        if(ret!= -ETIMEDOUT)
+            break;
+    }
+    printf("accept queue ret = %d\n", ret);
+    if(ret != 0)
+        return NULL;
+
 	return data;
 }
 
