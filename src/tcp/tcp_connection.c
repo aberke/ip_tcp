@@ -598,7 +598,7 @@ void *_handle_read_send(void *tcpconnection){
 	struct timespec wait_cond;	
 	struct timeval now;	// keep track of time to compare to window timeouts and connections' syn_timer 
 	float time_elapsed;
-	void* packet;
+	tcp_packet_data_t packet;
 	int ret;
 
 	while(connection->running){	
@@ -610,7 +610,7 @@ void *_handle_read_send(void *tcpconnection){
         wait_cond.tv_sec += wait_cond.tv_nsec/1000000000;
         wait_cond.tv_nsec %= 1000000000;
         
-		ret = bqueue_timed_dequeue_abs(connection->my_to_read, &packet, &wait_cond);
+		ret = bqueue_timed_dequeue_abs(connection->my_to_read, (void*)&packet, &wait_cond);
 
 		/* check if you're waiting for an ACK to come back */
 		if(tcp_connection_get_state(connection)==SYN_SENT){	
