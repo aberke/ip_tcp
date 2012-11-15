@@ -94,7 +94,7 @@ void _scale_up(ext_array_t ar){
 
 	void* new_data = malloc(ar->capacity);
 	int new_left = 0, new_right = ar->right - ar->left;
-	memcpy(new_data, ar->data, new_right);
+	memcpy(new_data, ar->data+ar->left, new_right);
 
 	/* free the old data */
 	free(ar->data);
@@ -113,7 +113,7 @@ void _scale_down(ext_array_t ar){
 	   capacity, and copy all the data over */
 	void* new_data = malloc(ar->capacity);
 	int new_left = 0, new_right = ar->right - ar->left;
-	memcpy(new_data, ar->data, new_right);
+	memcpy(new_data, ar->data+ar->left, new_right);
 
 	/* free the old data, and point the array to the new one */
 	free(ar->data);
@@ -127,10 +127,15 @@ void _shift(ext_array_t ar){
 
 	/* if the ratio of data to capacity is too small, then shrink */
 	if(data_size/(float)ar->capacity < MINIMUM_RATIO) 
-        ar->capacity /= SCALE_FACTOR;
+        	ar->capacity /= SCALE_FACTOR;
 
 	void* new_data = malloc(ar->capacity);
 	memcpy(new_data, ar->data+ar->left, data_size);
+
+	if(ar->capacity < data_size){
+		puts(";ladkjsf;ladkjsf;ladmjs;flkjasd;fljasd;fldjas;fldjaslkj");
+		exit(0);
+	}
 	
 	/* free the old data */
 	free(ar->data);

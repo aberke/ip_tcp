@@ -6,6 +6,8 @@
 #include <errno.h>
 #include <inttypes.h>
 
+
+#include "ipsum.h"
 #include "tcp_utils.h"
 
 #define MAX_BUFFER_LEN 1024 // how big should this be?
@@ -134,30 +136,20 @@ struct tcphdr* tcp_header_init(int data_size){
 /* requires the packet with the header as 
 	well as information for the pseudo-header (see below) */
 uint16_t tcp_utils_calc_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t protocol){
-/*	
-	char src[INET_ADDRSTRLEN], dest[INET_ADDRSTRLEN];
-	inet_ntop(AF_INET, &src_ip, src, INET_ADDRSTRLEN);
-	inet_ntop(AF_INET, &dest_ip, dest, INET_ADDRSTRLEN);
 
-	printf("calculating checksum: [length %u] [src %s] [dest %s] [proto %d]\n", total_length, src, dest, protocol);
-*/
-
-	int i;
+	uint16_t *p = (uint16_t*)packet;
 	uint32_t sum = 0;
-	uint16_t word;
+	uint16_t odd_byte = 0;
 
-	/* calculcate one's complement sum of the data and the tcp header */
-	for(i=0;i<total_length/2;i++){
-		word = *((uint16_t*)(((char*)packet)+i*2));
-		sum = sum+word;
+	int n = total_length;
+	while (n>1) {
+		sum += *p++;
+		n -= 2;
 	}
 
-	/* we're doing full 16-bit words, so if the length is
-		odd, then we need to pad the last byte with 0's */
-	if((total_length&1)==1){
-		// last byte
-		char last_byte = *(((char*)packet) + (total_length-1));		
-		sum += ((uint16_t)(last_byte << 8)) & 0xFF00;
+	if (n==1) {
+		*(uint8_t*)(&odd_byte) = *(uint8_t*)p;
+		sum += odd_byte;
 	}
 
 	/* now compute over the pseudo 96 byte header, which looks like this:
@@ -169,11 +161,12 @@ uint16_t tcp_utils_calc_checksum(void* packet, uint16_t total_length, uint32_t s
                      |  zero  |  PTCL  |    TCP Length   |
                      +--------+--------+--------+--------+
 	*/
-	sum = sum + ((src_ip>>16) & 0x00FF);
-	sum = sum + (src_ip & 0x00FF);
-	sum = sum + ((dest_ip>>16) & 0x00FF);
-	sum = sum + (dest_ip & 0x00FF);
-	sum = sum + total_length + protocol;
+
+	sum += ((src_ip>>16) & 0x00FF);
+	sum += (src_ip & 0x00FF);
+	sum += ((dest_ip>>16) & 0x00FF);
+	sum += (dest_ip & 0x00FF);
+	sum += total_length + protocol;
 
 	uint16_t result;
 	result = (sum & 0xFF) + (sum >> 16);
@@ -186,8 +179,10 @@ void tcp_utils_add_checksum(void* packet, uint16_t total_length, uint32_t src_ip
 	/* zero out the checksum */
 	tcp_set_checksum(packet, 0);
 
+	/* calculate it */
 	uint16_t checksum = tcp_utils_calc_checksum(packet, total_length, src_ip, dest_ip, protocol);
-	
+
+	/* set it back */
 	tcp_set_checksum(packet, checksum);
 }
 
@@ -209,11 +204,20 @@ int tcp_utils_validate_checksum(void* packet, uint16_t total_length, uint32_t sr
 	/* get the actual checksum */
 	uint16_t actual_checksum = tcp_utils_calc_checksum(packet, total_length, src_ip, dest_ip, protocol);
 
+	uint16_t nchecksum = ntohs(actual_checksum);
+
+	uint16_t checksum1 = tcp_utils_calc_checksum(packet, total_length, dest_ip, src_ip, protocol);
+	uint16_t nchecksum1 = ntohs(checksum1);
+	
+	printf("%u %u %u\n", nchecksum, checksum1, nchecksum1);
+
+
+/* !!!!!!!!!!!!!!!LADFJSLADJSFLASDFJDKLSFJ ASDLFKJAS DLFKA */
 	/* XOR the actual checksum and the given checksum, 
 	   if it's not 0, then they're not the same */
 	if(checksum ^ actual_checksum){
 		tcp_set_checksum(packet, checksum);
-		return -1;
+		return 1; // actually i mean -1
 	}
 	else
 		return 1;

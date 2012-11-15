@@ -55,14 +55,14 @@ TEST_DEFAULT_ARGS=
 PYTEST=pyLink.py
 
 _TEST_OBJS=test.o 
-_TEST_DEP_OBJS=ip/routing_table.o ip/forwarding_table.o util/utils.o util/state_machine.o util/queue.o tcp/send_window.o util/ext_array.o tcp/recv_window.o tcp/tcp_connection.o tcp/tcp_states.o util/bqueue.o tcp/tcp_utils.o ip/ip_utils.o util/ipsum.o ip/ip_node.o ip/link_interface.o util/parselinks.o util/list.o #tcp/tcp_connection_state_machine_handle.o
+_TEST_DEP_OBJS=util/utils.o util/ipsum.o util/parselinks.o util/list.o util/bqueue.o util/int_queue.o util/queue.o util/ext_array.o util/state_machine.o tcp/tcp_node_stdin.o tcp/tcp_api.o tcp/tcp_connection.o tcp/tcp_states.o tcp/send_window.o tcp/recv_window.o ip/ip_node.o ip/routing_table.o ip/forwarding_table.o ip/ip_utils.o ip/link_interface.o tcp/tcp_utils.o tcp/tcp_node.o
 TEST_OBJS=$(patsubst %.o, $(TEST_BUILD_DIR)/%.o, $(_TEST_OBJS)) $(patsubst %.o, $(BUILD_DIR)/%.o, $(_TEST_DEP_OBJS))
 
 _TEST_INCLUDE=$(TEST_DIR)/include
 TEST_INCLUDE=$(patsubst %, -I%, $(_TEST_INCLUDE)) $(INCLUDE)
 
 test_link:
-	$(CC) $(CFLAGS) -o $(TEST_EXEC_FILE) $(TEST_OBJS)
+	$(CC) $(CFLAGS) $(LIBS) -o $(TEST_EXEC_FILE) $(TEST_OBJS)
 
 test_build: validate $(TEST_OBJS) test_link
 
