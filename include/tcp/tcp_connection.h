@@ -144,6 +144,22 @@ void tcp_connection_ack(tcp_connection_t connection, uint32_t ack);
 /******* End of Sending Packets **************/
 //////////////////////////////////////////////////////////////////////////////////////
 
+//////////////////////////////////////////////////////////////////////////////////////
+/*********************************** CLOSING *****************************************/
+/* destroys recv window and sets receive_window pointer to null
+	 this is necessary for api call v_shutdown type 2 when we just need to close the reading portion of the connection
+	 returns 1 on success, -1 on failure */
+int tcp_connection_close_recv_window(tcp_connection_t connection);
+
+
+
+
+
+
+/*********************************** END OF CLOSING *****************************************/
+//////////////////////////////////////////////////////////////////////////////////////
+
+
 // to print when user calls 'sockets'
 void tcp_connection_print_sockets(tcp_connection_t connection);
 

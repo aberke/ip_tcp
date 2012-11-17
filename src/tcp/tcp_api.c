@@ -275,25 +275,28 @@ struct memchunk{
 	void* data;
 	int length;
 };*/
+
+	if(tcp_connection_get_recv_window(connection) == NULL){
+		// probably means we called v_shutdown type 2 to close reading portion of socket -- return error
+		printf("socket %d has NULL receiving window\n", tcp_connection_get_socket(connection));
+		return -1;
+	}
+	
 	memchunk_t chunk = recv_window_get_next(tcp_connection_get_recv_window(connection), nbyte);
 	if(!chunk){
 		return 0;
 	}	
-	print(("tcp_api_read 1"), ALEX_PRINT);
 	int read = nbyte;
 	if(chunk->length > nbyte){
 		puts("Error: Alex and Neil go debug tcp_api_read");
 		exit(-1);
 	}
-	print(("tcp_api_read 2"), ALEX_PRINT);
 	if(chunk->length < nbyte)
 		read = chunk->length;
 	
 	memcpy(buffer, chunk->data, read); 
-	print(("tcp_api_read 3"), ALEX_PRINT);
 	//clean up
 	memchunk_destroy_total(&chunk, util_free);
-	print(("tcp_api_read 4"), ALEX_PRINT);
 	return read;
 }
 void* tcp_api_read_entry(void* _args){
@@ -449,7 +452,7 @@ void* tcp_api_accept_entry(void* _args){
 	return NULL;
 }
 
-////////////////// DRIVER ///////////////////////
+////////////////// DRIVER VERSION///////////////////////
 
 /* So we need to call tcp_api_accept in a loop without blocking.... so here's my solution that I've implemented:
 	We call thread the call tcp_driver_accept_entry which then goes to call tcp_api_accept_entry in a loop.
@@ -494,4 +497,38 @@ void* tcp_driver_accept_entry(void* _args){
 	return NULL; // this won't do anything
 }
 
+//////////////////////////////////////////////////////////////////////////////////////
+/*********************************** CLOSING *****************************************/
+
+/* shutdown an open socket. If type is 1, close the writing part of
+the socket (CLOSE call in the RFC. This should send a FIN, etc.)
+If 2 is speciﬁed, close the reading part (no equivalent in the RFC;
+v read calls should just fail, and the window size should not grow any
+more). If 3 is speciﬁed, do both. The socket is not invalidated.
+returns 0 on success, or negative number on failure
+If the writing part is closed, any data not yet ACKed should still be retransmitted. */
+/*int v_shutdown(int socket, int type){
+	
+	
+	tcp_connection_close_recv_window(tcp_connection_t connection)
+
+
+	return 0;
+}
+
+void* tcp_api_read_entry(void* _args){
+	tcp_api_args_t args = (tcp_api_args_t)_args;
+
+	/* verifies that these fields are valid (node != NULL, socket >=0, ...) */
+/*	_verify_node(args);
+	_verify_socket(args);
+	
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
+	if(connection == NULL){
+		_return(args,-EBADF);
+		return NULL;
+	}
+
+
+*/
 

@@ -498,9 +498,15 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 	/* WINDOW SIZE */
 	if(connection->receive_window)
 		tcp_set_window_size(header, recv_window_get_size(connection->receive_window));
-	else
-		tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
-	
+	else{
+		state_e state = tcp_connection_get_state(connection);
+		if(state == SYN_SENT || state == LISTEN || state == SYN_RECEIVED)
+			tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
+		else
+			/* means we closed the receive window down 
+				-- so lets practice congestion control and tell them not to send more data */
+			tcp_set_window_size(header, 0);
+	}
 	
 	/* ACK */
 	if(connection->receive_window){
@@ -911,6 +917,14 @@ recv_window_t tcp_connection_get_recv_window(tcp_connection_t connection){
 // needed for driver window_cmd
 send_window_t tcp_connection_get_send_window(tcp_connection_t connection){
 	return connection->send_window;
+}
+/* destroys recv window and sets receive_window pointer to null
+	 this is necessary for api call v_shutdown type 2 when we just need to close the reading portion of the connection
+	 returns 1 on success, -1 on failure */
+int tcp_connection_close_recv_window(tcp_connection_t connection){
+	recv_window_destroy(&(connection->receive_window));
+	connection->receive_window = NULL;
+	return 1;
 }
 
 /* hacky? */  //<-- yeah kinda
