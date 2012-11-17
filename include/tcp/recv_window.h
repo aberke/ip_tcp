@@ -33,7 +33,7 @@ void recv_window_destroy(recv_window_t* recv_window);
 	pass in length 0
 	returns 1 if valid seqnum (in window) 0 if invalid
 */
-int recv_window_validate_seqnum(recv_window_t window, uint32_t seqnum, int length);
+int recv_window_validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t length);
 memchunk_t recv_window_get_next(recv_window_t window, int bytes);
 uint32_t recv_window_get_ack(recv_window_t window);
 uint16_t recv_window_get_size(recv_window_t window);
