@@ -230,6 +230,16 @@ void test_tcp_states(){
 	state_machine_destroy(&machine);
 }
 
+void test_checksum(){
+	void* packet = malloc(100);
+	uint16_t total_length = 100;
+	uint32_t dest_ip = 12234561;
+	uint32_t src_ip  = 55748211;	
+	uint16_t proto = (uint16_t)TCP_DATA;
+
+	tcp_utils_calc_checksum(packet,total_length, dest_ip, src_ip, proto);
+}
+
 void test_send_window_scale(){
 	send_window_t window = send_window_init(1.0, 100, 50, 0);
 	
@@ -896,11 +906,13 @@ int main(int argc, char** argv){
 
 	TEST(test_queue); 
 	*/
-	TEST(test_ext_array);
-	TEST(test_ext_array_scale);
+	//TEST(test_ext_array);
+	//TEST(test_ext_array_scale);
 	/*	
 	TEST(test_wrapping);
 	*/
+
+	TEST(test_checksum);
 	
 //	TEST(test_send_window);
 //	TEST(test_send_window_scale);

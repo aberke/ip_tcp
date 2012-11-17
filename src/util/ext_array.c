@@ -27,7 +27,6 @@ ext_array_t ext_array_init(int capacity){
 	ext_array_t ext_array = (struct ext_array*)malloc(sizeof(struct ext_array));
 	ext_array->capacity = capacity;
 	ext_array->data = malloc(capacity);
-
 	ext_array->left = ext_array->right = 0;
 
 	return ext_array;
@@ -49,10 +48,15 @@ void ext_array_push(ext_array_t ext_array, void* data, int length){
 	/* if there's no room at the end, but that's due to all the garbage at the beginning, 
 	   then get rid of all the garbage */
 	if(ext_array->capacity - ext_array->right <= length 
-		&& (ext_array->capacity - (ext_array->right - ext_array->left) >= length)){
+		&& (ext_array->capacity - (ext_array->right - ext_array->left) > length)){
 		/* shift everything over */
 		_shift(ext_array);
 	
+		if(ext_array->capacity < length){
+			printf("crashing... capacity : %d, length: %d\n", ext_array->capacity, length);
+			exit(0);
+		}
+
 		memcpy(ext_array->data+ext_array->right, data, length);
 		ext_array->right += length;
 	}
@@ -79,6 +83,10 @@ memchunk_t ext_array_peel(ext_array_t ext_array, int length){
 	
 	/* now peel */
 	ext_array->left += ret_length;
+
+	if( ((ext_array->right - ext_array->left) / (float)ext_array->capacity) <  MINIMUM_RATIO)
+		_scale_down(ext_array);
+
 
 	return memchunk_init(data, ret_length);
 }
@@ -125,23 +133,15 @@ void _scale_down(ext_array_t ar){
 void _shift(ext_array_t ar){
 	int data_size = ar->right - ar->left;
 
-	/* if the ratio of data to capacity is too small, then shrink */
-	if(data_size/(float)ar->capacity < MINIMUM_RATIO) 
-        	ar->capacity /= SCALE_FACTOR;
-
+	/* copy it over */
 	void* new_data = malloc(ar->capacity);
 	memcpy(new_data, ar->data+ar->left, data_size);
 
-	if(ar->capacity < data_size){
-		puts(";ladkjsf;ladkjsf;ladmjs;flkjasd;fljasd;fldjas;fldjaslkj");
-		exit(0);
-	}
-	
-	/* free the old data */
+	/* replace */
 	free(ar->data);
+	ar->data = new_data;
 
 	/* all is right in the world again */
-	ar->data = new_data;
 	ar->left = 0;
 	ar->right = data_size;
 }

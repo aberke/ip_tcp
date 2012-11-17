@@ -141,37 +141,33 @@ uint16_t tcp_utils_calc_checksum(void* packet, uint16_t total_length, uint32_t s
 	uint32_t sum = 0;
 	uint16_t odd_byte = 0;
 
-	int n = total_length;
+	uint16_t* pseudo_packet = (uint16_t*)malloc(total_length+12); // 12 is size in bytes of pseudo-header
+	memset(pseudo_packet, 0, total_length);
+	((uint32_t*)pseudo_packet)[0] = src_ip;
+	((uint32_t*)pseudo_packet)[1] = dest_ip;
+	((uint8_t*)pseudo_packet) [9] = (uint8_t)TCP_DATA;
+	((uint16_t*)pseudo_packet)[5] = ntohs((uint16_t)total_length);
+	
+	memcpy(((char*)pseudo_packet)+12, packet, total_length);
+
+	int n = total_length+12;
 	while (n>1) {
-		sum += *p++;
+		sum += *pseudo_packet++;
 		n -= 2;
 	}
 
 	if (n==1) {
-		*(uint8_t*)(&odd_byte) = *(uint8_t*)p;
+		*(uint8_t*)(&odd_byte) = *(uint8_t*)pseudo_packet;
 		sum += odd_byte;
 	}
 
-	/* now compute over the pseudo 96 byte header, which looks like this:
-					 +--------+--------+--------+--------+
-                     |           Source Address          |
-                     +--------+--------+--------+--------+
-                     |         Destination Address       |
-                     +--------+--------+--------+--------+
-                     |  zero  |  PTCL  |    TCP Length   |
-                     +--------+--------+--------+--------+
-	*/
-
-	sum += ((src_ip>>16) & 0x00FF);
-	sum += (src_ip & 0x00FF);
-	sum += ((dest_ip>>16) & 0x00FF);
-	sum += (dest_ip & 0x00FF);
-	sum += total_length + protocol;
-
+	sum = (sum >> 16) + (sum & 0xffff);
+	sum += (sum >> 16);
 	uint16_t result;
-	result = (sum & 0xFF) + (sum >> 16);
+	result = ~sum;
 
-	return ~result;
+	free(pseudo_packet);
+	return result;
 }
 
 /* calculates the checksum and adds it to the tcphdr */
