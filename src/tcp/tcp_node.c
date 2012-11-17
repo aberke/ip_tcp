@@ -771,6 +771,7 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 	int packet_size = tcp_packet->packet_size;
 	if( packet_size < TCP_HEADER_MIN_SIZE ){
 		puts("packet received is less than header size, discarding...");
+		tcp_packet_destroy(tcp_packet); //<--CAN'T JUST FREE -- caused segfaults
 		free(tcp_packet);
 		return;
 	}
@@ -781,7 +782,7 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 	if(!connection){
 		printf("invalid port: %u\n", dest_port);
 		tcp_node_invalid_port(tcp_node, tcp_packet);
-		free(tcp_packet);
+		tcp_packet_destroy(tcp_packet); //<--CAN'T JUST FREE -- caused segfaults
 		return;
 	}
 	// put it on that connection's my_to_read queue

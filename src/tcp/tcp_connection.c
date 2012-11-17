@@ -201,23 +201,20 @@ void tcp_connection_destroy(tcp_connection_t connection){
 /* 
 validates an ACK when it's being received during 
 establishing the connection 
+Returns 0 on success, -1 on failure
 */
 int _validate_ack(tcp_connection_t connection, uint32_t ack){
+	if(tcp_connection_get_state(connection) == SYN_SENT){
+		if((connection->last_seq_sent + 1) == ack)
+			return 0;
+		else
+			return -1;
+	}
+	else if(!connection->send_window)
+		return -1; //then we probably shouldn't be receiving an ack, right?
+		
 	return send_window_validate_ack(connection->send_window, ack);
 }	
-
-/* 
-		the ACK is valid if it is equal to one more than the 
-		last sequence number sent 
-	if (ack != (connection->last_seq_sent + 1) % MAX_SEQNUM){
-		printf("invalid ack: expecting %u, got %u\n", connection->last_seq_sent + 1, ack);
-		return -1;
-	}
-
-	return 0;
-}
-*/
-
 
 /* Function for tcp_node to call to place a packet on this connection's
 	my_to_read queue for this connection to handle in its _handle_read_send thread 
@@ -251,32 +248,10 @@ tcp_connection_handle_receive_packet
 */
 
 void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
-	/* 
-	  RFC 793: 
-		Although these examples do not show connection synchronization using data
-		-carrying segments, this is perfectly legitimate, so long as the receiving TCP
-  		doesn't deliver the data to the user until it is clear the data is valid
-		
 
-		so no matter what, we need to be pushing the data to the receiving window, 
-		and we simply shouldn't call get_next until we're in the established state 
-	*/
-	
 	void* tcp_packet = tcp_packet_data->packet;
-	state_e connection_state = state_machine_get_state(connection->state_machine);
 	
-	print(("Received Packet of size %d", tcp_packet_data->packet_size), PACKET_PRINT);
-	view_packet((struct tcphdr*)tcp_packet, tcp_packet+20, tcp_packet_data->packet_size-20); 
-	
-	//TODO: FIGURE OUT WHEN ITS NOT APPROPRIATE TO RESET REMOTE ADDRESSES -- we don't want our connection sabotaged 
-	//reset remote ip/port in case it has changed + so that we can correctly calculate checksum	
-	if(connection_state == LISTEN){
-		/* since listen binds to all interfaces, must be able to reset its ip addresses to receive connect requests */
-		tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
-		tcp_connection_set_local_ip(connection, tcp_packet_data->local_virt_ip);
-	}
-	
-	/* ensure the integrity */
+	/* First thing: ensure the integrity */
 	int checksum_result = tcp_utils_validate_checksum(tcp_packet, 
 											tcp_packet_data->packet_size, 
 											tcp_packet_data->remote_virt_ip, // because we might not know
@@ -285,9 +260,11 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 											TCP_DATA);
 	/* CHECKSUM */
 	if(checksum_result < 0){
-		//puts("Bad checksum! what happened? not discarding");
+		puts("Bad checksum! what happened? not discarding");
+		//tcp_packet_data_destroy(&tcp_packet_data);
 		//return;
-	}
+	}	
+	state_e connection_state = state_machine_get_state(connection->state_machine);
 	
 	/* this boolean just decides whether we need
 		to update our peer (just call tcp_wrap_packet_send) with
@@ -295,27 +272,85 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		an ack back which we will always do whenever we send a packet,
 		but if we receive data and then don't need to send a packet, 
 		this boolean will make sure we send one just for that reason */
-	int update_peer = 0;
-
-	/* DATA 
-	    check if there's any data, and if there is push it to the window,
-		but what does the seqnum even mean if the ACKs haven't been synchronized? */
-	memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
-	if(data){ 
-		recv_window_receive(connection->receive_window, data->data, data->length, tcp_seqnum(tcp_packet));
-		// if there's a blocking read, need to signal we got more data to read
-		tcp_connection_api_signal(connection, 1);
+	int update_peer = 0;	
 	
-		/* send the ack back */
-		memchunk_destroy(&data);
-
-		/* we want to update our peer what we've acked */
-		update_peer = 1;
-	}	
+	/* receive window is NULL until we transition to established or SYN_RECEIVED.  It's set NULL again when we 
+		stop receiving data, but then we don't care about seqnum's anyhow, right??
+		There are certain operations and checks we should make only if the seqnum is valid.
+		We certainly shouldn't push to a window that doesn't exist is the other thing 
+		
+			Times when we should accept an invalid seqnum (I think, says Alex):
+			SYN_SENT: because it's possible we're in a simultaneous open
+			Listen: we don't really yet have a seqnum
+	*/	
+	if(connection->receive_window != NULL){
+		int seqnum_valid = recv_window_validate_seqnum(connection->receive_window, tcp_seqnum(tcp_packet), 0);
+		if(!seqnum_valid){
+			printf("connection on socket %d received packet with invalid sequence number\n", connection->socket_id);
+			//drop packet, right? Should we send an RST in particular cases?
+			tcp_packet_data_destroy(&tcp_packet_data);
+			return;
+		}
+		/* DATA 
+			check if there's any data, and if there is push it to the window,
+			but what does the seqnum even mean if the ACKs haven't been synchronized? */
+		memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
+		if(data){ 
+			recv_window_receive(connection->receive_window, data->data, data->length, tcp_seqnum(tcp_packet));
+			// if there's a blocking read, need to signal we got more data to read
+			tcp_connection_api_signal(connection, 1);
+		
+			/* send the ack back */
+			memchunk_destroy(&data);
+	
+			/* we want to update our peer what we've acked */
+			update_peer = 1;
+		}
+	}
+	/* Printing packet here */
+	print(("Received Packet of size %d", tcp_packet_data->packet_size), PACKET_PRINT);
+	view_packet((struct tcphdr*)tcp_packet, tcp_packet+20, tcp_packet_data->packet_size-20); 
+	
+	
+	if(connection_state == LISTEN){
+		/* since listen binds to all interfaces, must be able to reset its ip addresses to receive connect requests */
+		tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
+		tcp_connection_set_local_ip(connection, tcp_packet_data->local_virt_ip);
+	}
 
 	/* lets get the window size first */
 	if(connection->send_window)
 		send_window_set_size(connection->send_window, tcp_window_size(tcp_packet));
+
+	if(tcp_rst_bit(tcp_packet)){
+	/*  In all states except SYN-SENT, all reset (RST) segments are validated
+	  by checking their SEQ-fields. (Which we did above!) A reset is valid if its sequence number
+	  is in the window.  In the SYN-SENT state (a RST received in response
+	  to an initial SYN), the RST is acceptable if the ACK field
+	  acknowledges the SYN. */
+		if(connection_state == SYN_SENT){
+			if(_validate_ack(connection, tcp_ack(tcp_packet)) < 0){
+				print(("Received invalid ack with rst bit while in SYN_SENT state -- discarding packet"), TCP_PRINT);
+				tcp_packet_data_destroy(&tcp_packet_data);
+				return;
+			}
+		}
+		/* The receiver of a RST first validates it, then changes state.  If the
+		  receiver was in the LISTEN state, it ignores it.  If the receiver was
+		  in SYN-RECEIVED state and had previously been in the LISTEN state,
+		  then the receiver returns to the LISTEN state, otherwise the receiver
+		  aborts the connection and goes to the CLOSED state.  If the receiver
+		  was in any other state, it aborts the connection and advises the user */
+		  
+		/* So let's abort the connection now: */
+		print(("received valid rst"),TCP_PRINT);
+		state_machine_transition(connection->state_machine, receiveRST);	
+		update_peer = 0;
+	
+	
+	//tcp_packet_data_destroy(&tcp_packet_data);
+	}
+
 
 	/* now check the SYN bit */
 	if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
@@ -351,12 +386,6 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
         }
 	}
 
-	else if(tcp_rst_bit(tcp_packet)){
-		print(("rst"),TCP_PRINT);
-		state_machine_transition(connection->state_machine, receiveRST);	
-		update_peer = 0;
-	}
-
 	/* now update that peer because friends don't let friends send unacknowledged bytes*/
 	if(update_peer)
 		tcp_wrap_packet_send(connection, tcp_header_init(0), NULL, 0);
@@ -366,7 +395,8 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 }
 
 void tcp_connection_handle_syn_ack(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
-    send_window_set_seq(connection->send_window, tcp_ack(tcp_packet_data->packet));
+	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, tcp_ack(tcp_packet_data->packet));
+ //   send_window_set_seq(connection->send_window, tcp_ack(tcp_packet_data->packet));
     
 	print(("syn/ack"),TCP_PRINT);
 
@@ -457,6 +487,9 @@ int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t 
    I also left the original version intact in src/tcp/tcp_utils.s
 */
 int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len){	
+	
+	/* Record last seq sent */
+	connection->last_seq_sent = tcp_seqnum(header);
 	
 	/* PORTS */
 	tcp_set_dest_port(header, connection->remote_addr.virt_port);

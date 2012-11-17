@@ -229,15 +229,13 @@ checksum:
 
 			
 NEIL:
-	write tcp checksum -- and write it for linux too!
+	write tcp checksum -- FIX
+	int recv_window_validate_seqnum
 
 ALEX:
 
-	TODO:	
-	fix checksum!!!  -- try it now, i think i fixed it.  we were putting it in host byte order before comparing.
-	create better way of dealing with new sockets/ports -- see tcp_node struct  
-		// for now virt_socket is the index of the tcp_connection in the array
-		
+	TODO
+	
 	DEAL WITH ESTABLISHED STATE AND TEAR-DOWN	
 	fix states.c to deal with corner conditions
 
@@ -246,9 +244,6 @@ SET BACK TO 1024: in tcp_node.h:
 #define MAX_FILE_DESCRIPTORS 5 // per process limit commonly set to 1024 on mac and linux machines
 	
 alex's questions for neil:
-
-	recv window bugs:
-		loses first byte of written data
 
 	to replicate Alex's segfaults that happen at plainlist_remove:
 		set MAX_FILE_DESCRIPTORS (found in tcp_node.h) to something very low like 5.

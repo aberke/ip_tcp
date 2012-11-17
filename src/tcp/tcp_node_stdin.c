@@ -27,8 +27,6 @@
 #define SHUTDOWN_BOTH	2
 
 // TODO remove the below #defines, replace by linking with API implementation 	
-#define v_read(a,b,c)	-ENOTSUP
-#define v_shutdown(a,b)	-ENOTSUP
 #define v_close(a)	-ENOTSUP
 
 void sockets_cmd(const char *line, tcp_node_t tcp_node){
@@ -225,6 +223,47 @@ void v_connect(const char *line, tcp_node_t tcp_node){
 	args->function_call = "v_connect()";
 	
 	tcp_node_thread(tcp_node, tcp_api_connect_entry, args);
+}
+
+/* shutdown an open socket. If type is 1, close the writing part of
+the socket (CLOSE call in the RFC. This should send a FIN, etc.)
+If 2 is speciﬁed, close the reading part (no equivalent in the RFC;
+v read calls should just fail, and the window size should not grow any
+more). If 3 is speciﬁed, do both. The socket is not invalidated.
+returns 0 on success, or negative number on failure
+If the writing part is closed, any data not yet ACKed should still be retransmitted. */
+int v shutdown(int socket, int type){
+	return 0;
+}
+/*shutdown socket read/write/both v shutdown on the given socket. If read or r is given, close
+only the reading side. If write or w is given, close only the writing side. If both is given, close
+both sides. Default is write*/
+void shutdown_cmd(const char* line, tcp_node_t tcp_node){
+	int socket;
+	char r_w_both[BUFFER_SIZE];
+	int ret;
+	int r_w_option; // <-- we'll set args->num = r_w_option to convey if this is a v_shutdown(1/2/3)
+	
+	ret = sscanf(line, "shutdown %d %s", &socket, r_w_both);
+	if(ret != 2){
+		fprintf(stderr, "syntax error (usage: shutdown [socket] [read/write/both])\n");
+		return;
+	}
+	if((!strcmp(r_w_both, "write")) || (!strcmp(r_w_both, "w"))){
+		r_w_option = 1;
+	}
+	else if((!strcmp(r_w_both, "read")) || (!strcmp(r_w_both, "r"))){
+		r_w_option = 2;
+	}
+	else if(!strcmp(r_w_both, "both")){
+		r_w_option = 3;
+	}
+	else{
+		fprintf(stderr, "syntax error (usage: shutdown [socket] [read/write/both])\n");
+		return;
+	}
+
+
 }
 
 /*
@@ -588,9 +627,9 @@ struct {
   {"s", send_cmd},
   {"w", send_cmd},
   {"sendfile", sendfile_cmd},
+  {"shutdown", shutdown_cmd},
 
   /*{"recvfile", recvfile_cmd},
-  {"shutdown", shutdown_cmd},
   {"close", close_cmd},*/
   {"quit", quit_cmd},	// last two quit commands added by alex -- is this how we want to deal with quitting?
   {"q", quit_cmd},

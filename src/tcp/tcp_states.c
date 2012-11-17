@@ -36,6 +36,9 @@ transitioning_t listen_next_state(transition_e t){
 		case SEND:
 			/* send SYN */
 			return transitioning_init(SYN_SENT, (action_f)tcp_connection_LISTEN_to_SYN_SENT);
+		case receiveRST:
+			/* RFC says ignore rst when in LISTEN */
+			return transitioning_init(LISTEN, (action_f)tcp_connection_NO_ACTION_transition);
 			
 		default:
 			return transitioning_init(LISTEN, (action_f)tcp_connection_invalid_transition);

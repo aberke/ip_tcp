@@ -121,7 +121,6 @@ int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection){
 	/* first pick a syn to send */
 	uint32_t ISN = rand(); // only up to RAND_MAX, don't know what that is, but probably < SEQNUM_MAX	
 	connection->last_seq_sent = ISN; //seq for syn about to be sent
-	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, ISN);
 
 	connection->syn_count = 1;
 	tcp_connection_send_syn(connection);
@@ -366,6 +365,12 @@ int tcp_connection_CLOSING_error(tcp_connection_t connection){
 }
 
 /********** End of State Changing Functions *******/
+
+// sometimes RFC specifies that if in a given state an action should be ignored
+int tcp_connection_NO_ACTION_transition(tcp_connection_t connection){
+	return 1;
+}
+
 
 // invalid transition
 int tcp_connection_invalid_transition(tcp_connection_t connection){

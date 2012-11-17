@@ -20,6 +20,10 @@ int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, ui
 // to be called during invalid transition 
 int tcp_connection_invalid_transition(tcp_connection_t connection);
 
+// sometimes RFC specifies that if in a given state an action should be ignored
+// eg, when in LISTEN and receive rst
+int tcp_connection_NO_ACTION_transition(tcp_connection_t connection);
+
 	/****** Functions called as actions by statemachine ******/
 int tcp_connection_CLOSED_to_LISTEN(tcp_connection_t connection);
 int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection);

@@ -314,6 +314,8 @@ void* tcp_api_read_entry(void* _args){
 	
 	//TODO: HANDLE CORRECT RESPONSES BASED ON STATE
 	
+	// CAN continue to read in the FIN-WAIT-1 state
+	
 	if(state == CLOSE_WAIT){
 		tcp_connection_api_unlock(connection);
 		puts("Remote Connection Closed");

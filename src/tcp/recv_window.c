@@ -71,7 +71,7 @@ returns
 	>0 if successful (offset at which the first byte from data should be read)
 	-1 otherwise
 */
-static int _validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t length){
+int recv_window_validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t length){
 	if(seqnum==(recv_window->left+1) || seqnum==(recv_window->left) || seqnum==(recv_window->left-1))
         return 0;
     
