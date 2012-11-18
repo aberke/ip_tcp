@@ -49,6 +49,9 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 	if(connection->send_window != NULL){
 		CRASH_AND_BURN("sending window is not null when we're trying to send a SYN/ACK in tcp_connection_LISTEN_to_SYN_RECEIVED. why?");
 	}
+	
+	 //sets time that we transitioned to SYN_RECEIVED -- so that we can timeout when necessary
+	gettimeofday(&(connection->state_timer), NULL);
 
 	uint32_t ISN = RAND_ISN();	
 	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, ISN);
@@ -103,7 +106,7 @@ int tcp_connection_send_syn(tcp_connection_t connection){
 	tcp_set_seq(header, connection->last_seq_sent);
 	
 	// set time of when we're sending off syn
-	gettimeofday(&(connection->syn_timer), NULL);
+	gettimeofday(&(connection->state_timer), NULL);
 
 	/*  that should be good? send it off. Note: NULL because I'm assuming there's
 		to send when initializing a connection, but that's not necessarily true */
@@ -172,7 +175,9 @@ int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection){
 		puts("Something went wrong, your receive window already exists and we just received a SYN. In tcp_connection_SYN_SENT_to_SYN_RECEIVED");
 		exit(1); // CRASH AND BURN 
 	}
-
+	 //sets time that we transitioned to SYN_RECEIVED
+	gettimeofday(&(connection->state_timer), NULL);
+	
 	// again, last_seq_received will have been set by the packet that triggered this transition 
 	connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, connection->last_seq_received);
 

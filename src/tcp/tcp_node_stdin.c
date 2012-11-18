@@ -225,16 +225,6 @@ void v_connect(const char *line, tcp_node_t tcp_node){
 	tcp_node_thread(tcp_node, tcp_api_connect_entry, args);
 }
 
-/* shutdown an open socket. If type is 1, close the writing part of
-the socket (CLOSE call in the RFC. This should send a FIN, etc.)
-If 2 is speciﬁed, close the reading part (no equivalent in the RFC;
-v read calls should just fail, and the window size should not grow any
-more). If 3 is speciﬁed, do both. The socket is not invalidated.
-returns 0 on success, or negative number on failure
-If the writing part is closed, any data not yet ACKed should still be retransmitted. */
-int v_shutdown(int socket, int type){
-	return 0;
-}
 /*shutdown socket read/write/both v shutdown on the given socket. If read or r is given, close
 only the reading side. If write or w is given, close only the writing side. If both is given, close
 both sides. Default is write*/
@@ -262,8 +252,13 @@ void shutdown_cmd(const char* line, tcp_node_t tcp_node){
 		fprintf(stderr, "syntax error (usage: shutdown [socket] [read/write/both])\n");
 		return;
 	}
-
-
+	tcp_api_args_t args = tcp_api_args_init();
+	args->node = tcp_node;
+	args->socket = socket;
+	args->function_call = "v_shutdown";
+	args->num = r_w_option;
+		
+	tcp_node_thread(tcp_node, tcp_api_shutdown_entry, args);
 }
 
 /*

@@ -62,8 +62,10 @@ struct tcp_connection{
 	
 	// keeping track of if need to fail connect attempt or retry
 	int syn_count;
-	struct timeval syn_timer;
-	//struct timeval connect_accept_timer; was this for something else? cause I'm renaming it
+	struct timeval state_timer; //WAS syn_timer, but is now an all purpose timer
+		//for example, don't want to block on accept forever, so we use this to time out of waiting for
+		//SYN_RECEIVED to change to ESTABLISHED
+		// lets also use this for closing
 	
 	// needs reference to the to_send queue in order to queue its packets
 	bqueue_t *to_send;	//--- tcp data for ip to send
@@ -285,7 +287,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	*/	
 	if(connection->receive_window != NULL){
 		int seqnum_valid = recv_window_validate_seqnum(connection->receive_window, tcp_seqnum(tcp_packet), 0);
-		if(!seqnum_valid){
+		if(seqnum_valid<0){
 			printf("connection on socket %d received packet with invalid sequence number\n", connection->socket_id);
 			//drop packet, right? Should we send an RST in particular cases?
 			tcp_packet_data_destroy(&tcp_packet_data);
@@ -488,8 +490,12 @@ int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t 
 */
 int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len){	
 	
-	/* Record last seq sent */
-	connection->last_seq_sent = tcp_seqnum(header);
+	/* Record last seq sent -- only if we purposely set the seqnum */
+	if(data_len > 0 || tcp_syn_bit(header))
+		connection->last_seq_sent = tcp_seqnum(header);
+		
+	else if(data_len == 0 && (!tcp_seqnum(header)))
+		tcp_set_seq(header, connection->last_seq_sent);
 	
 	/* PORTS */
 	tcp_set_dest_port(header, connection->remote_addr.virt_port);
@@ -642,6 +648,8 @@ void *_handle_read_send(void *tcpconnection){
 
 	while(connection->running){	
         
+        state_e state = tcp_connection_get_state(connection);
+        
 		gettimeofday(&now, NULL);	
 		wait_cond.tv_sec = now.tv_sec+0;
 		wait_cond.tv_nsec = 1000*now.tv_usec+TCP_CONNECTION_DEQUEUE_TIMEOUT_NSECS;
@@ -651,18 +659,18 @@ void *_handle_read_send(void *tcpconnection){
         
 		ret = bqueue_timed_dequeue_abs(connection->my_to_read, &packet, &wait_cond);
 
+		time_elapsed = now.tv_sec - connection->state_timer.tv_sec;
+		time_elapsed += now.tv_usec/1000000.0 - connection->state_timer.tv_usec/1000000.0;
+
 		/* check if you're waiting for an ACK to come back */
-		if(tcp_connection_get_state(connection)==SYN_SENT){	
-			time_elapsed = now.tv_sec - connection->syn_timer.tv_sec;
-			time_elapsed += now.tv_usec/1000000.0 - connection->syn_timer.tv_usec/1000000.0;
-         
+		if(state == SYN_SENT){	         
 			if(time_elapsed > (1 << ((connection->syn_count)-1))*SYN_TIMEOUT){
 				// we timeout connect or resend
 
 				if((connection->syn_count)==SYN_COUNT_MAX){
 					// timeout connection attempt
 					connection->syn_count = 0;
-					tcp_connection_state_machine_transition(connection, CLOSE); // calls tcp_node_remove_connection_kernal
+					tcp_connection_state_machine_transition(connection, CLOSE); 
 				}
 				else{	
 					// resend syn
@@ -671,7 +679,13 @@ void *_handle_read_send(void *tcpconnection){
 				}
 			}
 		}
-
+		else if(state == SYN_RECEIVED){
+			/* after a conservative amount of time, let's let the SYN_RECEIVED time out so that accept doesn't 
+				block waiting for the api signal forever */
+			if(time_elapsed > (1 << 3)*SYN_TIMEOUT){
+				tcp_connection_api_signal(connection, API_TIMEOUT);
+			}
+		}
 
 		/* send whatever you're trying to send */
 		if(connection->send_window){
@@ -822,6 +836,13 @@ void tcp_connection_set_local_ip(tcp_connection_t connection, uint32_t ip){
 }
 
 /* signaling */
+
+/* If waiting for api signal and trying to shutdown, we end up blocking -- need way out
+	to be called before pthread_destroy on api thread
+	sets ret to SIGNAL_DESTROYING --should be something else? */
+void tcp_connection_api_cancel(tcp_connection_t connection){
+	tcp_connection_api_signal(connection, SIGNAL_DESTROYING);
+}
 	
 /* calls pthread_cond_signal(api_cond) so that the waiting tcp_api function can stop waiting and take a look at the return value		
 tcp_connection_api_signal(connection); 
@@ -879,23 +900,44 @@ int tcp_connection_api_result(tcp_connection_t connection){
 
 /* refuse the connection (send a RST) */
 void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_data_t packet){
-/* 
+/*  
 	RFC 793: pg 35
+	If the connection does not exist (CLOSED) then a reset is sent
+    in response to any incoming segment except another reset.	****
     In particular, SYNs addressed to a non-existent connection are rejected
     by this means.
-*/
+*/  
 	struct tcphdr* incoming_header = (struct tcphdr*)packet->packet;
+
+	if(tcp_rst_bit(incoming_header))
+		return; //by **** a few lines right above
 
 	struct tcphdr* outgoing_header = tcp_header_init(0);
 
+	/* PORTS */
 	tcp_set_dest_port(outgoing_header, tcp_source_port(incoming_header));
 	tcp_set_source_port(outgoing_header, tcp_dest_port(incoming_header));
 
-	/* CHECKSUM */
-	tcp_utils_add_checksum(outgoing_header, tcp_offset_in_bytes(outgoing_header), connection->local_addr.virt_ip, connection->remote_addr.virt_ip, TCP_DATA);
-
 	/* RST */
 	tcp_set_rst_bit(outgoing_header);
+	
+	/* SEQNUM */
+		/*If the incoming segment has an ACK field, the reset takes its
+		sequence number from the ACK field of the segment, otherwise the
+		reset has sequence number zero and the ACK field is set to the sum
+		of the sequence number and segment length of the incoming segment.
+		The connection remains in the CLOSED state.*/
+	if(tcp_ack_bit(incoming_header))
+		tcp_set_seq(outgoing_header, tcp_ack(incoming_header));
+	else
+		tcp_set_seq(outgoing_header, 0);
+
+	/* ACK */
+	int seg_length = packet->packet_size - tcp_offset_in_bytes(incoming_header);
+	tcp_set_ack(outgoing_header, (tcp_seqnum(outgoing_header)+seg_length));
+
+	/* CHECKSUM */
+	tcp_utils_add_checksum(outgoing_header, tcp_offset_in_bytes(outgoing_header), connection->local_addr.virt_ip, connection->remote_addr.virt_ip, TCP_DATA);
 
 	tcp_packet_data_t packet_data = tcp_packet_data_init(
 										(char*)outgoing_header, 
@@ -922,6 +964,8 @@ send_window_t tcp_connection_get_send_window(tcp_connection_t connection){
 	 this is necessary for api call v_shutdown type 2 when we just need to close the reading portion of the connection
 	 returns 1 on success, -1 on failure */
 int tcp_connection_close_recv_window(tcp_connection_t connection){
+	if(!connection->receive_window)
+		return -1;
 	recv_window_destroy(&(connection->receive_window));
 	connection->receive_window = NULL;
 	return 1;

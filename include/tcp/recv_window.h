@@ -31,7 +31,7 @@ recv_window_t recv_window_init(uint16_t window_size, uint32_t ISN);
 void recv_window_destroy(recv_window_t* recv_window);
 /* allows us to decide if we should drop the packet or not right away 
 	pass in length 0
-	returns 1 if valid seqnum (in window) 0 if invalid
+	returns >=0 if valid seqnum (in window) <0 if invalid
 */
 int recv_window_validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t length);
 memchunk_t recv_window_get_next(recv_window_t window, int bytes);

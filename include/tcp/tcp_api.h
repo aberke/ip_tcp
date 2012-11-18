@@ -78,8 +78,8 @@ v read calls should just fail, and the window size should not grow any
 more). If 3 is speciﬁed, do both. The socket is not invalidated.
 returns 0 on success, or negative number on failure
 If the writing part is closed, any data not yet ACKed should still be retransmitted. */
-int v_shutdown(int socket, int type);
-
+int tcp_api_shutdown(tcp_node_t node, int socket, int type);
+void* tcp_api_shutdown_entry(void* _args);
 
 
 

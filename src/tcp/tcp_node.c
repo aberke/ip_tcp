@@ -199,10 +199,12 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	plain_list_t list = tcp_node->thread_list;
 	plain_list_el_t el;
 	tcp_api_args_t args;
-  
+  	print(("tcp_node_destroy 0"), CLOSING_PRINT);
 	PLAIN_LIST_ITER(list, el)
         args = (tcp_api_args_t)el->data;
+        print(("tcp_node_destroy 0.1"), CLOSING_PRINT);
         int result = tcp_api_args_destroy(&args);
+        print(("tcp_node_destroy 0.2"), CLOSING_PRINT);
 		if(result < 0){	
 			char* error_string = strerror(-result);
 			printf("Error: %s\n", error_string);
@@ -217,12 +219,12 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 		plain_list_remove(list, el);			
 	PLAIN_LIST_ITER_DONE(list);
 	/*****************************/
-	
+  	print(("tcp_node_destroy 1"), CLOSING_PRINT);	
 	
 	// gracefully CLOSE all connections
 	// this blocks for a little until all connections CLOSED - and presumably kernal empty?
 	tcp_node_close_all_connections(tcp_node);
-	
+	  	print(("tcp_node_destroy 2"), CLOSING_PRINT);
 	// wait for mutex so we can ensure we destroy e'erthang
 	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 	//// iterate through the hash maps and destroy all of the keys/values,
@@ -719,10 +721,15 @@ void tcp_node_invalid_port(tcp_node_t tcp_node, tcp_packet_data_t packet){
 void tcp_node_refuse_connection(tcp_node_t tcp_node, tcp_packet_data_t packet){
 /*  
 	RFC 793: pg 35
+	If the connection does not exist (CLOSED) then a reset is sent
+    in response to any incoming segment except another reset.	****
     In particular, SYNs addressed to a non-existent connection are rejected
     by this means.
-*/
+*/  
 	struct tcphdr* incoming_header = (struct tcphdr*)packet->packet;
+
+	if(tcp_rst_bit(incoming_header))
+		return; //by **** a few lines right above
 
 	// create the outgoing packet
 	struct tcphdr* outgoing_header = tcp_header_init(0);
@@ -733,6 +740,21 @@ void tcp_node_refuse_connection(tcp_node_t tcp_node, tcp_packet_data_t packet){
 
 	/* RST */
 	tcp_set_rst_bit(outgoing_header);
+	
+	/* seqnum */
+		/*If the incoming segment has an ACK field, the reset takes its
+		sequence number from the ACK field of the segment, otherwise the
+		reset has sequence number zero and the ACK field is set to the sum
+		of the sequence number and segment length of the incoming segment.
+		The connection remains in the CLOSED state.*/
+	if(tcp_ack_bit(incoming_header))
+		tcp_set_seq(outgoing_header, tcp_ack(incoming_header));
+	else
+		tcp_set_seq(outgoing_header, 0);
+
+	/* ack */
+	int seg_length = packet->packet_size - tcp_offset_in_bytes(incoming_header);
+	tcp_set_ack(outgoing_header, (tcp_seqnum(outgoing_header)+seg_length));
 
 	/* CHECKSUM */
 	tcp_utils_add_checksum(outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip, TCP_DATA);

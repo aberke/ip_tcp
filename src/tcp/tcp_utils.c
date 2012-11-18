@@ -172,6 +172,9 @@ uint16_t tcp_utils_calc_checksum(void* packet, uint16_t total_length, uint32_t s
 
 /* calculates the checksum and adds it to the tcphdr */
 void tcp_utils_add_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t protocol){
+	
+	return; //was segfaulting so ALEX commented out until NEIL fixes
+	
 	/* zero out the checksum */
 	tcp_set_checksum(packet, 0);
 
@@ -191,6 +194,9 @@ returns
 	-1 if incorrect
 */
 int tcp_utils_validate_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t protocol){
+	
+	return 1; // was segfaulting so ALEX commented out until NEIL fixes
+	
 	/* store the original checksum */
 	uint16_t checksum = tcp_checksum(packet);
 

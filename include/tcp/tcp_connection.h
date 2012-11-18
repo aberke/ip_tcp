@@ -16,6 +16,7 @@
 
 #define SIGNAL_CRASH_AND_BURN -777
 #define SIGNAL_DESTROYING -666
+#define API_TIMEOUT -333
 
 typedef struct tcp_connection* tcp_connection_t;  
 
@@ -45,6 +46,11 @@ uint32_t tcp_connection_get_remote_ip(tcp_connection_t connection);
 uint32_t tcp_connection_get_local_ip(tcp_connection_t connection);
 
 /* signaling */
+
+/* If waiting for api signal and trying to shutdown, we end up blocking -- need way out
+	to be called before pthread_destroy on api thread
+	sets ret to SIGNAL_DESTROYING --should be something else? */
+void tcp_connection_api_cancel(tcp_connection_t connection);
 void tcp_connection_api_signal(tcp_connection_t connection, int ret);
 void tcp_connection_api_lock(tcp_connection_t connection);
 void tcp_connection_api_unlock(tcp_connection_t connection);
