@@ -16,7 +16,8 @@
 
 #define SIGNAL_CRASH_AND_BURN -777
 #define SIGNAL_DESTROYING -666
-#define API_TIMEOUT -333
+#define API_TIMEOUT -555
+#define REMOTE_CONNECTION_CLOSED -444
 
 typedef struct tcp_connection* tcp_connection_t;  
 

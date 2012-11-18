@@ -234,8 +234,11 @@ void send_window_ack(send_window_t sw, int seqnum){
 
 /* Will handle going through all the timers and for the ones who have 
    timers that have elapsed time > timeout, adds these to the to_send
-   queue and resets the timer. */
-void send_window_check_timers_synchronized(send_window_t send_window){
+   queue and resets the timer. 
+   
+   ALEX gave this a return value -- I think it returns number of outstanding segments, let me know if wrong
+   */
+int send_window_check_timers_synchronized(send_window_t send_window){
 
 	/* get the time */
 	time_t now;
@@ -244,8 +247,10 @@ void send_window_check_timers_synchronized(send_window_t send_window){
 	plain_list_t list = send_window->sent_list;
 	plain_list_el_t el;
 	send_window_chunk_t chunk;
-
+	
+	int i = 0;
 	PLAIN_LIST_ITER(list, el)
+		i++;
 		chunk = (send_window_chunk_t)el->data;
 		if(difftime(now, chunk->send_time) > send_window->timeout){
 			print(("resending"), SEND_WINDOW_PRINT);
@@ -253,13 +258,19 @@ void send_window_check_timers_synchronized(send_window_t send_window){
 		}
 	PLAIN_LIST_ITER_DONE(list);
 
-	return;
+	return i;
 }
 
-void send_window_check_timers(send_window_t sw){
+/* Alex wants to be able to use this for closing purposes as well
+	-- so if there are no more timers to check -- all data sent successfully acked 
+	-- then we cant continue with close
+	returns 0 if no more outstanding segmements -- all data sent acked
+	returns > 0 number for remaining outstanding segments */
+int send_window_check_timers(send_window_t sw){
 	pthread_mutex_lock(&(sw->mutex));
-	send_window_check_timers_synchronized(sw);
+	int ret = send_window_check_timers_synchronized(sw);
 	pthread_mutex_unlock(&(sw->mutex));
+	return ret;
 }
 
 // needed for driver window_cmd

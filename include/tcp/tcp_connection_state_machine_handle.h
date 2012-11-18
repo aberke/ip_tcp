@@ -8,6 +8,8 @@
 #include "recv_window.h"
 #include "int_queue.h"
 
+//returns 1=true if in a closing state, 0=false otherwise
+int tcp_connection_in_closing_state(tcp_connection_t connection);
 
 /********** State Changing Functions *************/
 
@@ -41,6 +43,28 @@ int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection);
 int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection);
 ///##TODO##
 int tcp_connection_SYN_RECEIVED_to_ESTABLISHED(tcp_connection_t connection);
+
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+/* 0o0o0oo0o0o0o0o0o0o0o0o0o0o0o0o0o0o Closing Connection 0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o */
+/* 0o0o0oo0o0o0o0o0o0o0o0o0o0o0o0o0o0o Closing Connection 0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o */
+
+// allows us to resend fin like we do for syn or any data
+int tcp_connection_send_fin(tcp_connection_t connection);
+
+// called when ready to ack a fin
+int tcp_connection_ack_fin(tcp_connection_t connection);
+
+/***pCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpC Passive Close pCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpC******/	
+
+// called when receives FIN
+int tcp_connection_receive_FIN(tcp_connection_t connection);
+
+/*****aCaCaCaCaCaCaCaCaCaCaCaaCaCCaCaC Active Close aCaCaCaCaCaCaCaCaCaCaCaCaCaaCaCaCaCaCaC**********/
+// called when user commands CLOSE
+int tcp_connection_close(tcp_connection_t connection);
+
+
 int tcp_connection_SYN_RECEIVED_to_FIN_WAIT_1(tcp_connection_t connection);
 
 int tcp_connection_ESTABLISHED_to_CLOSE_WAIT(tcp_connection_t connection);

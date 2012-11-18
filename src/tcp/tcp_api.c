@@ -324,7 +324,7 @@ void* tcp_api_read_entry(void* _args){
 	
 	// CAN continue to read in the FIN-WAIT-1 state
 	
-	if(state == CLOSE_WAIT){
+	if(state == LAST_ACK){
 		tcp_connection_api_unlock(connection);
 		puts("Remote Connection Closed");
 		//inform application layer that we need to close -- is this the right way to do it?
@@ -358,6 +358,10 @@ void* tcp_api_read_entry(void* _args){
 				if(result<0){
 					tcp_connection_api_unlock(connection);
 					free(to_read);
+					if(result == REMOTE_CONNECTION_CLOSED){
+						_return(args, 0); //return 0 to signify remote connection closed
+						return NULL;
+					}
 					_return(args, result);
 					return NULL;
 				}
@@ -432,6 +436,11 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 		tcp_connection_api_unlock(listening_connection);
 		continue; //try again
 	}
+	if(ret == REMOTE_CONNECTION_CLOSED){	//Instead of sending back ack they sent back fin
+		tcp_node_remove_connection_kernal(tcp_node, new_connection);
+		tcp_connection_api_unlock(listening_connection);
+		continue; //try again
+	}	
 	tcp_connection_api_unlock(listening_connection);
 
 	/* Our connection has been established! 
@@ -504,6 +513,50 @@ void* tcp_driver_accept_entry(void* _args){
 //////////////////////////////////////////////////////////////////////////////////////
 /*********************************** CLOSING *****************************************/
 
+/* Invalidate this socket, making the underlying connection inaccessible to
+any of these API functions. If the writing part of the socket has not been
+shutdown yet, then do so. The connection shouldn't be terminated, though;
+any data not yet ACKed should still be retransmitted. */
+int tcp_api_close(tcp_node_t tcp_node, int socket){
+	
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(connection == NULL){
+		return -EBADF;
+	}
+	int ret;
+		
+	// CLOSE and close reading part
+	ret = tcp_api_shutdown(tcp_node, socket, 3);
+	if(ret == 0) //success
+		// wait until CLOSE completed
+		ret = tcp_connection_api_result(connection);
+	// invalidate socket
+	tcp_node_remove_connection_kernal(tcp_node, connection);
+	
+	if(ret < 0) //error
+		return ret;
+	return 0; //success	
+}
+void* tcp_api_close_entry(void* _args){
+	tcp_api_args_t args = (tcp_api_args_t)_args;
+
+	/* verifies that these fields are valid (node != NULL, socket >=0, ...) */
+	_verify_node(args);
+	_verify_socket(args);
+	
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
+	if(connection == NULL){
+		_return(args,-EBADF);
+		return NULL;
+	}
+	
+	tcp_connection_api_lock(connection);	
+	int ret = tcp_api_close(args->node, args->socket);
+	tcp_connection_api_unlock(connection);
+	
+	_return(args, ret);
+	return NULL;
+}
 /* shutdown an open socket. If type is 1, close the writing part of
 the socket (CLOSE call in the RFC. This should send a FIN, etc.)
 If 2 is speciﬁed, close the reading part (no equivalent in the RFC;
@@ -516,24 +569,29 @@ int tcp_api_shutdown(tcp_node_t tcp_node, int socket, int type){
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(connection == NULL)
 		return -EBADF;
-	int ret = 0;
+	int ret;
 	
 	if(type == 1){
-		
-		
-		return ret;	
+		ret = tcp_connection_close(connection);		
+		if(ret < 0) //error
+			return ret;	
+		return 0; //success
 	}
 	if(type == 2){
 		/* just close reading capability */
 		tcp_connection_close_recv_window(connection);
-		return ret;
+		if(ret < 0) //error
+			return ret;
+		return 0; //success
 	}
 	if(type == 3){
 		/* close reading capability */
 		tcp_connection_close_recv_window(connection);
 		/* CLOSE */
-		
-		return ret;
+		ret = tcp_connection_close(connection);
+		if(ret < 0)
+			return ret;
+		return 0; //success
 	}
 
 	CRASH_AND_BURN("invalid option for v_shutdown");

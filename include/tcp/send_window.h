@@ -30,7 +30,13 @@ void send_window_destroy(send_window_t* send_window);
 
 void send_window_set_size(send_window_t send_window, uint32_t size);
 void send_window_push(send_window_t send_window, void* data, int length);
-void send_window_check_timers(send_window_t send_window);
+/* Alex wants to be able to use this for closing purposes as well
+	-- so if there are no more timers to check -- all data sent successfully acked 
+	-- then we cant continue with close
+	returns 0 if no more outstanding segmements -- all data sent acked
+	returns > 0 number for remaining outstanding segments 
+	NEIL -- PLEASE CHECK THAT I DID THIS RIGHT */
+int send_window_check_timers(send_window_t send_window);
 int send_window_validate_ack(send_window_t send_window, uint32_t ack);
 void send_window_ack(send_window_t send_window, int index);
 void send_window_resize(send_window_t send_window, int size);

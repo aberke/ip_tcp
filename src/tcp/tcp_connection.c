@@ -59,6 +59,7 @@ struct tcp_connection{
 	   ack that we get back is valid */
 	uint32_t last_seq_received;
 	uint32_t last_seq_sent;	
+	uint32_t fin_seqnum; //if we send fin, set our fin_seqnum to this, or if we receive fin, for acking purposes
 	
 	// keeping track of if need to fail connect attempt or retry
 	int syn_count;
@@ -212,6 +213,11 @@ int _validate_ack(tcp_connection_t connection, uint32_t ack){
 		else
 			return -1;
 	}
+	else if(tcp_connection_in_closing_state(connection)){
+		// could be the ack for our FIN
+		if(ack == (connection->fin_seqnum)+1)
+			return 0;
+	}
 	else if(!connection->send_window)
 		return -1; //then we probably shouldn't be receiving an ack, right?
 		
@@ -253,6 +259,10 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 
 	void* tcp_packet = tcp_packet_data->packet;
 	
+	/* Printing packet here */
+	print(("Received Packet of size %d", tcp_packet_data->packet_size), PACKET_PRINT);
+	view_packet((struct tcphdr*)tcp_packet, tcp_packet+20, tcp_packet_data->packet_size-20); 
+	
 	/* First thing: ensure the integrity */
 	int checksum_result = tcp_utils_validate_checksum(tcp_packet, 
 											tcp_packet_data->packet_size, 
@@ -267,6 +277,12 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		//return;
 	}	
 	state_e connection_state = state_machine_get_state(connection->state_machine);
+
+	// if closed we're supposedly fictional
+	if(connection_state == CLOSED){
+		tcp_connection_refuse_connection(connection, tcp_packet_data);
+		return;
+	}
 	
 	/* this boolean just decides whether we need
 		to update our peer (just call tcp_wrap_packet_send) with
@@ -309,10 +325,6 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 			update_peer = 1;
 		}
 	}
-	/* Printing packet here */
-	print(("Received Packet of size %d", tcp_packet_data->packet_size), PACKET_PRINT);
-	view_packet((struct tcphdr*)tcp_packet, tcp_packet+20, tcp_packet_data->packet_size-20); 
-	
 	
 	if(connection_state == LISTEN){
 		/* since listen binds to all interfaces, must be able to reset its ip addresses to receive connect requests */
@@ -352,10 +364,24 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	
 	//tcp_packet_data_destroy(&tcp_packet_data);
 	}
-
+	/* check FIN bit */
+	else if(tcp_fin_bit(tcp_packet)){
+		print(("received fin"),TCP_PRINT);
+		if(tcp_ack_bit(tcp_packet)){
+			print(("received ack with fin"),TCP_PRINT);
+			if(!_validate_ack(connection, tcp_ack(tcp_packet))){
+				if(connection->send_window)
+					send_window_ack(connection->send_window, tcp_ack(tcp_packet));
+			}
+		}
+		connection->fin_seqnum = tcp_seqnum(tcp_packet);
+		
+		tcp_connection_receive_FIN(connection);
+		update_peer = 0;
+	}		
 
 	/* now check the SYN bit */
-	if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
+	else if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
 		tcp_connection_handle_syn_ack(connection, tcp_packet_data);	
 		update_peer = 0;
 	}
@@ -374,6 +400,13 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		// do we want an else? that was a bad ACK (its not acking anything), or we fucked up
 		else if(connection_state == SYN_RECEIVED) //<-- Neil: why did you change that to syn_sent????
 			state_machine_transition(connection->state_machine, receiveACK);	
+		
+		// if we sent a FIN we're waiting for its ack	
+		else if(connection_state == FIN_WAIT_1 || connection_state == CLOSING || connection_state == LAST_ACK){
+			if(tcp_ack(tcp_packet) == (connection->fin_seqnum)+1)
+				// we received the ack for our FIN!
+				state_machine_transition(connection->state_machine, receiveACK);
+		}
 	}
 	
 	else if(tcp_syn_bit(tcp_packet)){
@@ -491,11 +524,17 @@ int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t 
 int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len){	
 	
 	/* Record last seq sent -- only if we purposely set the seqnum */
+	/* NO BECAUSE WE RESEND UN-ACKED PACKETS
 	if(data_len > 0 || tcp_syn_bit(header))
-		connection->last_seq_sent = tcp_seqnum(header);
-		
-	else if(data_len == 0 && (!tcp_seqnum(header)))
-		tcp_set_seq(header, connection->last_seq_sent);
+		connection->last_seq_sent = tcp_seqnum(header); */
+	
+	// gotta put a seqnum on it, right?	
+	if((data_len == 0) && (!tcp_seqnum(header))){
+		if(connection->send_window)
+			tcp_set_seq(header, send_window_get_next_seq(connection->send_window));
+		else
+			tcp_set_seq(header, (connection->last_seq_sent)+1); //increment by 1 right??
+	}
 	
 	/* PORTS */
 	tcp_set_dest_port(header, connection->remote_addr.virt_port);
@@ -519,6 +558,13 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 		tcp_set_ack_bit(header);
 		tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
 	}
+	// if in one of closing states, possible we already closed receive window but still need to correctly ack
+	// for now we're doing it a slightly hacky way of setting it to last_seq_received + 1
+	else if(tcp_connection_in_closing_state(connection)){
+		tcp_set_ack_bit(header);
+		tcp_set_ack(header, (connection->last_seq_received)+1);	
+	}
+	
 	/* DATA */
 	uint32_t total_length = tcp_offset_in_bytes(header) + data_len;
     
@@ -644,7 +690,7 @@ void *_handle_read_send(void *tcpconnection){
 	struct timeval now;	// keep track of time to compare to window timeouts and connections' syn_timer 
 	float time_elapsed;
 	void* packet;
-	int ret;
+	int ret, timers_ret;
 
 	while(connection->running){	
         
@@ -689,9 +735,16 @@ void *_handle_read_send(void *tcpconnection){
 
 		/* send whatever you're trying to send */
 		if(connection->send_window){
-			send_window_check_timers(connection->send_window);
+			timers_ret = send_window_check_timers(connection->send_window);
 			tcp_connection_send_next(connection);
 		}
+		/* If we're in certain closing states, after all of our data reliably sent (acked) AND fin acked
+			then we can proceed with rest of close process */
+		
+		//if in CLOSING, can't ack fin until received ack for every preceding segment
+		if((!timers_ret) && (state == CLOSING))
+			tcp_connection_ack_fin(connection); 
+		
 		/* now check if there's something to read */
 		if (ret != 0) 
 			/* should probably check at this point WHY we failed (for instance perhaps the queue
