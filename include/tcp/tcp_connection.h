@@ -14,10 +14,13 @@
 #include "tcp_node.h"
 #include "int_queue.h"
 
+/* for api signaling */
 #define SIGNAL_CRASH_AND_BURN -777
 #define SIGNAL_DESTROYING -666
 #define API_TIMEOUT -555
 #define REMOTE_CONNECTION_CLOSED -444
+#define CONNECTION_RESET -333
+
 
 typedef struct tcp_connection* tcp_connection_t;  
 

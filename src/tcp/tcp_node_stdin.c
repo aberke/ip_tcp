@@ -229,6 +229,7 @@ void v_connect(const char *line, tcp_node_t tcp_node){
 only the reading side. If write or w is given, close only the writing side. If both is given, close
 both sides. Default is write*/
 void shutdown_cmd(const char* line, tcp_node_t tcp_node){
+
 	int socket;
 	char r_w_both[BUFFER_SIZE];
 	int ret;

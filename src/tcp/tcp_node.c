@@ -427,6 +427,9 @@ int tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection){
 	
 int tcp_node_remove_connection_kernal(tcp_node_t tcp_node, tcp_connection_t connection){
 	
+	if(!connection)
+		return tcp_node->num_connections;
+		
 	// return port and socket to available queue for reuse
 	int port = (int)tcp_connection_get_local_port(connection);
 	int socket = tcp_connection_get_socket(connection);

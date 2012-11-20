@@ -62,7 +62,7 @@ struct tcp_connection{
 	uint32_t fin_seqnum; //if we send fin, set our fin_seqnum to this, or if we receive fin, for acking purposes
 	
 	// keeping track of if need to fail connect attempt or retry
-	int syn_count;
+	int syn_fin_count;
 	struct timeval state_timer; //WAS syn_timer, but is now an all purpose timer
 		//for example, don't want to block on accept forever, so we use this to time out of waiting for
 		//SYN_RECEIVED to change to ESTABLISHED
@@ -276,14 +276,6 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		//tcp_packet_data_destroy(&tcp_packet_data);
 		//return;
 	}	
-	state_e connection_state = state_machine_get_state(connection->state_machine);
-
-	// if closed we're supposedly fictional
-	if(connection_state == CLOSED){
-		tcp_connection_refuse_connection(connection, tcp_packet_data);
-		return;
-	}
-	
 	/* this boolean just decides whether we need
 		to update our peer (just call tcp_wrap_packet_send) with
 		our current state, at this point this only involves sending
@@ -291,6 +283,328 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		but if we receive data and then don't need to send a packet, 
 		this boolean will make sure we send one just for that reason */
 	int update_peer = 0;	
+	
+		
+	/* SEE PAGE 64 OF RFC 793: IN THE FOLLOWING SECTION I FOLLOW IT PRECISELY */
+	
+	state_e state = state_machine_get_state(connection->state_machine);
+
+	// if closed we're supposedly fictional
+	if(state == CLOSED){
+		tcp_connection_refuse_connection(connection, tcp_packet_data); //sends rst if rst not set in packet
+		tcp_packet_data_destroy(&tcp_packet_data);
+		return;
+	}
+	else if(state == LISTEN){
+		/* RFC If the state is LISTEN then:
+			first check for an RST.  An incoming RST should be ignored.  Return. */
+		if(tcp_rst_bit(tcp_packet)){
+			tcp_packet_data_destroy(&tcp_packet_data);
+			return;
+		}
+		/* second check for an ACK*/
+		else if(tcp_ack_bit(tcp_packet)){
+        	/* Any acknowledgment is bad if it arrives on a connection still in the LISTEN state.  
+        	An acceptable reset segment should be formed. Return. */
+        	tcp_connection_refuse_connection(connection, tcp_packet_data);
+        }
+		/* third check for a SYN */
+		else if(tcp_syn_bit(tcp_packet)){
+			/* handle like we were before I redid this I suppose */
+
+			/* since listen binds to all interfaces, must be able to reset its ip addresses to receive connect requests */
+			tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
+			tcp_connection_set_local_ip(connection, tcp_packet_data->local_virt_ip);
+		
+            tcp_connection_handle_syn(connection, tcp_packet_data);
+        }
+        tcp_packet_data_destroy(&tcp_packet_data);
+        return;
+    }
+    /* If the state is SYN-SENT then */
+    else if(state == SYN_SENT){
+    	/* first check the ACK bit */
+    	if(tcp_ack_bit(tcp_packet)){
+    		/* If SEG.ACK =< ISS, or SEG.ACK > SND.NXT, send a reset 
+    		(unless the RST bit is set, if so drop the segment and return) */
+			if((tcp_ack(tcp_packet)<=connection->last_seq_sent)||(tcp_ack(tcp_packet)>connection->last_seq_sent+1)){
+				printf("[Socket %d]: Received invalid ack while in the LISTEN state -- dropping packet\n", 
+					connection->socket_id);
+				if(tcp_rst_bit(tcp_packet)){
+    				tcp_packet_data_destroy(&tcp_packet_data);
+					return; //instead of sending reset just return
+				}
+				else{
+					tcp_connection_refuse_connection(connection, tcp_packet_data); //send reset
+				}
+			}
+			else{	/* If SND.UNA =< SEG.ACK =< SND.NXT then the ACK is acceptable. */
+          		        
+          		/* If the RST bit is set */
+          		if(tcp_rst_bit(tcp_packet)){
+					/*If the ACK was acceptable then signal the user "error: connection reset", 
+					drop the segment, enter CLOSED state, delete TCB, and return.  
+					Otherwise (no ACK) drop the segment and return. */
+					state_machine_transition(connection->state_machine, receiveRST);
+				}
+				else{
+    				if(tcp_syn_bit(tcp_packet)){
+    					/* syn-ack */
+    					tcp_connection_handle_syn_ack(connection, tcp_packet_data);
+    				}
+    			}
+    		}
+    	}
+    	else if(tcp_syn_bit(tcp_packet)){
+             // we think the TA implementation is WRONG and now we have to deal with it WTF
+            //tcp_connection_handle_syn_ack(connection, tcp_packet_data);
+            tcp_connection_handle_syn(connection, tcp_packet_data);   		
+    	}
+    	tcp_packet_data_destroy(&tcp_packet_data);
+    	return;
+    }	
+    else{		
+	    /*Otherwise first check sequence number */
+			/* SYN-RECEIVED STATE, ESTABLISHED STATE, FIN-WAIT-1 STATE, FIN-WAIT-2 STATE,
+      			CLOSE-WAIT STATE, CLOSING STATE, LAST-ACK STATE, TIME-WAIT STATE */
+		
+		/*If the RCV.WND is zero, no segments will be acceptable, but
+        special allowance should be made to accept valid ACKs, URGs and
+        RSTs. */
+
+		if(connection->receive_window != NULL){
+			int seqnum_valid = recv_window_validate_seqnum(connection->receive_window, tcp_seqnum(tcp_packet), 0);
+			if(seqnum_valid<0){
+				printf("connection on socket %d received packet with invalid sequence number\n", connection->socket_id);
+				/* If an incoming segment is not acceptable, an acknowledgment
+				should be sent in reply (unless the RST bit is set, if so drop
+				the segment and return) */
+				if(!tcp_rst_bit(tcp_packet)){
+					tcp_wrap_packet_send(connection, tcp_header_init(0), NULL, 0);
+				}	
+				tcp_packet_data_destroy(&tcp_packet_data);
+				return;		
+			}
+		}
+		/* second check the RST bit */
+		if(tcp_rst_bit(tcp_packet)){
+			/* SYN-RECEIVED STATE */
+			if(state == SYN_RECEIVED){
+				/* If the RST bit is set: If this connection was initiated with a passive OPEN 
+				(i.e., came from the LISTEN state), then return this connection to
+				  LISTEN state and return.  The user need not be informed.  If
+				  this connection was initiated with an active OPEN (i.e., came
+				  from SYN-SENT state) then the connection was refused, signal
+				  the user "connection refused".  In either case, all segments
+				  on the retransmission queue should be removed.  And in the
+				  active OPEN case, enter the CLOSED state and delete the TCB,
+				  and return. */
+				state_machine_transition(connection->state_machine, receiveRST);
+			}
+			/* ESTABLISHED, FIN-WAIT-1, FIN-WAIT-2, CLOSE-WAIT */
+			else if(state==ESTABLISHED||state==FIN_WAIT_1||state==FIN_WAIT_2||state==CLOSE_WAIT){
+				/* If the RST bit is set then, any outstanding RECEIVEs and SEND
+				should receive "reset" responses.  All segment queues should be
+				flushed.  Users should also receive an unsolicited general
+				"connection reset" signal.  Enter the CLOSED state, delete the
+				TCB, and return. */
+				printf("[Socket %d]: Connection Reset\n", connection->socket_id);
+				state_machine_transition(connection->state_machine, receiveRST);
+				// ##TODO: how can we delete ourselves??? it has to be api right??
+				// tcp_node_remove_connection_kernal(connection->tcp_node, connection);
+			}
+			/* CLOSING STATE, LAST-ACK STATE, TIME-WAIT */
+			else if(state==CLOSING||state==LAST_ACK||state==TIME_WAIT){
+				/* If the RST bit is set then, enter the CLOSED state, delete the TCB, and return. */
+				state_machine_transition(connection->state_machine, receiveRST);
+				// ##TODO: does api handle deleting TCB?
+			}
+			tcp_packet_data_destroy(&tcp_packet_data);
+    		return;			
+		}
+		// done handling if rst set
+		/* third check security and precedence --- WE DON'T DO THIS */
+		/* fourth, check the SYN bit, */
+		if(tcp_syn_bit(tcp_packet)){
+		    /* SYN-RECEIVED, ESTABLISHED STATE, FIN-WAIT STATE-1, FIN-WAIT STATE-2, CLOSE-WAIT STATE
+      			CLOSING STATE, LAST-ACK STATE, TIME-WAIT STATE */
+      		if(state==SYN_RECEIVED||state==ESTABLISHED||state==FIN_WAIT_1||
+      			state==FIN_WAIT_2||state==CLOSE_WAIT||state==CLOSING||state==LAST_ACK||state==TIME_WAIT){
+				/* If the SYN is in the window it is an error, send a reset, any
+				outstanding RECEIVEs and SEND should receive "reset" responses,
+				all segment queues should be flushed, the user should also
+				receive an unsolicited general "connection reset" signal, enter
+				the CLOSED state, delete the TCB, and return.
+		
+				If the SYN is not in the window this step would not be reached
+				and an ack would have been sent in the first step (sequence
+				number check).*/
+				printf("[Socket %d]: Connection Reset\n", connection->socket_id);
+				state_machine_transition(connection->state_machine, receiveRST);
+				tcp_packet_data_destroy(&tcp_packet_data);
+    			return;	
+			}
+		}
+		// done handling syn bit
+		/*fifth check the ACK field, */
+		if(!tcp_ack_bit(tcp_packet)){
+		 	/* if the ACK bit is off drop the segment and return */
+		 	print(("Socket %d Received packet without ack -- dropping packet", connection->socket_id), PACKET_PRINT);
+			tcp_packet_data_destroy(&tcp_packet_data);
+    		return;		
+    	}
+    	else{	/* if the ACK bit is on */
+			/* SYN-RECEIVED STATE */
+			if(state==SYN_RECEIVED){
+				/* If SND.UNA =< SEG.ACK =< SND.NXT then enter ESTABLISHED state and continue processing. */
+				if(!_validate_ack(connection, tcp_ack(tcp_packet)))
+					state_machine_transition(connection->state_machine, receiveACK);	// ack valid --> transition
+				else{
+					/* If the segment acknowledgment is not acceptable, form a reset segment,
+						 <SEQ=SEG.ACK><CTL=RST> and send it. */
+		 			print(("Socket %d Received packet with invalid ack -- resetting connection", connection->socket_id), PACKET_PRINT);					
+					tcp_connection_refuse_connection(connection, tcp_packet_data); //send reset
+					tcp_packet_data_destroy(&tcp_packet_data);
+    				return;	
+    			}
+    		}
+    		/* ESTABLISHED STATE */
+    		else if(state==ESTABLISHED){
+				/* see page 72, RFC 793 for the specifics */
+				send_window_ack(connection->send_window, tcp_ack(tcp_packet));
+				//send next chunks of data
+				if(tcp_connection_send_next(connection) > 0)
+					update_peer = 0;
+			}
+			/* FIN-WAIT-1 STATE */
+			else if(state==FIN_WAIT_1){
+			  /* In addition to the processing for the ESTABLISHED state, if
+			  	our FIN is now acknowledged then enter FIN-WAIT-2 and continue
+			  	processing in that state.	*/			  	
+				send_window_ack(connection->send_window, tcp_ack(tcp_packet));
+				//send next chunks of data
+				if(tcp_connection_send_next(connection) > 0)
+					update_peer = 1;
+			
+				if(tcp_ack(tcp_packet) == (connection->fin_seqnum)+1)
+					// we received the ack for our FIN!
+					state_machine_transition(connection->state_machine, receiveACK);				
+				
+			}
+			/* FIN-WAIT-2 STATE */
+			else if(state==FIN_WAIT_2){			
+				
+				/* In addition to the processing for the ESTABLISHED state,*/
+				send_window_ack(connection->send_window, tcp_ack(tcp_packet));
+				//send next chunks of data
+				if(tcp_connection_send_next(connection) > 0)
+					update_peer = 0;
+							
+				/* if the retransmission queue is empty, the user's CLOSE can be
+          			acknowledged ("ok") but do not delete the TCB.	*/
+          			//I'M CONFUSED
+          	}
+          	/* CLOSE-WAIT STATE--We're just waiting for our user to finally close after receiving unsolicited FIN*/
+			else if(state==CLOSE_WAIT){				
+          		/* Do the same processing as for the ESTABLISHED state. */
+				send_window_ack(connection->send_window, tcp_ack(tcp_packet));
+				//send next chunks of data
+				if(tcp_connection_send_next(connection) > 0)
+					update_peer = 0;
+			}
+			/* CLOSING STATE */
+			else if(state == CLOSING){
+			  	/* In addition to the processing for the ESTABLISHED state, */
+				send_window_ack(connection->send_window, tcp_ack(tcp_packet));
+				//send next chunks of data
+				if(tcp_connection_send_next(connection) > 0)
+					update_peer = 0;
+							  
+			  	/* if the ACK acknowledges our FIN then enter the TIME-WAIT state,
+			  	otherwise ignore the segment.		*/
+				if(tcp_ack(tcp_packet) == (connection->fin_seqnum)+1)
+					// we received the ack for our FIN!
+					state_machine_transition(connection->state_machine, receiveACK);				
+							  		
+			}
+			/* LAST-ACK STATE */
+			else if(state == LAST_ACK){
+				/* The only thing that can arrive in this state is an
+				acknowledgment of our FIN.  If our FIN is now acknowledged,
+				delete the TCB, enter the CLOSED state, and return. */
+				if(tcp_ack(tcp_packet) == (connection->fin_seqnum)+1){
+					// we received the ack for our FIN!
+					state_machine_transition(connection->state_machine, receiveACK);				
+					tcp_packet_data_destroy(&tcp_packet_data);
+    				return;
+				}
+			}
+			/* TIME-WAIT STATE */
+			else if(state == TIME_WAIT){
+			  /* The only thing that can arrive in this state is a
+			  retransmission of the remote FIN.  Acknowledge it, and restart
+			  the 2 MSL timeout. */		
+			  if(tcp_fin_bit(tcp_packet))
+			  		state_machine_transition(connection->state_machine, receiveFIN);	
+			}
+		}
+		/* sixth, check the URG bit, -- WE DONT HWAHAHA */
+		/* seventh, process the segment text, */
+		/*ESTABLISHED STATE, FIN-WAIT-1 STATE, FIN-WAIT-2 STATE */
+		if(state == ESTABLISHED || state == FIN_WAIT_1 || state == FIN_WAIT_2){
+			/* Once in the ESTABLISHED state, it is possible to deliver segment
+        		text to user RECEIVE buffers.  blah blah etc see page 74 */
+     			/* DATA check if there's any data, and if there is push it to the window */
+			if(connection->receive_window != NULL){
+				// this is worth checking because remember we have the shutdown r option in our api
+				memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
+				if(data){ 
+					recv_window_receive(connection->receive_window, data->data, data->length, tcp_seqnum(tcp_packet));
+					memchunk_destroy(&data);
+					// if there's a blocking read, need to signal we got more data to read
+					tcp_connection_api_signal(connection, 1);
+				}   
+			}
+			// now lets send our ack -- handles the update peer situation
+			/* now update that peer because friends don't let friends send unacknowledged bytes*/
+			if(update_peer)
+				tcp_wrap_packet_send(connection, tcp_header_init(0), NULL, 0);					
+        }
+       	/* CLOSE-WAIT STATE, CLOSING STATE, LAST-ACK STATE, TIME-WAIT STATE
+			This should not occur, since a FIN has been received from the
+			remote side.  Ignore the segment text.     */
+		
+		/* eighth, check the FIN bit, */
+		if(tcp_fin_bit(tcp_packet)){
+			/* Do not process the FIN if the state is CLOSED, LISTEN or SYN-SENT
+     		 since the SEG.SEQ cannot be validated; drop the segment and return. */
+     		 if(state == CLOSED || state == LISTEN || state == SYN_SENT){  //<-- we will never actually get here
+  				tcp_packet_data_destroy(&tcp_packet_data);
+    			return;
+    		}
+    		else{   		 	
+				 /* If the FIN bit is set, signal the user "connection closing" and
+				  return any pending RECEIVEs with same message, advance RCV.NXT
+				  over the FIN, and send an acknowledgment for the FIN.  Note that
+				  FIN implies PUSH for any segment text not yet delivered to the
+				  user.  */
+				 connection->last_seq_received = tcp_seqnum(tcp_packet);
+				 printf("[Socket %d]: Connection closing\n", connection->socket_id);
+				 tcp_connection_api_signal(connection, REMOTE_CONNECTION_CLOSED); //<-- ?? SHOULD THIS HAPPEN HERE?
+				 state_machine_transition(connection->state_machine, receiveFIN);
+			}
+		}
+
+    	tcp_packet_data_destroy(&tcp_packet_data);
+    	return;	
+	}
+	
+	
+	
+	
+	/* SEE PAGE 64 OF RFC 793: IN THE ABOVE SECTION I FOLLOW IT PRECISELY */
+	
+	
 	
 	/* receive window is NULL until we transition to established or SYN_RECEIVED.  It's set NULL again when we 
 		stop receiving data, but then we don't care about seqnum's anyhow, right??
@@ -301,143 +615,145 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 			SYN_SENT: because it's possible we're in a simultaneous open
 			Listen: we don't really yet have a seqnum
 	*/	
-	if(connection->receive_window != NULL){
-		int seqnum_valid = recv_window_validate_seqnum(connection->receive_window, tcp_seqnum(tcp_packet), 0);
-		if(seqnum_valid<0){
-			printf("connection on socket %d received packet with invalid sequence number\n", connection->socket_id);
-			//drop packet, right? Should we send an RST in particular cases?
-			tcp_packet_data_destroy(&tcp_packet_data);
-			return;
-		}
-		/* DATA 
-			check if there's any data, and if there is push it to the window,
-			but what does the seqnum even mean if the ACKs haven't been synchronized? */
-		memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
-		if(data){ 
-			recv_window_receive(connection->receive_window, data->data, data->length, tcp_seqnum(tcp_packet));
-			// if there's a blocking read, need to signal we got more data to read
-			tcp_connection_api_signal(connection, 1);
-		
-			/* send the ack back */
-			memchunk_destroy(&data);
-	
-			/* we want to update our peer what we've acked */
-			update_peer = 1;
-		}
+// 	if(connection->receive_window != NULL){
+// 		int seqnum_valid = recv_window_validate_seqnum(connection->receive_window, tcp_seqnum(tcp_packet), 0);
+// 		if(seqnum_valid<0){
+// 			printf("connection on socket %d received packet with invalid sequence number\n", connection->socket_id);
+// 			//drop packet, right? Should we send an RST in particular cases?
+// 			tcp_packet_data_destroy(&tcp_packet_data);
+// 			return;
+// 		}
+// 		/* DATA 
+// 			check if there's any data, and if there is push it to the window,
+// 			but what does the seqnum even mean if the ACKs haven't been synchronized? */
+// 		memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
+// 		if(data){ 
+// 			recv_window_receive(connection->receive_window, data->data, data->length, tcp_seqnum(tcp_packet));
+// 			// if there's a blocking read, need to signal we got more data to read
+// 			tcp_connection_api_signal(connection, 1);
+// 		
+// 			/* send the ack back */
+// 			memchunk_destroy(&data);
+// 	
+// 			/* we want to update our peer what we've acked */
+// 			update_peer = 1;
+// 		}
+// 	}
+// 	
+// 	if(connection_state == LISTEN){
+// 		/* since listen binds to all interfaces, must be able to reset its ip addresses to receive connect requests */
+// 		tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
+// 		tcp_connection_set_local_ip(connection, tcp_packet_data->local_virt_ip);
+// 	}
+// 
+// 	/* lets get the window size first */
+// 	if(connection->send_window)
+// 		send_window_set_size(connection->send_window, tcp_window_size(tcp_packet));
+// 
+// 	if(tcp_rst_bit(tcp_packet)){
+// 	/*  In all states except SYN-SENT, all reset (RST) segments are validated
+// 	  by checking their SEQ-fields. (Which we did above!) A reset is valid if its sequence number
+// 	  is in the window.  In the SYN-SENT state (a RST received in response
+// 	  to an initial SYN), the RST is acceptable if the ACK field
+// 	  acknowledges the SYN. */
+// 		if(connection_state == SYN_SENT){
+// 			if(_validate_ack(connection, tcp_ack(tcp_packet)) < 0){
+// 				print(("Received invalid ack with rst bit while in SYN_SENT state -- discarding packet"), TCP_PRINT);
+// 				tcp_packet_data_destroy(&tcp_packet_data);
+// 				return;
+// 			}
+// 		}
+// 		/* The receiver of a RST first validates it, then changes state.  If the
+// 		  receiver was in the LISTEN state, it ignores it.  If the receiver was
+// 		  in SYN-RECEIVED state and had previously been in the LISTEN state,
+// 		  then the receiver returns to the LISTEN state, otherwise the receiver
+// 		  aborts the connection and goes to the CLOSED state.  If the receiver
+// 		  was in any other state, it aborts the connection and advises the user */
+// 		  
+// 		/* So let's abort the connection now: */
+// 		print(("received valid rst"),TCP_PRINT);
+// 		state_machine_transition(connection->state_machine, receiveRST);	
+// 		update_peer = 0;
+// 	
+// 	
+// 	//tcp_packet_data_destroy(&tcp_packet_data);
+// 	}
+// 	/* check FIN bit */
+// 	else if(tcp_fin_bit(tcp_packet)){
+// 		print(("received fin"),TCP_PRINT);
+// 		if(tcp_ack_bit(tcp_packet)){
+// 			print(("received ack with fin"),TCP_PRINT);
+// 			if(!_validate_ack(connection, tcp_ack(tcp_packet))){
+// 				if(connection->send_window)
+// 					send_window_ack(connection->send_window, tcp_ack(tcp_packet));
+// 			}
+// 		}
+// 		connection->fin_seqnum = tcp_seqnum(tcp_packet);
+// 		
+// 		tcp_connection_receive_FIN(connection);
+// 		update_peer = 0;
+// 	}		
+// 
+// 	/* now check the SYN bit */
+// 	else if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
+// 		tcp_connection_handle_syn_ack(connection, tcp_packet_data);	
+// 		update_peer = 0;
+// 	}
+// 	
+// 	/* ack data if you're in a position to do so */
+// 	else if(tcp_ack_bit(tcp_packet)){
+// 	
+// 	
+// 	
+//  		if(connection->send_window)
+// 			send_window_ack(connection->send_window, tcp_ack(tcp_packet));
+// 				
+// 		if(connection_state == ESTABLISHED){
+// 			//send next chunks of data
+// 			if(tcp_connection_send_next(connection) > 0)
+// 				update_peer = 0;
+// 		}	
+// 		
+// 		// do we want an else? that was a bad ACK (its not acking anything), or we fucked up
+// 		else if(connection_state == SYN_RECEIVED) //<-- Neil: why did you change that to syn_sent????
+// 			state_machine_transition(connection->state_machine, receiveACK);	
+// 		
+// 		// if we sent a FIN we're waiting for its ack	
+// 		else if(connection_state == FIN_WAIT_1 || connection_state == CLOSING || connection_state == LAST_ACK){
+// 			if(tcp_ack(tcp_packet) == (connection->fin_seqnum)+1)
+// 				// we received the ack for our FIN!
+// 				state_machine_transition(connection->state_machine, receiveACK);
+// 		}
+// 	}
+// 	
+// 	else if(tcp_syn_bit(tcp_packet)){
+//         if(connection_state == SYN_SENT){
+//             // we think the TA implementation is WRONG and now we have to deal with it WTF
+//             tcp_connection_handle_syn_ack(connection, tcp_packet_data);
+//             update_peer = 0;
+//         }
+//         else{
+//             tcp_connection_handle_syn(connection, tcp_packet_data);
+//             update_peer = 0;
+//         }
+// 	}
+// 
+// 	/* now update that peer because friends don't let friends send unacknowledged bytes*/
+// 	if(update_peer)
+// 		tcp_wrap_packet_send(connection, tcp_header_init(0), NULL, 0);
+// 		
+// 	/* Clean up */
+// 	tcp_packet_data_destroy(&tcp_packet_data);
 	}
-	
-	if(connection_state == LISTEN){
-		/* since listen binds to all interfaces, must be able to reset its ip addresses to receive connect requests */
-		tcp_connection_set_remote(connection, tcp_packet_data->remote_virt_ip, tcp_source_port(tcp_packet));
-		tcp_connection_set_local_ip(connection, tcp_packet_data->local_virt_ip);
-	}
-
-	/* lets get the window size first */
-	if(connection->send_window)
-		send_window_set_size(connection->send_window, tcp_window_size(tcp_packet));
-
-	if(tcp_rst_bit(tcp_packet)){
-	/*  In all states except SYN-SENT, all reset (RST) segments are validated
-	  by checking their SEQ-fields. (Which we did above!) A reset is valid if its sequence number
-	  is in the window.  In the SYN-SENT state (a RST received in response
-	  to an initial SYN), the RST is acceptable if the ACK field
-	  acknowledges the SYN. */
-		if(connection_state == SYN_SENT){
-			if(_validate_ack(connection, tcp_ack(tcp_packet)) < 0){
-				print(("Received invalid ack with rst bit while in SYN_SENT state -- discarding packet"), TCP_PRINT);
-				tcp_packet_data_destroy(&tcp_packet_data);
-				return;
-			}
-		}
-		/* The receiver of a RST first validates it, then changes state.  If the
-		  receiver was in the LISTEN state, it ignores it.  If the receiver was
-		  in SYN-RECEIVED state and had previously been in the LISTEN state,
-		  then the receiver returns to the LISTEN state, otherwise the receiver
-		  aborts the connection and goes to the CLOSED state.  If the receiver
-		  was in any other state, it aborts the connection and advises the user */
-		  
-		/* So let's abort the connection now: */
-		print(("received valid rst"),TCP_PRINT);
-		state_machine_transition(connection->state_machine, receiveRST);	
-		update_peer = 0;
-	
-	
-	//tcp_packet_data_destroy(&tcp_packet_data);
-	}
-	/* check FIN bit */
-	else if(tcp_fin_bit(tcp_packet)){
-		print(("received fin"),TCP_PRINT);
-		if(tcp_ack_bit(tcp_packet)){
-			print(("received ack with fin"),TCP_PRINT);
-			if(!_validate_ack(connection, tcp_ack(tcp_packet))){
-				if(connection->send_window)
-					send_window_ack(connection->send_window, tcp_ack(tcp_packet));
-			}
-		}
-		connection->fin_seqnum = tcp_seqnum(tcp_packet);
-		
-		tcp_connection_receive_FIN(connection);
-		update_peer = 0;
-	}		
-
-	/* now check the SYN bit */
-	else if(tcp_syn_bit(tcp_packet) && tcp_ack_bit(tcp_packet)){
-		tcp_connection_handle_syn_ack(connection, tcp_packet_data);	
-		update_peer = 0;
-	}
-	
-	/* ack data if you're in a position to do so */
-	else if(tcp_ack_bit(tcp_packet)){
- 		if(connection->send_window)
-			send_window_ack(connection->send_window, tcp_ack(tcp_packet));
-				
-		if(connection_state == ESTABLISHED){
-			//send next chunks of data
-			if(tcp_connection_send_next(connection) > 0)
-				update_peer = 0;
-		}	
-		
-		// do we want an else? that was a bad ACK (its not acking anything), or we fucked up
-		else if(connection_state == SYN_RECEIVED) //<-- Neil: why did you change that to syn_sent????
-			state_machine_transition(connection->state_machine, receiveACK);	
-		
-		// if we sent a FIN we're waiting for its ack	
-		else if(connection_state == FIN_WAIT_1 || connection_state == CLOSING || connection_state == LAST_ACK){
-			if(tcp_ack(tcp_packet) == (connection->fin_seqnum)+1)
-				// we received the ack for our FIN!
-				state_machine_transition(connection->state_machine, receiveACK);
-		}
-	}
-	
-	else if(tcp_syn_bit(tcp_packet)){
-        if(connection_state == SYN_SENT){
-            // we think the TA implementation is WRONG and now we have to deal with it WTF
-            tcp_connection_handle_syn_ack(connection, tcp_packet_data);
-            update_peer = 0;
-        }
-        else{
-            tcp_connection_handle_syn(connection, tcp_packet_data);
-            update_peer = 0;
-        }
-	}
-
-	/* now update that peer because friends don't let friends send unacknowledged bytes*/
-	if(update_peer)
-		tcp_wrap_packet_send(connection, tcp_header_init(0), NULL, 0);
-		
-	/* Clean up */
-	tcp_packet_data_destroy(&tcp_packet_data);
-}
 
 void tcp_connection_handle_syn_ack(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
+	print(("TODO: Better handle initializing send window -- we're doing it differently for normal and simultaneous connections"), ALEX_PRINT);
 	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, tcp_ack(tcp_packet_data->packet));
- //   send_window_set_seq(connection->send_window, tcp_ack(tcp_packet_data->packet));
-    
+   
 	print(("syn/ack"),TCP_PRINT);
 
 	void* tcp_packet = tcp_packet_data->packet;
 
-	//puts("received packet with syn_bit and ack_bit set");
 	if(_validate_ack(connection, tcp_ack(tcp_packet)) < 0){
 		/* then you sent a syn with a seqnum that wasn't faithfully returned. 
 			what should we do? for now, let's discard */
@@ -710,18 +1026,17 @@ void *_handle_read_send(void *tcpconnection){
 
 		/* check if you're waiting for an ACK to come back */
 		if(state == SYN_SENT){	         
-			if(time_elapsed > (1 << ((connection->syn_count)-1))*SYN_TIMEOUT){
+			if(time_elapsed > (1 << ((connection->syn_fin_count)-1))*SYN_TIMEOUT){
 				// we timeout connect or resend
 
-				if((connection->syn_count)==SYN_COUNT_MAX){
+				if((connection->syn_fin_count)==SYN_COUNT_MAX){
 					// timeout connection attempt
-					connection->syn_count = 0;
+					connection->syn_fin_count = 0;
 					tcp_connection_state_machine_transition(connection, CLOSE); 
 				}
 				else{	
 					// resend syn
-					tcp_connection_send_syn(connection);
-					connection->syn_count = connection->syn_count+1;
+					tcp_connection_send_syn(connection); //this call increments syn_fin_count
 				}
 			}
 		}
@@ -732,7 +1047,18 @@ void *_handle_read_send(void *tcpconnection){
 				tcp_connection_api_signal(connection, API_TIMEOUT);
 			}
 		}
-
+		else if(state == FIN_WAIT_1){
+			/* For active close: 
+				RFC: All segments preceding and including FIN  will be retransmitted until acknowledged. */
+			if(time_elapsed > WINDOW_DEFAULT_TIMEOUT){ // lets use same timeout as send_window
+				if((connection->syn_fin_count)==SYN_COUNT_MAX){
+					// lets give up on them ever acking it
+					state_machine_transition(connection->state_machine, ABORT);
+				}
+				else
+					tcp_connection_send_fin(connection);	
+			}
+		}
 		/* send whatever you're trying to send */
 		if(connection->send_window){
 			timers_ret = send_window_check_timers(connection->send_window);

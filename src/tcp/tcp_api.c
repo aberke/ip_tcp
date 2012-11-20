@@ -94,7 +94,10 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint1
 	if(transition_result < 0){
 		// error or timeout so lets get rid of this
 		tcp_node_remove_connection_kernal(tcp_node, connection); 
-		return transition_result;
+		if(transition_result == -CONNECTION_RESET)
+			return -ECONNREFUSED;
+		else
+			return transition_result;
 	}
 	if(ret==1) //successful active_open
 		return 0;
@@ -611,7 +614,7 @@ void* tcp_api_shutdown_entry(void* _args){
 		_return(args,-EBADF);
 		return NULL;
 	}
-	
+
 	tcp_connection_api_lock(connection);	
 	int ret = tcp_api_shutdown(args->node, args->socket, type);
 	tcp_connection_api_unlock(connection);
