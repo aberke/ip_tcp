@@ -14,10 +14,22 @@
 #include "tcp_node.h"
 #include "int_queue.h"
 
+/* for api signaling */
 #define SIGNAL_CRASH_AND_BURN -777
 #define SIGNAL_DESTROYING -666
 #define API_TIMEOUT -555
 #define REMOTE_CONNECTION_CLOSED -444
+#define CONNECTION_RESET -333
+
+/* time outs */
+#define SYN_TIMEOUT 2 //2 seconds at first, and doubles each time next syn_sent
+#define SYN_COUNT_MAX 3 // how many syns we send before timing out
+
+/* Must wait for 2MSL during time-wait */
+/*The TCP standard defines MSL as being a value of 120 seconds (2 minutes). 
+In modern networks this is an eternity, so TCP allows implementations to choose a lower value 
+if it is believed that will lead to better operation. */
+#define MSL 60 //1 minute rather than 2
 
 typedef struct tcp_connection* tcp_connection_t;  
 
@@ -153,11 +165,16 @@ void tcp_connection_ack(tcp_connection_t connection, uint32_t ack);
 
 //////////////////////////////////////////////////////////////////////////////////////
 /*********************************** CLOSING *****************************************/
-/* destroys recv window and sets receive_window pointer to null
+
+/* Instead of destroying receive window we just keep track of whether or not it exists.
+	We don't want to destroy it because we still need it to catch the data sent and keep track of sequence numbers
+	in case we shut down the receive window while still in the established state
 	 this is necessary for api call v_shutdown type 2 when we just need to close the reading portion of the connection
 	 returns 1 on success, -1 on failure */
 int tcp_connection_close_recv_window(tcp_connection_t connection);
 
+// returns 1=true if connection has reading capabilities, 0=false otherwise
+int tcp_connection_recv_window_alive(tcp_connection_t connection);
 
 
 

@@ -25,7 +25,7 @@ int tcp_api_args_destroy(tcp_api_args_t* args){
 	tcp_connection_t connection = tcp_node_get_connection_by_socket((*args)->node, (*args)->socket);
 	if(connection){
 		//lets cancel any blocks on the api signal so that shutting down doesn't take a while
-		tcp_connection_api_cancel(connection);  
+		tcp_connection_api_cancel(connection); 
 	}
     pthread_join((*args)->thread, NULL);
     int result = (*args)->result;
@@ -94,7 +94,10 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint1
 	if(transition_result < 0){
 		// error or timeout so lets get rid of this
 		tcp_node_remove_connection_kernal(tcp_node, connection); 
-		return transition_result;
+		if(transition_result == -CONNECTION_RESET)
+			return -ECONNREFUSED;
+		else
+			return transition_result;
 	}
 	if(ret==1) //successful active_open
 		return 0;
@@ -275,15 +278,10 @@ int tcp_api_read(tcp_node_t tcp_node, int socket, char *buffer, uint32_t nbyte){
 		return -EBADF;
 
 	/* Don't lock because tcp_api read_entry locks up -- it needs to lock up because its the blocking call */
-/*
-struct memchunk{
-	void* data;
-	int length;
-};*/
 
-	if(tcp_connection_get_recv_window(connection) == NULL){
+	if(tcp_connection_get_recv_window(connection) == NULL || (!tcp_connection_recv_window_alive(connection))){
 		// probably means we called v_shutdown type 2 to close reading portion of socket -- return error
-		printf("socket %d has NULL receiving window\n", tcp_connection_get_socket(connection));
+		printf("[Socket %d]: Illegal read call\n", tcp_connection_get_socket(connection));
 		return -1;
 	}
 	
@@ -340,7 +338,13 @@ void* tcp_api_read_entry(void* _args){
 	//char to_read[args->num + 1];
 
 	int ret = tcp_api_read(args->node, args->socket, to_read, args->num);	
-
+	
+	if(ret<0){
+		free(to_read);
+		_return(args, ret);
+		return NULL;
+	}
+	
 	if(args->boolean){
 		// block until read in args->num bytes
 		int read = ret;	
@@ -523,15 +527,23 @@ int tcp_api_close(tcp_node_t tcp_node, int socket){
 	if(connection == NULL){
 		return -EBADF;
 	}
+	/* It's okay to lock the api for this entire time because once we close, its not like we can call anything
+		else on this socket anyhow -- we killed it */	
+	tcp_connection_api_lock(connection);
+
 	int ret;
 		
 	// CLOSE and close reading part
 	ret = tcp_api_shutdown(tcp_node, socket, 3);
 	if(ret == 0) //success
-		// wait until CLOSE completed
+		/* everything's going well and all, but we're still in the process of closing so let's not delete
+		this connection until it has finished closing with its peer */
 		ret = tcp_connection_api_result(connection);
-	// invalidate socket
-	tcp_node_remove_connection_kernal(tcp_node, connection);
+
+	/* invalidate socket (remove from kernal) only after we unlock -- otherwise thats a logical error because
+		calling unlock on a mutex we destroyed */	
+	tcp_connection_api_unlock(connection);
+	tcp_node_remove_connection_kernal(tcp_node, connection);	
 	
 	if(ret < 0) //error
 		return ret;
@@ -544,16 +556,15 @@ void* tcp_api_close_entry(void* _args){
 	_verify_node(args);
 	_verify_socket(args);
 	
-	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
-	if(connection == NULL){
-		_return(args,-EBADF);
-		return NULL;
-	}
+	/* invalidate socket (remove from kernal) only after we unlock -- otherwise thats a logical error because
+		calling unlock on a mutex we destroyed 
+		So let's put the locking logic and destroying logic -- and therefore all the other logic in the 
+		actual api call */	
 	
-	tcp_connection_api_lock(connection);	
+	// THEREFORE WE LOCK IN THE API CALL
+		
 	int ret = tcp_api_close(args->node, args->socket);
-	tcp_connection_api_unlock(connection);
-	
+
 	_return(args, ret);
 	return NULL;
 }
@@ -611,7 +622,7 @@ void* tcp_api_shutdown_entry(void* _args){
 		_return(args,-EBADF);
 		return NULL;
 	}
-	
+
 	tcp_connection_api_lock(connection);	
 	int ret = tcp_api_shutdown(args->node, args->socket, type);
 	tcp_connection_api_unlock(connection);

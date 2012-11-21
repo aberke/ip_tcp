@@ -257,7 +257,15 @@ TODO: TO HANDLE:
 	receiveRST when in ESTABLISHED state	
 	handle all closed by RST cases
 	
+	I don't think we're properly handling active close in that we should wait for all data to be 
+	'segmented' before sending fin
 	
+	To enhance efficiency:
+		do we want to stop that infinite thread loop in transition TIME_WAIT_to_CLOSED
+			- like we could set connection->running = 0 and just restart thread if connect/listen called
+	
+ssh key: 
+		
 
 	
 	
