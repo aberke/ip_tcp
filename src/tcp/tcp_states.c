@@ -122,8 +122,8 @@ transitioning_t fin_wait_1_next_state(transition_e t){
 transitioning_t fin_wait_2_next_state(transition_e t){
 	switch(t){
 		case receiveFIN:
-			/* ACTION: send ACK */	
-			return transitioning_init(TIME_WAIT, (action_f)tcp_connection_invalid_transition);
+			/* ACTION: Finally - they're ready to close too! send ACK */	
+			return transitioning_init(TIME_WAIT, (action_f)tcp_connection_FIN_WAIT_2_to_TIME_WAIT);
 		
 		case CLOSE:
 			/*RFC:       Strictly speaking, this is an error and should receive a "error:
@@ -174,7 +174,7 @@ transitioning_t last_ack_next_state(transition_e t){
 transitioning_t time_wait_next_state(transition_e t){	
 	switch(t){
 		case TIME_ELAPSED:
-			return transitioning_init(CLOSED, (action_f)tcp_connection_invalid_transition);
+			return transitioning_init(CLOSED, (action_f)tcp_connection_TIME_WAIT_to_CLOSED);
 		
 		case CLOSE: 
 			/*RFC: Respond with "error:  connection closing". */

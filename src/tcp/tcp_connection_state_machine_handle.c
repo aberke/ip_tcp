@@ -61,6 +61,7 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 	/*  just to reiterate, last_seq_received should have JUST been received by the SYN
 		packet that made the state transition call this function */	// <-- Thanks a lot for that comment!! :)
 	connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, connection->last_seq_received);
+	connection->recv_window_alive = 1; // It's now alive! <-- need this boolean for implementing shutdown r option
 
 	struct tcphdr* header = tcp_header_init(0);
 
@@ -185,6 +186,7 @@ int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection){
 	
 	// again, last_seq_received will have been set by the packet that triggered this transition 
 	connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, connection->last_seq_received);
+	connection->recv_window_alive = 1; // It's now alive! <-- need this boolean for implementing shutdown r option
 
 	struct tcphdr* header = tcp_header_init(0); 
 											
@@ -210,6 +212,7 @@ int tcp_connection_SYN_SENT_to_ESTABLISHED(tcp_connection_t connection){
 	}
 		
 	connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, connection->last_seq_received);
+	connection->recv_window_alive = 1; // It's now alive! <-- need this boolean for implementing shutdown r option
 	
 	struct tcphdr* header = tcp_header_init(0);
 
@@ -269,7 +272,12 @@ int tcp_connection_send_fin(tcp_connection_t connection){
 
 // called when ready to ack a fin
 int tcp_connection_ack_fin(tcp_connection_t connection){
-	puts("TODO: HANDLE ACKING THE FIN");
+	/* init the packet and set the ack bit -- tcp_wrap_packet_send will not reset the ack bit */
+	struct tcphdr* header = tcp_header_init(0);
+	tcp_set_ack(header, (connection->last_seq_received)+1);
+	
+	tcp_wrap_packet_send(connection, header, NULL, 0);
+	
 	return 1;
 }
 
@@ -340,6 +348,15 @@ int tcp_connection_ESTABLISHED_to_FIN_WAIT_1(tcp_connection_t connection){
       form a FIN segment and send it.  In any case, enter FIN-WAIT-1
       state.
 	*/
+	
+	/* So our issue here is that we don't have a way of pushing a fin to our send window.
+		Here is how I will handle that: 
+			We'll set the fin count to 0: */
+	connection->syn_fin_count = 0;
+			/* Now that we're in the FIN_WAIT_1 state, the thread will check at each iteration
+				if it needs to resend its fin.  When it ensures the timeout has occurred 
+				 then it will resend a fin up to 3 times.  Since we're in the FIN_WAIT_1 state the user 
+				 will not be able to add to the send-window queue, so we can set:  */			
 	connection->fin_seqnum = send_window_get_next_seq(connection->send_window);
 	tcp_connection_send_fin(connection);
 	
@@ -356,8 +373,24 @@ int tcp_connection_FIN_WAIT_1_to_CLOSING(tcp_connection_t connection){
 	return 1;	
 }
 
+int tcp_connection_FIN_WAIT_2_to_TIME_WAIT(tcp_connection_t connection){
+	/* We had already sent our fin, they acked it, but now they finally decided to close too and 
+		sent their fin
+		so we ACK their fin and set timer for time_wait */
+	
+	//set timer
+	gettimeofday(&(connection->state_timer), NULL);
+	
+	//ack their fin
+	tcp_connection_ack_fin(connection);		
+	
+	
+	return 1;
+}
 
 // there are a few different ways we could get here -- we handle them all the same, right?
+/* It might be that we were already in TIME_WAIT and get the fin again -- well it was a retransmission
+	so lets ack it again and reset timer */
 int tcp_connection_transition_TIME_WAIT(tcp_connection_t connection){
 	
 	//TODO: SET TIMER
@@ -365,18 +398,25 @@ int tcp_connection_transition_TIME_WAIT(tcp_connection_t connection){
 	
 	return 1;
 }
-
+/* This closing process finally over -- TIME_ELAPSED occurred in TIME_WAIT so signal user safe to delete TCB */
+int tcp_connection_TIME_WAIT_to_CLOSED(tcp_connection_t connection){
+	
+	tcp_connection_api_signal(connection, 0); //0 for success, right?
+	
+	// do we want to stop that infinite thread loop?
+	
+	//anything else?
+	return 1;		
+}	
 
 /*****aCaCaCaCaCaCaCaCaCaCaCaaCaCCaCaC End of Active Close aCaCaCaCaCaCaCaCaCaCaCaCaCaaCaCaCaCaCaC**********/
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////	
 /* 0o0o0oo0o0o0o0o0o0o0o0o0o0o0o0o0o0o Closing Connection 0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o */
 /* 0o0o0oo0o0o0o0o0o0o0o0o0o0o0o0o0o0o Closing Connection 0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o */
 
-//TODO
+
 int tcp_connection_LISTEN_to_CLOSED(tcp_connection_t connection){	
 	print(("LISTEN --> CLOSED"), STATES_PRINT);
-	
-	//TODO:
 	
 	/* RFC:   Any outstanding RECEIVEs are returned with "error:  closing"
       responses.  Delete TCB, enter CLOSED state, and return. */

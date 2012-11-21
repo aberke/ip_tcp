@@ -79,10 +79,11 @@ int tcp_connection_FIN_WAIT_1_to_FIN_WAIT_2(tcp_connection_t connection);
 
 int tcp_connection_FIN_WAIT_1_to_CLOSING(tcp_connection_t connection);
 
-
+int tcp_connection_FIN_WAIT_2_to_TIME_WAIT(tcp_connection_t connection);
 // there are a few different ways we could get here -- we handle them all the same, right?
 int tcp_connection_transition_TIME_WAIT(tcp_connection_t connection);
 
+int tcp_connection_TIME_WAIT_to_CLOSED(tcp_connection_t connection);
 
 ///////////////////////////////////////////////////////////////////////////////////
 int tcp_connection_CLOSED_by_RST(tcp_connection_t connection);

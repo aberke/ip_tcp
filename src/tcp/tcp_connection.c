@@ -22,8 +22,6 @@
 #include "tcp_utils.h"
 #include "tcp_connection_state_machine_handle.h"
 
-#define SYN_TIMEOUT 2 //2 seconds at first, and doubles each time next syn_sent
-#define SYN_COUNT_MAX 3 // how many syns we send before timing out
 
 // all those fancy things we defined here are now located in tcp_utils so they can also 
 // be shared with tcp_connection_state_handle
@@ -47,6 +45,8 @@ struct tcp_connection{
 	// owns window for sending and window for receiving
 	send_window_t send_window;
 	recv_window_t receive_window;
+	int recv_window_alive; // we use this for implementing shutdown read option -- instead of destroying our
+							// existing receive window we just keep track of this boolean - 1 for alive, 0 for down
 	
 	// owns accept queue to queue new connections when listening and receive syn
 	// always queues -- if user called accept then we'll call out tcp_connection_api_finish
@@ -112,10 +112,12 @@ tcp_connection_t tcp_connection_init(tcp_node_t tcp_node, int socket, bqueue_t *
 	
 	connection->api_ret = SIGNAL_CRASH_AND_BURN;
 	
-	// let's do this the first time we send the SYN, just so if we try to send before that
-	// we'll crash and burn because it's null
-	connection->send_window = NULL;
+	/* we init send window here but only init recv window when we get our first seqnum */
+	uint32_t ISN = RAND_ISN();	
+	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, ISN);
+
 	connection->receive_window = NULL;
+	connection->recv_window_alive = 1; //I set it to one for the purpose of knowing how to set window size in tcp_wrap_packet_send
 
 	connection->socket_id = socket;
 	//zero out virtual addresses to start
@@ -129,9 +131,6 @@ tcp_connection_t tcp_connection_init(tcp_node_t tcp_node, int socket, bqueue_t *
 
 	connection->accept_queue = NULL;  //initialized when connection goes to LISTEN state
 	connection->to_send = tosend;
-
-	uint32_t ISN = RAND_ISN();	
-	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, ISN);
 
 	/* 	I know that this will set it to a huge number and not
 		actually -1, I learned my lesson.  (LOL -alex) These variables
@@ -290,6 +289,13 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
  	state_e state = state_machine_get_state(connection->state_machine);	
 		
 //SEE PAGE 64 OF RFC 793: IN THE FOLLOWING SECTION I FOLLOW IT PRECISELY
+
+	/* DESIGN CHOICE:  We check the ack field before the fin field so that we can handle 
+		the transition FIN_WAIT_1 to TIME_WAIT (ie receiving an ack+fin) in this entire segment.
+		This means that in this segment of code, if a ack+fin received,
+		 the connection can move from the FIN_WAIT_1 state to the FIN_WAIT_2 state (when we check the ack)
+		 and then from the FIN_WAIT_2 state to the TIME_WAIT state when we then check the fin 
+		 This means we don't need a state machine transition FIN_WAIT_1_to_TIME_WAIT */
 	
 	// if closed we're supposedly fictional
 	if(state == CLOSED){
@@ -366,7 +372,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
     	return;
     }	
     else{		
-	    /*Otherwise first check sequence number
+	    /*Otherwise first check sequence number */
 			/* SYN-RECEIVED STATE, ESTABLISHED STATE, FIN-WAIT-1 STATE, FIN-WAIT-2 STATE,
       			CLOSE-WAIT STATE, CLOSING STATE, LAST-ACK STATE, TIME-WAIT STATE */
 		
@@ -388,6 +394,9 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 				return;		
 			}
 		}
+		/* lets get the window size first  -- us, not RFC */
+		send_window_set_size(connection->send_window, tcp_window_size(tcp_packet));
+		
 		/* second check the RST bit */
 		if(tcp_rst_bit(tcp_packet)){
 			/* SYN-RECEIVED STATE */
@@ -469,7 +478,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 				else{
 					/* If the segment acknowledgment is not acceptable, form a reset segment,
 						 <SEQ=SEG.ACK><CTL=RST> and send it. */
-		 			print(("Socket %d Received packet with invalid ack -- resetting connection", connection->socket_id), PACKET_PRINT);					
+		 			print(("Socket %d Received packet with invalid ack -- sending reset", connection->socket_id), PACKET_PRINT);					
 					tcp_connection_refuse_connection(connection, tcp_packet_data); //send reset
 					tcp_packet_data_destroy(&tcp_packet_data);
     				return;	
@@ -489,16 +498,24 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 			else if(state==FIN_WAIT_1){
 			  /* In addition to the processing for the ESTABLISHED state, if
 			  	our FIN is now acknowledged then enter FIN-WAIT-2 and continue
-			  	processing in that state.	*/			  	
-				send_window_ack(connection->send_window, tcp_ack(tcp_packet));
-				//send next chunks of data
-				if(tcp_connection_send_next(connection) > 0)
-					update_peer = 1;
-			
-				if(tcp_ack(tcp_packet) == (connection->fin_seqnum)+1)
+			  	processing in that state.	*/	
+			  	
+				if(tcp_ack(tcp_packet) == (connection->fin_seqnum)+1){
 					// we received the ack for our FIN!
-					state_machine_transition(connection->state_machine, receiveACK);				
-				
+					state_machine_transition(connection->state_machine, receiveACK);
+	
+			  		/* I don't think our send-window will understand if we ack the ack for the fin, but we 
+			  			still need to know that all the previous data has just been acked, so lets ack up to it */
+			  		send_window_ack(connection->send_window, tcp_ack(tcp_packet)-1);
+			  		/* NOTE: We don't exit because this may have been an ack+fin so then below
+			  			we can check the fin and move from FIN_WAIT_2 to TIME_WAIT */ 			  						  		
+			  	}
+			  	else{
+			  		/* just a normal data ack then */		  	
+					send_window_ack(connection->send_window, tcp_ack(tcp_packet));
+					//send next chunks of data
+					tcp_connection_send_next(connection);
+				}			
 			}
 			/* FIN-WAIT-2 STATE */
 			else if(state==FIN_WAIT_2){			
@@ -564,20 +581,19 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 			/* Once in the ESTABLISHED state, it is possible to deliver segment
         		text to user RECEIVE buffers.  blah blah etc see page 74 */
      			/* DATA check if there's any data, and if there is push it to the window */
-			if(connection->receive_window != NULL){
-				// this is worth checking because remember we have the shutdown r option in our api
-				memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
-				if(data){ 
-					recv_window_receive(connection->receive_window, data->data, data->length, tcp_seqnum(tcp_packet));
-					memchunk_destroy(&data);
-					// if there's a blocking read, need to signal we got more data to read
+     			/* If user used the shutdown r option, then we'll just let them know in our ack that our
+     				window size is 0.  All good! */
+			memchunk_t data = tcp_unwrap_data(tcp_packet, tcp_packet_data->packet_size);
+			if(data){ 
+				recv_window_receive(connection->receive_window, data->data, data->length, tcp_seqnum(tcp_packet));
+				memchunk_destroy(&data);
+				// if there's a blocking read, need to signal we got more data to read
+				if(connection->recv_window_alive)
 					tcp_connection_api_signal(connection, 1);
-				}   
-			}
-			// now lets send our ack -- handles the update peer situation
-			/* now update that peer because friends don't let friends send unacknowledged bytes*/
-			if(update_peer)
-				tcp_wrap_packet_send(connection, tcp_header_init(0), NULL, 0);					
+				// now lets send our ack -- handles the update peer situation
+				/* now update that peer because friends don't let friends send unacknowledged bytes*/
+				tcp_wrap_packet_send(connection, tcp_header_init(0), NULL, 0);
+			}   	
         }
        	/* CLOSE-WAIT STATE, CLOSING STATE, LAST-ACK STATE, TIME-WAIT STATE
 			This should not occur, since a FIN has been received from the
@@ -599,8 +615,8 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 				  user. */
 				 connection->last_seq_received = tcp_seqnum(tcp_packet);
 				 printf("[Socket %d]: Connection closing\n", connection->socket_id);
-				 tcp_connection_api_signal(connection, REMOTE_CONNECTION_CLOSED); //<-- ?? SHOULD THIS HAPPEN HERE?
 				 state_machine_transition(connection->state_machine, receiveFIN);
+				 tcp_connection_api_signal(connection, REMOTE_CONNECTION_CLOSED); //<-- ?? SHOULD THIS HAPPEN HERE?
 			}
 		}
 
@@ -608,13 +624,9 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
     	return;	
 	}
 	
-	
-	
-	
 	/* SEE PAGE 64 OF RFC 793: IN THE ABOVE SECTION I FOLLOW IT PRECISELY */
 	
-	
-	
+////////////////////////////////////////////////////////////////////////////////////////////////
 	/* receive window is NULL until we transition to established or SYN_RECEIVED.  It's set NULL again when we 
 		stop receiving data, but then we don't care about seqnum's anyhow, right??
 		There are certain operations and checks we should make only if the seqnum is valid.
@@ -758,7 +770,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 // 		
 // 	/* Clean up */
 // 	tcp_packet_data_destroy(&tcp_packet_data);
-	}
+}
 
 void tcp_connection_handle_syn_ack(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
 
@@ -875,28 +887,29 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 	tcp_set_source_port(header, connection->local_addr.virt_port);
 
 	/* WINDOW SIZE */
-	if(connection->receive_window)
+	tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
+	if(connection->receive_window) //we don't set it until we receive our first byte
 		tcp_set_window_size(header, recv_window_get_size(connection->receive_window));
-	else{
-		state_e state = tcp_connection_get_state(connection);
-		if(state == SYN_SENT || state == LISTEN || state == SYN_RECEIVED)
-			tcp_set_window_size(header, DEFAULT_WINDOW_SIZE);
-		else
-			/* means we closed the receive window down 
-				-- so lets practice congestion control and tell them not to send more data */
-			tcp_set_window_size(header, 0);
-	}
+	if(!connection->recv_window_alive)
+		/* means we closed the receive window down 
+			-- so lets practice congestion control and tell them not to send more data */
+		tcp_set_window_size(header, 0);
+
 	
 	/* ACK */
-	if(connection->receive_window){
-		tcp_set_ack_bit(header);
-		tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
-	}
-	// if in one of closing states, possible we already closed receive window but still need to correctly ack
-	// for now we're doing it a slightly hacky way of setting it to last_seq_received + 1
-	else if(tcp_connection_in_closing_state(connection)){
-		tcp_set_ack_bit(header);
-		tcp_set_ack(header, (connection->last_seq_received)+1);	
+	if(!tcp_ack(header)){
+		/* We may have already set it -- like if we were trying to ack a fin -- so don't reset */
+		
+		if(connection->receive_window){
+			tcp_set_ack_bit(header);
+			tcp_set_ack(header, recv_window_get_ack(connection->receive_window));
+		}
+		// if in one of closing states, possible we already closed receive window but still need to correctly ack
+		// for now we're doing it a slightly hacky way of setting it to last_seq_received + 1
+		else if(tcp_connection_in_closing_state(connection)){
+			tcp_set_ack_bit(header);
+			tcp_set_ack(header, (connection->last_seq_received)+1);	
+		}
 	}
 	
 	/* DATA */
@@ -978,7 +991,9 @@ int tcp_connection_send_next(tcp_connection_t connection){
 }
 
 int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* to_write, int num_bytes){
-	if(tcp_connection_get_state(connection) != ESTABLISHED){
+	
+	state_e state = tcp_connection_get_state(connection);
+	if(!(state == ESTABLISHED || state == CLOSE_WAIT)){
 		puts("Trying to send data on a non-established connection.");
 		return -EINVAL; // whats the correct error code here?
 	}
@@ -1077,6 +1092,13 @@ void *_handle_read_send(void *tcpconnection){
 					tcp_connection_send_fin(connection);	
 			}
 		}
+		else if(state == TIME_WAIT){
+			/* For active close: wait for 2 MSL before transitioning to CLOSED */
+			if(time_elapsed > 2*MSL){
+				/* TIME_WAIT_to_CLOSED transition will signal api that TCB can be deleted */
+				state_machine_transition(connection->state_machine, TIME_ELAPSED);
+			}	
+		}	
 		/* send whatever you're trying to send */
 		if(connection->send_window){
 			timers_ret = send_window_check_timers(connection->send_window);
@@ -1357,14 +1379,20 @@ recv_window_t tcp_connection_get_recv_window(tcp_connection_t connection){
 send_window_t tcp_connection_get_send_window(tcp_connection_t connection){
 	return connection->send_window;
 }
-/* destroys recv window and sets receive_window pointer to null
+// returns 1=true if connection has reading capabilities, 0=false otherwise
+int tcp_connection_recv_window_alive(tcp_connection_t connection){
+	return connection->recv_window_alive;
+}
+
+/* Instead of destroying receive window we just keep track of whether or not it exists.
+	We don't want to destroy it because we still need it to catch the data sent and keep track of sequence numbers
+	in case we shut down the receive window while still in the established state
 	 this is necessary for api call v_shutdown type 2 when we just need to close the reading portion of the connection
 	 returns 1 on success, -1 on failure */
 int tcp_connection_close_recv_window(tcp_connection_t connection){
-	if(!connection->receive_window)
+	if(!connection->recv_window_alive)
 		return -1;
-	recv_window_destroy(&(connection->receive_window));
-	connection->receive_window = NULL;
+	connection->recv_window_alive = 0;
 	return 1;
 }
 
