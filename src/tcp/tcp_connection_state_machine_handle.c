@@ -55,18 +55,8 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 	/*  1. ack their SEQ number 
 	    2. send your own SEQ number */
 
-	if(connection->send_window != NULL){
-		CRASH_AND_BURN("sending window is not null when we're trying to send a SYN/ACK in tcp_connection_LISTEN_to_SYN_RECEIVED. why?");
-	}
-	
 	 //sets time that we transitioned to SYN_RECEIVED -- so that we can timeout when necessary
 	gettimeofday(&(connection->state_timer), NULL);
-
-	uint32_t ISN = RAND_ISN();	
-	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, ISN);
-
-	// function does exactly that:
-	//connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, WINDOW_DEFAULT_SEND_WINDOW_SIZE, DEFAULT_WINDOW_SIZE, ISN);
 	
 	/*  just to reiterate, last_seq_received should have JUST been received by the SYN
 		packet that made the state transition call this function */	// <-- Thanks a lot for that comment!! :)
@@ -78,8 +68,12 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 	tcp_set_syn_bit(header);
 
 	/* SEQ */
-	tcp_set_seq(header, send_window_get_next_seq(connection->send_window)); 
-	connection->last_seq_sent = send_window_get_next_seq(connection->send_window);
+	
+	/* Where we were initializing send windows was getting confusing, so I put it in tcp_connection_init
+		so the ISN was set randomly upon initialization and is ready to be used for the first time here */
+	uint32_t ISN = send_window_get_next_seq(connection->send_window);
+	tcp_set_seq(header, ISN); 
+	connection->last_seq_sent = ISN;
 
 	tcp_set_window_size(header, recv_window_get_size(connection->receive_window));
 
@@ -131,8 +125,11 @@ tcp_connection_CLOSED_to_SYN_SENT
 */
 int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection){
 	
-	/* first pick a syn to send */
+	/* send random ISN as seqnum 
+		Even though our send window was initialized with a random ISN it might be that we closed and are 
+		reopening, and wouldn't want to put a similar seqnum in the network */
 	uint32_t ISN = rand(); // only up to RAND_MAX, don't know what that is, but probably < SEQNUM_MAX	
+	send_window_set_seq(connection->send_window, ISN);
 	connection->last_seq_sent = ISN; //seq for syn about to be sent
 
 	connection->syn_fin_count = 0;
@@ -159,16 +156,14 @@ int tcp_connection_LISTEN_to_SYN_SENT(tcp_connection_t connection){
 
         However, if a SEND is attempted before the foreign socket
         becomes specified, an error will be returned*/
-	uint32_t ISN = RAND_ISN();
-	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, ISN);
-	
+
 	struct tcphdr* header = tcp_header_init(0);
 
 	/* SYN */
 	tcp_set_syn_bit(header);
 
 	/* SEQ */
-	tcp_set_seq(header, send_window_get_next_seq(connection->send_window));
+	tcp_set_seq(header, send_window_get_next_seq(connection->send_window)); //NOTE: send window initalized in tcp_connection_init
 
 	tcp_wrap_packet_send(connection, header, NULL, 0);
 	
