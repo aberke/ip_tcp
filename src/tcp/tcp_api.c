@@ -21,7 +21,12 @@ tcp_api_args_t tcp_api_args_init(){
 /* returns result */
 int tcp_api_args_destroy(tcp_api_args_t* args){
 	/* first join your thread. this will block
-		if you're not done yet */    
+		if you're not done yet */ 
+	tcp_connection_t connection = tcp_node_get_connection_by_socket((*args)->node, (*args)->socket);
+	if(connection){
+		//lets cancel any blocks on the api signal so that shutting down doesn't take a while
+		tcp_connection_api_cancel(connection);  
+	}
     pthread_join((*args)->thread, NULL);
     int result = (*args)->result;
 	/* For this not to go wrong we had better set args->addr to NULL at first.  See function init() */
@@ -275,25 +280,28 @@ struct memchunk{
 	void* data;
 	int length;
 };*/
+
+	if(tcp_connection_get_recv_window(connection) == NULL){
+		// probably means we called v_shutdown type 2 to close reading portion of socket -- return error
+		printf("socket %d has NULL receiving window\n", tcp_connection_get_socket(connection));
+		return -1;
+	}
+	
 	memchunk_t chunk = recv_window_get_next(tcp_connection_get_recv_window(connection), nbyte);
 	if(!chunk){
 		return 0;
 	}	
-	print(("tcp_api_read 1"), ALEX_PRINT);
 	int read = nbyte;
 	if(chunk->length > nbyte){
 		puts("Error: Alex and Neil go debug tcp_api_read");
 		exit(-1);
 	}
-	print(("tcp_api_read 2"), ALEX_PRINT);
 	if(chunk->length < nbyte)
 		read = chunk->length;
 	
 	memcpy(buffer, chunk->data, read); 
-	print(("tcp_api_read 3"), ALEX_PRINT);
 	//clean up
 	memchunk_destroy_total(&chunk, util_free);
-	print(("tcp_api_read 4"), ALEX_PRINT);
 	return read;
 }
 void* tcp_api_read_entry(void* _args){
@@ -314,7 +322,9 @@ void* tcp_api_read_entry(void* _args){
 	
 	//TODO: HANDLE CORRECT RESPONSES BASED ON STATE
 	
-	if(state == CLOSE_WAIT){
+	// CAN continue to read in the FIN-WAIT-1 state
+	
+	if(state == LAST_ACK){
 		tcp_connection_api_unlock(connection);
 		puts("Remote Connection Closed");
 		//inform application layer that we need to close -- is this the right way to do it?
@@ -322,12 +332,6 @@ void* tcp_api_read_entry(void* _args){
 		return NULL;
 	}
 	
-	if(tcp_connection_get_state(connection) != ESTABLISHED){
-		//TODO: HANDLE APPROPRIATELY
-		tcp_connection_api_unlock(connection);
-		_return(args,-EBADF);	//fd is not a valid file descriptor or is not open for reading.
-		return NULL;
-	}
 	/* we'll use the macro thread_return in order to return a value */
 	tcp_connection_api_lock(connection);
 	
@@ -354,6 +358,10 @@ void* tcp_api_read_entry(void* _args){
 				if(result<0){
 					tcp_connection_api_unlock(connection);
 					free(to_read);
+					if(result == REMOTE_CONNECTION_CLOSED){
+						_return(args, 0); //return 0 to signify remote connection closed
+						return NULL;
+					}
 					_return(args, result);
 					return NULL;
 				}
@@ -379,6 +387,8 @@ returns new socket handle on success or negative number on failure
 int v accept(int socket, struct in addr *node); */
 int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 
+	while(1){ //if first connection doesn't become all the way ESTABLISHED, want to repeat
+
 	tcp_connection_t listening_connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(listening_connection == NULL)
 		return -EBADF;
@@ -397,13 +407,12 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 	 new socket is the socket assigned to that new connection.  This connection will then go on to finish
 	 the three-way handshake to reach ESTABLISHED state */
 	/* THIS CALL IS BLOCKING -- because the accept_queue is a bqueue -- call returns when accept_data_t dequeued */
-	tcp_connection_t new_connection = tcp_node_connection_accept(tcp_node, listening_connection);
+	tcp_connection_t new_connection = tcp_node_connection_accept(tcp_node, listening_connection);	
 	if(new_connection == NULL){
 		// NULL is returned when we've reached max number of file descriptors
 		tcp_connection_api_unlock(listening_connection);
 		return -ENFILE;	//The system limit on the total number of open files has been reached.
 	}
-
 	// set state of this new_connection to LISTEN so that we can send it through transition LISTEN_to_SYN_RECEIVED
 	tcp_connection_set_state(new_connection, LISTEN);
 	
@@ -422,14 +431,23 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 		tcp_connection_api_unlock(listening_connection);
 		return SIGNAL_DESTROYING;
 	}
-
+	if(ret == API_TIMEOUT){ //changing from SYN_RECEIVED to ESTABLISHED timed out
+		tcp_node_remove_connection_kernal(tcp_node, new_connection);
+		tcp_connection_api_unlock(listening_connection);
+		continue; //try again
+	}
+	if(ret == REMOTE_CONNECTION_CLOSED){	//Instead of sending back ack they sent back fin
+		tcp_node_remove_connection_kernal(tcp_node, new_connection);
+		tcp_connection_api_unlock(listening_connection);
+		continue; //try again
+	}	
 	tcp_connection_api_unlock(listening_connection);
 
 	/* Our connection has been established! 
 	TODO:HANDLE bad ret value */
 	
 	return ret;	
- 
+ 	} //end of while loop which allowed us to call continue
 }
 // Not for driver use -- just for our use when we only want to accept once
 void* tcp_api_accept_entry(void* _args){
@@ -447,7 +465,7 @@ void* tcp_api_accept_entry(void* _args){
 	return NULL;
 }
 
-////////////////// DRIVER ///////////////////////
+////////////////// DRIVER VERSION///////////////////////
 
 /* So we need to call tcp_api_accept in a loop without blocking.... so here's my solution that I've implemented:
 	We call thread the call tcp_driver_accept_entry which then goes to call tcp_api_accept_entry in a loop.
@@ -490,6 +508,116 @@ void* tcp_driver_accept_entry(void* _args){
 	//* we'll use the macro _return in order to return a value * //<--- nah lets have it just be successful
 	_return(args, ret);
 	return NULL; // this won't do anything
+}
+
+//////////////////////////////////////////////////////////////////////////////////////
+/*********************************** CLOSING *****************************************/
+
+/* Invalidate this socket, making the underlying connection inaccessible to
+any of these API functions. If the writing part of the socket has not been
+shutdown yet, then do so. The connection shouldn't be terminated, though;
+any data not yet ACKed should still be retransmitted. */
+int tcp_api_close(tcp_node_t tcp_node, int socket){
+	
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(connection == NULL){
+		return -EBADF;
+	}
+	int ret;
+		
+	// CLOSE and close reading part
+	ret = tcp_api_shutdown(tcp_node, socket, 3);
+	if(ret == 0) //success
+		// wait until CLOSE completed
+		ret = tcp_connection_api_result(connection);
+	// invalidate socket
+	tcp_node_remove_connection_kernal(tcp_node, connection);
+	
+	if(ret < 0) //error
+		return ret;
+	return 0; //success	
+}
+void* tcp_api_close_entry(void* _args){
+	tcp_api_args_t args = (tcp_api_args_t)_args;
+
+	/* verifies that these fields are valid (node != NULL, socket >=0, ...) */
+	_verify_node(args);
+	_verify_socket(args);
+	
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
+	if(connection == NULL){
+		_return(args,-EBADF);
+		return NULL;
+	}
+	
+	tcp_connection_api_lock(connection);	
+	int ret = tcp_api_close(args->node, args->socket);
+	tcp_connection_api_unlock(connection);
+	
+	_return(args, ret);
+	return NULL;
+}
+/* shutdown an open socket. If type is 1, close the writing part of
+the socket (CLOSE call in the RFC. This should send a FIN, etc.)
+If 2 is speciﬁed, close the reading part (no equivalent in the RFC;
+v read calls should just fail, and the window size should not grow any
+more). If 3 is speciﬁed, do both. The socket is not invalidated.
+returns 0 on success, or negative number on failure
+If the writing part is closed, any data not yet ACKed should still be retransmitted. */
+int tcp_api_shutdown(tcp_node_t tcp_node, int socket, int type){
+
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
+	if(connection == NULL)
+		return -EBADF;
+	int ret;
+	
+	if(type == 1){
+		ret = tcp_connection_close(connection);		
+		if(ret < 0) //error
+			return ret;	
+		return 0; //success
+	}
+	if(type == 2){
+		/* just close reading capability */
+		tcp_connection_close_recv_window(connection);
+		if(ret < 0) //error
+			return ret;
+		return 0; //success
+	}
+	if(type == 3){
+		/* close reading capability */
+		tcp_connection_close_recv_window(connection);
+		/* CLOSE */
+		ret = tcp_connection_close(connection);
+		if(ret < 0)
+			return ret;
+		return 0; //success
+	}
+
+	CRASH_AND_BURN("invalid option for v_shutdown");
+	return -1;
+}
+
+void* tcp_api_shutdown_entry(void* _args){
+	tcp_api_args_t args = (tcp_api_args_t)_args;
+
+	/* verifies that these fields are valid (node != NULL, socket >=0, ...) */
+	_verify_node(args);
+	_verify_socket(args);	
+	int type = args->num;
+	
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
+	if(connection == NULL){
+		_return(args,-EBADF);
+		return NULL;
+	}
+	
+	tcp_connection_api_lock(connection);	
+	int ret = tcp_api_shutdown(args->node, args->socket, type);
+	tcp_connection_api_unlock(connection);
+	
+	_return(args, ret);
+	return NULL;
 }
 
 

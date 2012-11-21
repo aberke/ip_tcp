@@ -16,6 +16,8 @@
 
 #define SIGNAL_CRASH_AND_BURN -777
 #define SIGNAL_DESTROYING -666
+#define API_TIMEOUT -555
+#define REMOTE_CONNECTION_CLOSED -444
 
 typedef struct tcp_connection* tcp_connection_t;  
 
@@ -45,6 +47,11 @@ uint32_t tcp_connection_get_remote_ip(tcp_connection_t connection);
 uint32_t tcp_connection_get_local_ip(tcp_connection_t connection);
 
 /* signaling */
+
+/* If waiting for api signal and trying to shutdown, we end up blocking -- need way out
+	to be called before pthread_destroy on api thread
+	sets ret to SIGNAL_DESTROYING --should be something else? */
+void tcp_connection_api_cancel(tcp_connection_t connection);
 void tcp_connection_api_signal(tcp_connection_t connection, int ret);
 void tcp_connection_api_lock(tcp_connection_t connection);
 void tcp_connection_api_unlock(tcp_connection_t connection);
@@ -143,6 +150,22 @@ int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* t
 void tcp_connection_ack(tcp_connection_t connection, uint32_t ack);
 /******* End of Sending Packets **************/
 //////////////////////////////////////////////////////////////////////////////////////
+
+//////////////////////////////////////////////////////////////////////////////////////
+/*********************************** CLOSING *****************************************/
+/* destroys recv window and sets receive_window pointer to null
+	 this is necessary for api call v_shutdown type 2 when we just need to close the reading portion of the connection
+	 returns 1 on success, -1 on failure */
+int tcp_connection_close_recv_window(tcp_connection_t connection);
+
+
+
+
+
+
+/*********************************** END OF CLOSING *****************************************/
+//////////////////////////////////////////////////////////////////////////////////////
+
 
 // to print when user calls 'sockets'
 void tcp_connection_print_sockets(tcp_connection_t connection);

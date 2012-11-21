@@ -71,7 +71,7 @@ returns
 	>0 if successful (offset at which the first byte from data should be read)
 	-1 otherwise
 */
-static int _validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t length){
+int recv_window_validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t length){
 	if(seqnum==(recv_window->left+1) || seqnum==(recv_window->left) || seqnum==(recv_window->left-1))
         return 0;
     
@@ -147,7 +147,7 @@ recv_window_receive
 	stores the data directly, so give it something that it can free!
 */
 void recv_window_receive_synchronized(recv_window_t recv_window, void* data, uint32_t length, uint32_t seqnum){
-	int offset = _validate_seqnum(recv_window, seqnum, length);
+	int offset = recv_window_validate_seqnum(recv_window, seqnum, length);
 	if(offset<0){
 		LOG(("seqnum %d not accepted. left: %d\n", seqnum, recv_window->left)); 
 		return;

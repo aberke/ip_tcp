@@ -30,6 +30,7 @@ enum transition{
 	receiveACK,
 
 	receiveRST,
+	ABORT, //intermediary after receiveRST -- unless in SYN_RECEIVED state, upon receiving RST, ABORT if RST valid
 	CLOSE,
 	TIME_ELAPSED,
 	receiveFIN,

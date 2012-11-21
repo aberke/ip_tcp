@@ -3,6 +3,15 @@
 /*** #included from tcp_connection.c ***********/
 /***********************************************/
 
+//returns 1=true if in a closing state, 0=false otherwise
+int tcp_connection_in_closing_state(tcp_connection_t connection){
+
+	state_e s = tcp_connection_get_state(connection);
+	if(s==FIN_WAIT_1 || s==FIN_WAIT_2 || s==CLOSE_WAIT || s==TIME_WAIT || s==LAST_ACK || s==CLOSING)
+		return 1;
+	return 0;
+}
+
 
 						/********** State Changing Functions *************/
 
@@ -49,6 +58,9 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 	if(connection->send_window != NULL){
 		CRASH_AND_BURN("sending window is not null when we're trying to send a SYN/ACK in tcp_connection_LISTEN_to_SYN_RECEIVED. why?");
 	}
+	
+	 //sets time that we transitioned to SYN_RECEIVED -- so that we can timeout when necessary
+	gettimeofday(&(connection->state_timer), NULL);
 
 	uint32_t ISN = RAND_ISN();	
 	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, ISN);
@@ -103,7 +115,7 @@ int tcp_connection_send_syn(tcp_connection_t connection){
 	tcp_set_seq(header, connection->last_seq_sent);
 	
 	// set time of when we're sending off syn
-	gettimeofday(&(connection->syn_timer), NULL);
+	gettimeofday(&(connection->state_timer), NULL);
 
 	/*  that should be good? send it off. Note: NULL because I'm assuming there's
 		to send when initializing a connection, but that's not necessarily true */
@@ -121,7 +133,6 @@ int tcp_connection_CLOSED_to_SYN_SENT(tcp_connection_t connection){
 	/* first pick a syn to send */
 	uint32_t ISN = rand(); // only up to RAND_MAX, don't know what that is, but probably < SEQNUM_MAX	
 	connection->last_seq_sent = ISN; //seq for syn about to be sent
-	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, ISN);
 
 	connection->syn_count = 1;
 	tcp_connection_send_syn(connection);
@@ -173,7 +184,9 @@ int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection){
 		puts("Something went wrong, your receive window already exists and we just received a SYN. In tcp_connection_SYN_SENT_to_SYN_RECEIVED");
 		exit(1); // CRASH AND BURN 
 	}
-
+	 //sets time that we transitioned to SYN_RECEIVED
+	gettimeofday(&(connection->state_timer), NULL);
+	
 	// again, last_seq_received will have been set by the packet that triggered this transition 
 	connection->receive_window = recv_window_init(DEFAULT_WINDOW_SIZE, connection->last_seq_received);
 
@@ -234,6 +247,33 @@ int tcp_connection_SYN_RECEIVED_to_ESTABLISHED(tcp_connection_t connection){
 /* 0o0o0oo0o0o0o0o0o0o0o0o0o0o0o0o0o0o Closing Connection 0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o */
 /* 0o0o0oo0o0o0o0o0o0o0o0o0o0o0o0o0o0o Closing Connection 0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o */
 
+// allows us to resend fin like we do for syn or any data
+int tcp_connection_send_fin(tcp_connection_t connection){
+	
+	/* now init the packet */
+	struct tcphdr* header = tcp_header_init(0);
+	
+	/* FIN */
+	tcp_set_fin_bit(header);
+
+	/* SEQ */
+	tcp_set_seq(header, connection->fin_seqnum);
+	
+	// set time of when we're sending off fin
+	gettimeofday(&(connection->state_timer), NULL);
+
+	/*  that should be good? send it off. Note: NULL because I'm assuming there's
+		to send when initializing a connection, but that's not necessarily true */
+	tcp_wrap_packet_send(connection, header, NULL, 0);
+	return 1;
+}
+
+// called when ready to ack a fin
+int tcp_connection_ack_fin(tcp_connection_t connection){
+	puts("TODO: HANDLE ACKING THE FIN");
+	return 1;
+}
+
 /***pCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpC Passive Close pCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpC******/	
 // called when receives FIN
 int tcp_connection_receive_FIN(tcp_connection_t connection){
@@ -241,9 +281,20 @@ int tcp_connection_receive_FIN(tcp_connection_t connection){
 }
 
 int tcp_connection_ESTABLISHED_to_CLOSE_WAIT(tcp_connection_t connection){
-	//TODO: SEND ACK
-	puts("Inform user that remote connection closed so that user can command CLOSE -- waiting for that CLOSE");
-	// waits until user commands CLOSE to send FIN.  Is there a timeout??
+	
+	//SEND ACK
+	struct tcphdr* header = tcp_header_init(0);
+	/* SEQ */
+	tcp_set_seq(header, send_window_get_next_seq(connection->send_window));
+	// send it off 
+	tcp_wrap_packet_send(connection, header, NULL, 0);
+	
+	/* We can return from anything we're waiting on to inform user of FIN */
+	tcp_connection_api_signal(connection, REMOTE_CONNECTION_CLOSED); 	
+	
+	// inform user that remote connection closed
+	printf("[socket %d]: Remote connection closed\n", connection->socket_id);
+	// User is now supposed to tell connection to CLOSE
 	return 1;	
 }
 
@@ -278,12 +329,14 @@ int tcp_connection_ESTABLISHED_to_FIN_WAIT_1(tcp_connection_t connection){
       form a FIN segment and send it.  In any case, enter FIN-WAIT-1
       state.
 	*/
+	connection->fin_seqnum = send_window_get_next_seq(connection->send_window);
+	tcp_connection_send_fin(connection);
+	
 	return 1;	
 }
 
 int tcp_connection_FIN_WAIT_1_to_CLOSING(tcp_connection_t connection){
-	//TODO: SEND ACK
-	puts("HANDLE tcp_connection_FIN_WAIT_1_to_CLOSING: TODO: SEND ACK");
+	// SEND ACK ONLY AFTER HAVE RELIABLY SENT ALL DATA
 	return 1;	
 }
 
@@ -366,6 +419,12 @@ int tcp_connection_CLOSING_error(tcp_connection_t connection){
 }
 
 /********** End of State Changing Functions *******/
+
+// sometimes RFC specifies that if in a given state an action should be ignored
+int tcp_connection_NO_ACTION_transition(tcp_connection_t connection){
+	return 1;
+}
+
 
 // invalid transition
 int tcp_connection_invalid_transition(tcp_connection_t connection){

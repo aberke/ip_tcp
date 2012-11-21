@@ -63,9 +63,25 @@ return num bytes read or negative number on failure or 0 on eof */
 int tcp_api_read(tcp_node_t tcp_node, int socket, char *buffer, uint32_t nbyte);
 void* tcp_api_read_entry(void* _args);
 
-
-///////////// DRIVER COMMANDS ////////////////
 void* tcp_driver_accept_entry(void* args);
+
+
+//////////////////////////////////////////////////////////////////////////////////////
+/*********************************** CLOSING *****************************************/
+
+
+
+/* shutdown an open socket. If type is 1, close the writing part of
+the socket (CLOSE call in the RFC. This should send a FIN, etc.)
+If 2 is speciﬁed, close the reading part (no equivalent in the RFC;
+v read calls should just fail, and the window size should not grow any
+more). If 3 is speciﬁed, do both. The socket is not invalidated.
+returns 0 on success, or negative number on failure
+If the writing part is closed, any data not yet ACKed should still be retransmitted. */
+int tcp_api_shutdown(tcp_node_t node, int socket, int type);
+void* tcp_api_shutdown_entry(void* _args);
+
+
 
 
 #endif //__TCP_API_H__
