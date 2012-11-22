@@ -21,15 +21,24 @@
 #define REMOTE_CONNECTION_CLOSED -444
 #define CONNECTION_RESET -333
 
-/* time outs */
-#define SYN_TIMEOUT 2 //2 seconds at first, and doubles each time next syn_sent
+
 #define SYN_COUNT_MAX 3 // how many syns we send before timing out
+/* TIMEOUTS DEFINED BY RFC:
+      Timeouts
+
+        USER TIMEOUT
+        RETRANSMISSION TIMEOUT
+        TIME-WAIT TIMEOUT */
+
+#define USER_TIMEOUT 300 //meh lets do 5 minutes
+#define RETRANSMISSION_TIMEOUT 2 //replaced SYN_TIMEOUT -- 2 seconds at first, and doubles each time next syn_sent
 
 /* Must wait for 2MSL during time-wait */
 /*The TCP standard defines MSL as being a value of 120 seconds (2 minutes). 
 In modern networks this is an eternity, so TCP allows implementations to choose a lower value 
 if it is believed that will lead to better operation. */
 #define MSL 60 //1 minute rather than 2
+#define TIME_WAIT_TIMEOUT 2*MSL //that's what the RFC said to do
 
 typedef struct tcp_connection* tcp_connection_t;  
 

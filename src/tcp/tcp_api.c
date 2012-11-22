@@ -284,6 +284,11 @@ int tcp_api_read(tcp_node_t tcp_node, int socket, char *buffer, uint32_t nbyte){
 		printf("[Socket %d]: Illegal read call\n", tcp_connection_get_socket(connection));
 		return -1;
 	}
+
+	state_e state = tcp_connection_get_state(connection);
+	if(state == CLOSED || state == CLOSE_WAIT || state == LAST_ACK){
+		return 0;
+	}
 	
 	memchunk_t chunk = recv_window_get_next(tcp_connection_get_recv_window(connection), nbyte);
 	if(!chunk){
@@ -316,17 +321,17 @@ void* tcp_api_read_entry(void* _args){
 	}
 	/* I think this is the correct place to check state because if we're in the connect/accept state for example,
 		we might already be blocking and then it wouldn't make sense to call lock on the connection */
-	state_e state = tcp_connection_get_state(connection);
-	
+
 	//TODO: HANDLE CORRECT RESPONSES BASED ON STATE
 	
 	// CAN continue to read in the FIN-WAIT-1 state
 	
-	if(state == LAST_ACK){
+	state_e state = tcp_connection_get_state(connection);
+	if(state == CLOSED || state == CLOSE_WAIT || state == LAST_ACK){
 		tcp_connection_api_unlock(connection);
 		puts("Remote Connection Closed");
 		//inform application layer that we need to close -- is this the right way to do it?
-		_return(args,-EBADF);	//fd is not a valid file descriptor or is not open for reading.
+		_return(args,0);	//return 0?
 		return NULL;
 	}
 	
@@ -339,6 +344,16 @@ void* tcp_api_read_entry(void* _args){
 
 	int ret = tcp_api_read(args->node, args->socket, to_read, args->num);	
 	
+	if(ret == 0){ 
+		// was there nothing to read, or did connection close? let's check
+		if(state == CLOSED || state == CLOSE_WAIT || state == LAST_ACK){
+			tcp_connection_api_unlock(connection);
+			puts("Remote Connection Closed");
+			//inform application layer that we need to close -- is this the right way to do it?
+			_return(args,0);	//return 0?
+			return NULL;
+		}
+	}	
 	if(ret<0){
 		free(to_read);
 		_return(args, ret);
@@ -356,6 +371,9 @@ void* tcp_api_read_entry(void* _args){
 				return NULL;
 			}
 			if(read == 0){
+				if(state == CLOSED || state == CLOSE_WAIT || state == LAST_ACK){
+					break; //remote connection closed, but lets still print what we got til then
+				}
 				// need to wait until there is something to read
 				int result = tcp_connection_api_result(connection); // will block until it gets the result
 
@@ -436,12 +454,24 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 		return SIGNAL_DESTROYING;
 	}
 	if(ret == API_TIMEOUT){ //changing from SYN_RECEIVED to ESTABLISHED timed out
-		tcp_node_remove_connection_kernal(tcp_node, new_connection);
+		// want to close it but don't want to block -- let's thread the close??! (which will also remove it)
+		tcp_api_args_t args = tcp_api_args_init();
+		args->node = tcp_node;
+		args->socket = socket;
+		args->function_call = "v_close";		
+		tcp_node_thread(tcp_node, tcp_api_close_entry, args);
+		
 		tcp_connection_api_unlock(listening_connection);
 		continue; //try again
 	}
 	if(ret == REMOTE_CONNECTION_CLOSED){	//Instead of sending back ack they sent back fin
-		tcp_node_remove_connection_kernal(tcp_node, new_connection);
+		// lets close this connection responsibly and try again
+		tcp_api_args_t args = tcp_api_args_init();
+		args->node = tcp_node;
+		args->socket = socket;
+		args->function_call = "v_close";		
+		tcp_node_thread(tcp_node, tcp_api_close_entry, args);
+		
 		tcp_connection_api_unlock(listening_connection);
 		continue; //try again
 	}	

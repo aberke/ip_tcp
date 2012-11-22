@@ -254,6 +254,9 @@ alex's questions for tas:
 	
 	
 TODO: TO HANDLE:
+
+	put user time outs into the closing protocol
+
 	receiveRST when in ESTABLISHED state	
 	handle all closed by RST cases
 	

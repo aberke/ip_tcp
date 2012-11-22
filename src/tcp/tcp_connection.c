@@ -614,9 +614,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 				  FIN implies PUSH for any segment text not yet delivered to the
 				  user. */
 				 connection->last_seq_received = tcp_seqnum(tcp_packet);
-				 printf("[Socket %d]: Connection closing\n", connection->socket_id);
 				 state_machine_transition(connection->state_machine, receiveFIN);
-				 tcp_connection_api_signal(connection, REMOTE_CONNECTION_CLOSED); //<-- ?? SHOULD THIS HAPPEN HERE?
 			}
 		}
 
@@ -1059,7 +1057,7 @@ void *_handle_read_send(void *tcpconnection){
 
 		/* check if you're waiting for an ACK to come back */
 		if(state == SYN_SENT){	         
-			if(time_elapsed > (1 << ((connection->syn_fin_count)-1))*SYN_TIMEOUT){
+			if(time_elapsed > (1 << ((connection->syn_fin_count)-1))*RETRANSMISSION_TIMEOUT){
 				// we timeout connect or resend
 
 				if((connection->syn_fin_count)==SYN_COUNT_MAX){
@@ -1076,10 +1074,20 @@ void *_handle_read_send(void *tcpconnection){
 		else if(state == SYN_RECEIVED){
 			/* after a conservative amount of time, let's let the SYN_RECEIVED time out so that accept doesn't 
 				block waiting for the api signal forever */
-			if(time_elapsed > (1 << 3)*SYN_TIMEOUT){
+			if(time_elapsed > (1 << 3)*RETRANSMISSION_TIMEOUT){
+				// right now we're letting the api close and remove it when it sees this timeout
 				tcp_connection_api_signal(connection, API_TIMEOUT);
 			}
 		}
+	/************************ Handle in PASSIVE CLOSING states ******************************/
+		else if(state == LAST_ACK){
+			/* If an ACK is not forthcoming, after the user timeout the connection is aborted and the user is told. */
+			if(time_elapsed > USER_TIMEOUT){
+				state_machine_transition(connection->state_machine, ABORT);
+			}
+		}
+				
+	/************************ Handle in ACTIVE CLOSING states ******************************/
 		else if(state == FIN_WAIT_1){
 			/* For active close: 
 				RFC: All segments preceding and including FIN  will be retransmitted until acknowledged. */
@@ -1098,9 +1106,11 @@ void *_handle_read_send(void *tcpconnection){
 				/* TIME_WAIT_to_CLOSED transition will signal api that TCB can be deleted */
 				state_machine_transition(connection->state_machine, TIME_ELAPSED);
 			}	
-		}	
+		}
+	/************************* DONE CHECKING CLOSING STATE NEEDS *******************************/	
 		/* send whatever you're trying to send */
-		if(connection->send_window){
+		if(connection->send_window){ /*<-- important to check if this still is a thing because we may have 
+											destroyed it in the loop above when we transitioned to CLOSED */
 			timers_ret = send_window_check_timers(connection->send_window);
 			tcp_connection_send_next(connection);
 		}
