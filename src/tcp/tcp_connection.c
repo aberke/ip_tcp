@@ -1038,13 +1038,8 @@ void *_handle_read_send(void *tcpconnection){
 	struct timespec wait_cond;	
 	struct timeval now;	// keep track of time to compare to window timeouts and connections' syn_timer 
 	float time_elapsed;
-<<<<<<< HEAD
-	tcp_packet_data_t packet;
-	int ret;
-=======
 	void* packet;
 	int ret, timers_ret;
->>>>>>> 8dbdfd2569cfb3f364edbee8bda73d5d1bb8b063
 
 	while(connection->running){	
         
