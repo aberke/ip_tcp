@@ -275,6 +275,7 @@ int tcp_connection_ack_fin(tcp_connection_t connection){
 	/* init the packet and set the ack bit -- tcp_wrap_packet_send will not reset the ack bit */
 	struct tcphdr* header = tcp_header_init(0);
 	tcp_set_ack(header, (connection->last_seq_received)+1);
+	tcp_set_ack_bit(header);
 	
 	tcp_wrap_packet_send(connection, header, NULL, 0);
 	
