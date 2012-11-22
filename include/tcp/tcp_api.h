@@ -81,6 +81,13 @@ If the writing part is closed, any data not yet ACKed should still be retransmit
 int tcp_api_shutdown(tcp_node_t node, int socket, int type);
 void* tcp_api_shutdown_entry(void* _args);
 
+/* Invalidate this socket, making the underlying connection inaccessible to
+any of these API functions. If the writing part of the socket has not been
+shutdown yet, then do so. The connection shouldn't be terminated, though;
+any data not yet ACKed should still be retransmitted. */
+int tcp_api_close(tcp_node_t tcp_node, int socket);
+void* tcp_api_close_entry(void* _args);
+
 
 
 
