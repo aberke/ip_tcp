@@ -166,9 +166,9 @@ void* tcp_api_sendfile_entry(void* _args){
 	
 	//clean up
 	fclose(f);
-	// TODO: IMPLEMENT: close connection after file sent
-	//ret = tcp_api_close(args->node, args->socket); 
 	tcp_connection_api_unlock(connection);
+	// close connection we opened -- this will also call tcp_connection_api_lock/unlock and block
+	tcp_api_close(args->node, args->socket); //locks and blocks but we don't need this anymore anyhow
 	/* and use my macro to return it 
 		(first arg is size of retal) */
 	_return(args, 0);
@@ -559,7 +559,9 @@ void* tcp_api_close_entry(void* _args){
 	/* invalidate socket (remove from kernal) only after we unlock -- otherwise thats a logical error because
 		calling unlock on a mutex we destroyed 
 		So let's put the locking logic and destroying logic -- and therefore all the other logic in the 
-		actual api call */	
+		actual api call 
+		
+		Also, for calls like sendfile we want to be able to use close, and might as well lock there too */	
 	
 	// THEREFORE WE LOCK IN THE API CALL
 		

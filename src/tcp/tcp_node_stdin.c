@@ -261,6 +261,24 @@ void shutdown_cmd(const char* line, tcp_node_t tcp_node){
 		
 	tcp_node_thread(tcp_node, tcp_api_shutdown_entry, args);
 }
+//close [socket]  :  v_close on the given socket.
+void close_cmd(const char* line, tcp_node_t node){
+
+	int socket, ret;
+	
+	ret = sscanf(line, "close %d", &socket);
+	if(ret != 1){
+		fprintf(stderr, "syntax error (usage: close [socket] )\n");
+		return;
+	}
+	
+	tcp_api_args_t args = tcp_api_args_init();
+	args->node = node;
+	args->socket = socket;
+	args->function_call = "v_close";
+		
+	tcp_node_thread(node, tcp_api_close_entry, args);			
+}
 
 /*
 recv/r socket numbytes y/n Try to read data from a given socket. If the last argument is y, then
@@ -477,8 +495,6 @@ void sendfile_cmd(const char* line, tcp_node_t tcp_node){
 	struct in_addr* addr = malloc(sizeof(struct in_addr));
 	char addr_buffer[INET_ADDRSTRLEN];
 	
-	//TODO: ALEX IS FIXING
-	//should be: sendﬁle filename ip port
 	ret = sscanf(line, "sendfile %s %s %d", filename_buffer, addr_buffer, &port);
 	if(ret != 3){
 		fprintf(stderr, "syntax error (usage: sendfile [filename] [ip] [port])\n");
@@ -625,8 +641,8 @@ struct {
   {"sendfile", sendfile_cmd},
   {"shutdown", shutdown_cmd},
 
-  /*{"recvfile", recvfile_cmd},
-  {"close", close_cmd},*/
+  /*{"recvfile", recvfile_cmd},*/
+  {"close", close_cmd},
   {"quit", quit_cmd},	// last two quit commands added by alex -- is this how we want to deal with quitting?
   {"q", quit_cmd},
   /*Also to directly test our api: */
