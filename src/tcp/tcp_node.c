@@ -131,7 +131,6 @@ tcp_node_t tcp_node_init(iplist_t* links){
 	ip_node_t ip_node = ip_node_init(links);
 	if(!ip_node)
 		return NULL;
-
 	// create tcp_node
 	tcp_node_t tcp_node = (tcp_node_t)malloc(sizeof(struct tcp_node));	
 	tcp_node->ip_node = ip_node;
@@ -220,11 +219,6 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	PLAIN_LIST_ITER_DONE(list);
 	/*****************************/
   	print(("tcp_node_destroy 1"), CLOSING_PRINT);	
-	
-	// gracefully CLOSE all connections
-	// this blocks for a little until all connections CLOSED - and presumably kernal empty?
-	tcp_node_close_all_connections(tcp_node);
-	  	print(("tcp_node_destroy 2"), CLOSING_PRINT);
 	// wait for mutex so we can ensure we destroy e'erthang
 	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 	//// iterate through the hash maps and destroy all of the keys/values,
@@ -245,7 +239,8 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	//// NOW destroy all the connections
 	int i;
 	for(i=0; i<(tcp_node->num_connections); i++){
-		// use void tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection) instead??
+		// we quickly send RST rather than gracefully CLOSEing
+		tcp_connection_ABORT(tcp_node->connections[i]);
 		tcp_connection_destroy(tcp_node->connections[i]);
 	}
 	// free the array itself
@@ -408,11 +403,7 @@ void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, int port){
 	
 	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 }
-//ALEX TODO:
-// gracefully CLOSE all connections
-void tcp_node_close_all_connections(tcp_node_t tcp_node){
-	print(("ALEX TODO: GRACEFULLY CLOSE ALL CONNECTIONS BEFORE DESTROYING NODE"),ALEX_PRINT);
-}
+
 //###TODO: FINISH LOGIC ####
 //needs to be called when close connection so that we can return port/socket to available queue for reuse
 // returns new number of connections in kernal

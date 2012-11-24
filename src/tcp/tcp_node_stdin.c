@@ -719,11 +719,8 @@ void* _handle_tcp_node_stdin(void* node){
 					
 					else
 						printf("%s on socket %d returned value: %d\n", args->function_call, args->socket, args->result);
-					print(("1"), ALEXS_SEGFAULT);
 					tcp_api_args_destroy(&args);
-					print(("2"), ALEXS_SEGFAULT);
 					plain_list_remove(list, el);
-					print( ("3"), ALEXS_SEGFAULT);
 				}			
 			PLAIN_LIST_ITER_DONE(list);
 

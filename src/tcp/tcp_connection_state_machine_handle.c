@@ -19,6 +19,10 @@ int tcp_connection_in_closing_state(tcp_connection_t connection){
 /* 0o0o0oo0o0o0o0o0o0o0o0o0o0o0o0o0o0o Establishing Connection 0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o */
 
 int tcp_connection_passive_open(tcp_connection_t connection){
+	
+	/* We're no longer in CLOSED state */
+	connection->closing = 0;
+	
 	return state_machine_transition(connection->state_machine, passiveOPEN);	
 }
 
@@ -87,6 +91,9 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 /* this function should actually be called ONLY by tcp_node, because 
 	don't we need to first verify that this is a valid IP? */
 int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, uint16_t port){
+
+	/* We're no longer in CLOSED state */
+	connection->closing = 0;
 
 	/* set the remote and then transition */
 	tcp_connection_set_remote(connection, ip_addr, port);
@@ -275,6 +282,7 @@ int tcp_connection_ack_fin(tcp_connection_t connection){
 	/* init the packet and set the ack bit -- tcp_wrap_packet_send will not reset the ack bit */
 	struct tcphdr* header = tcp_header_init(0);
 	tcp_set_ack(header, (connection->last_seq_received)+1);
+	tcp_set_ack_bit(header);
 	
 	tcp_wrap_packet_send(connection, header, NULL, 0);
 	
@@ -282,41 +290,46 @@ int tcp_connection_ack_fin(tcp_connection_t connection){
 }
 
 /***pCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpC Passive Close pCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpC******/	
-// called when receives FIN
-int tcp_connection_receive_FIN(tcp_connection_t connection){
-	return state_machine_transition(connection->state_machine, receiveFIN);
-}
 
-int tcp_connection_ESTABLISHED_to_CLOSE_WAIT(tcp_connection_t connection){
+// it all starts when we receive a FIN
+// we seem to need to do the exact same thing whether we were in SYN_RECEIVED or ESTABLISHED
+int tcp_connection_transition_CLOSE_WAIT(tcp_connection_t connection){
 	
 	//SEND ACK
-	struct tcphdr* header = tcp_header_init(0);
-	/* SEQ */
-	tcp_set_seq(header, send_window_get_next_seq(connection->send_window));
-	// send it off 
-	tcp_wrap_packet_send(connection, header, NULL, 0);
+	tcp_connection_ack_fin(connection);
+	
+	// inform user that remote connection closed
+	printf("[socket %d]: Remote connection closed\n", connection->socket_id);
 	
 	/* We can return from anything we're waiting on to inform user of FIN */
 	tcp_connection_api_signal(connection, REMOTE_CONNECTION_CLOSED); 	
 	
-	// inform user that remote connection closed
-	printf("[socket %d]: Remote connection closed\n", connection->socket_id);
 	// User is now supposed to tell connection to CLOSE
 	return 1;	
 }
 
 // transition occurs when in CLOSE_WAIT and user commands CLOSE	
 int tcp_connection_CLOSE_WAIT_to_LAST_ACK(tcp_connection_t connection){
-	//TODO: SEND FIN
-	puts("HANDLE tcp_connection_CLOSE_WAIT_to_LAST_ACK -- need to send FIN and then wait for last ack before transitioning to CLOSED");
+	
+	/* RFC: The user will respond with a CLOSE, upon which the TCP can send a FIN to
+    the other TCP after sending any remaining data.  The TCP then waits
+    until its own FIN is acknowledged whereupon it deletes the
+    connection.  If an ACK is not forthcoming, after the user timeout
+    the connection is aborted and the user is told. */
+    
+    connection->syn_fin_count = 0; //not that we're going to use it for resending fins			
+	connection->fin_seqnum = send_window_get_next_seq(connection->send_window);
+	tcp_connection_send_fin(connection); //this will set the timer
+		
+	//now just wait for the ack to our fin and time out if it never comes
 	return 1;	
 }
-
+// we received the ack we sent our peer -- so we can finish this closing process
 int tcp_connection_LAST_ACK_to_CLOSED(tcp_connection_t connection){
 	// destroy window
 	send_window_destroy(&(connection->send_window));
 	recv_window_destroy(&(connection->receive_window));
-	puts("HANDLE tcp_connection_LAST_ACK_to_CLOSED -- All completed?");
+	tcp_connection_api_signal(connection, 0); //0 for success, right?
 	return 1;	
 }
 /***pCpCpCpCpCpCpCpCpCpCpCpCpCpCpCp End of Passive Close pCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpCpC******/
@@ -324,8 +337,21 @@ int tcp_connection_LAST_ACK_to_CLOSED(tcp_connection_t connection){
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////	
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////	
 /*****aCaCaCaCaCaCaCaCaCaCaCaaCaCCaCaC Active Close aCaCaCaCaCaCaCaCaCaCaCaCaCaaCaCaCaCaCaC**********/
+
+// before we call CLOSE we need to set this boolean!
+void tcp_connection_set_close(tcp_connection_t connection){
+	connection->closing = 1;
+}
+// boolean 1 if closing, 0 otherwise
+int tcp_connection_get_close_boolean(tcp_connection_t connection){
+	return connection->closing;
+}	
 // called when user commands CLOSE
 int tcp_connection_close(tcp_connection_t connection){
+	
+	/* We're going into CLOSED state */
+	connection->closing = 1;	
+	
 	connection->syn_fin_count = 0;
 	return state_machine_transition(connection->state_machine, CLOSE);
 }	
@@ -334,7 +360,7 @@ int tcp_connection_SYN_RECEIVED_to_FIN_WAIT_1(tcp_connection_t connection){
 	/*  RFC: If no SENDs have been issued and there is no pending data to send,
       then form a FIN segment and send it, and enter FIN-WAIT-1 state;
       otherwise queue for processing after entering ESTABLISHED state.*/
-	
+	connection->syn_fin_count = 0;	
 	connection->fin_seqnum = send_window_get_next_seq(connection->send_window);
 	tcp_connection_send_fin(connection);
 	
@@ -369,7 +395,12 @@ int tcp_connection_FIN_WAIT_1_to_FIN_WAIT_2(tcp_connection_t connection){
 }
 
 int tcp_connection_FIN_WAIT_1_to_CLOSING(tcp_connection_t connection){
-	// SEND ACK ONLY AFTER HAVE RELIABLY SENT ALL DATA
+	// TODO: SEND ACK ONLY AFTER HAVE RELIABLY SENT ALL DATA
+
+	//ack their fin
+	tcp_connection_ack_fin(connection);
+	
+	// now once we get their ack for our fin we can go to TIME_WAIT		
 	return 1;	
 }
 
@@ -388,14 +419,13 @@ int tcp_connection_FIN_WAIT_2_to_TIME_WAIT(tcp_connection_t connection){
 	return 1;
 }
 
-// there are a few different ways we could get here -- we handle them all the same, right?
-/* It might be that we were already in TIME_WAIT and get the fin again -- well it was a retransmission
-	so lets ack it again and reset timer */
-int tcp_connection_transition_TIME_WAIT(tcp_connection_t connection){
+/*  We acked their fin and now they have acked ours.  Not much more to say.
+	RFC: Both will, upon receiving these ACKs, delete the connection.*/
+int tcp_connection_CLOSING_to_TIME_WAIT(tcp_connection_t connection){
 	
-	//TODO: SET TIMER
-	// ACK FIN
-	
+	//set timer
+	gettimeofday(&(connection->state_timer), NULL);
+
 	return 1;
 }
 /* This closing process finally over -- TIME_ELAPSED occurred in TIME_WAIT so signal user safe to delete TCB */
@@ -417,12 +447,14 @@ int tcp_connection_TIME_WAIT_to_CLOSED(tcp_connection_t connection){
 
 int tcp_connection_LISTEN_to_CLOSED(tcp_connection_t connection){	
 	print(("LISTEN --> CLOSED"), STATES_PRINT);
+
+	/* We're going into CLOSED state */
+	connection->closing = 1;
 	
 	/* RFC:   Any outstanding RECEIVEs are returned with "error:  closing"
       responses.  Delete TCB, enter CLOSED state, and return. */
-	
 	tcp_connection_accept_queue_destroy(connection);
-	
+	tcp_connection_api_signal(connection, 0); //0 for success, right?
 	/*  there's not much to do here, except for get rid of the 
 	   	data you were buffering (from the other side?) and getting
 	   	rid of the queued connections. For now, just return */
@@ -441,6 +473,9 @@ int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection){
 
 	print(("SYN_SENT --> CLOSED"), STATES_PRINT);
 
+	/* We're going into CLOSED state */
+	connection->closing = 1;
+
 	if(connection->send_window)
 		send_window_destroy(&(connection->send_window));
 	if(connection->receive_window)
@@ -456,6 +491,10 @@ int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection){
 	ip addresses) */
 int tcp_connection_CLOSED_by_RST(tcp_connection_t connection){
 	print(("CLOSED by RST"), STATES_PRINT);
+	
+	/* We're going into CLOSED state */
+	connection->closing = 1;	
+	
 	if(connection->send_window)
 		send_window_destroy(&(connection->send_window));
 	if(connection->receive_window)
@@ -471,26 +510,13 @@ int tcp_connection_CLOSED_by_RST(tcp_connection_t connection){
 // and not pthread_cond_wait indefinitely?
 int tcp_connection_CLOSING_error(tcp_connection_t connection){
 	/*RFC: Respond with "error:  connection closing". */
-	puts("TODO: make transition to handle: RFC: Respond with 'error:  connection closing'");
+	puts("Error:  connection closing");
 	tcp_connection_api_signal(connection, -EBADF); //fd isn't a valid open file descriptor.
 	return -1;
 }
 
 /********** End of State Changing Functions *******/
 
-// sometimes we just need to give up.  eg ABORT transition called in thread after fin never acked
-int tcp_connection_ABORT(tcp_connection_t connection){
-
-	connection->syn_fin_count = 0;
-
-	if(connection->send_window)
-		send_window_destroy(&(connection->send_window));
-	if(connection->receive_window)
-		recv_window_destroy(&(connection->receive_window));
-	
-	tcp_connection_api_signal(connection, -ETIMEDOUT);
-	return 1;	
-}
 
 // sometimes RFC specifies that if in a given state an action should be ignored
 int tcp_connection_NO_ACTION_transition(tcp_connection_t connection){

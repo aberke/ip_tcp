@@ -7,10 +7,6 @@
 #include "send_window.h"
 #include "recv_window.h"
 #include "state_machine.h"
-
-/* for tcp_packet_data_t HA!
-#include "ip_utils.h"
-#include "tcp_utils.h" */
 #include "tcp_node.h"
 #include "int_queue.h"
 
@@ -20,25 +16,33 @@
 #define API_TIMEOUT -555
 #define REMOTE_CONNECTION_CLOSED -444
 #define CONNECTION_RESET -333
+#define CONNECTION_CLOSED -222
 
-/* time outs */
-#define SYN_TIMEOUT 2 //2 seconds at first, and doubles each time next syn_sent
+
 #define SYN_COUNT_MAX 3 // how many syns we send before timing out
+/* TIMEOUTS DEFINED BY RFC:
+      Timeouts
+
+        USER TIMEOUT
+        RETRANSMISSION TIMEOUT
+        TIME-WAIT TIMEOUT */
+
+#define USER_TIMEOUT 300 //lets do 5 minutes
+#define RETRANSMISSION_TIMEOUT 2 //replaced SYN_TIMEOUT -- 2 seconds at first, and doubles each time next syn_sent
 
 /* Must wait for 2MSL during time-wait */
 /*The TCP standard defines MSL as being a value of 120 seconds (2 minutes). 
 In modern networks this is an eternity, so TCP allows implementations to choose a lower value 
 if it is believed that will lead to better operation. */
 #define MSL 60 //1 minute rather than 2
+#define TIME_WAIT_TIMEOUT 2*MSL //that's what the RFC said to do
 
 typedef struct tcp_connection* tcp_connection_t;  
 
 tcp_connection_t tcp_connection_init(tcp_node_t tcp_node, int socket, bqueue_t *to_send);
 void tcp_connection_destroy(tcp_connection_t connection);
 
-/* TODO: Start using this in our implemenation:
-give to tcp_connection:
-
+/*
 	tcp_connection	
 		int ret_value; // return value for the calling tcp_api function
 		pthread_mutex_t api_mutex
@@ -156,7 +160,9 @@ void tcp_connection_push_data(tcp_connection_t connection, void* to_write, int n
 // queues chunks off from send_window and handles sending them for as long as send_window wants to send more chunks
 int tcp_connection_send_next(tcp_connection_t connection);
 void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_data_t data);
-
+// sometimes we just need to give up.  eg ABORT transition called in thread after fin never acked
+/* send rst and transition to closed by ABORT */
+int tcp_connection_ABORT(tcp_connection_t connection);
 // called by v_write
 int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* to_write, int num_bytes);
 void tcp_connection_ack(tcp_connection_t connection, uint32_t ack);

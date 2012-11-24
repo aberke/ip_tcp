@@ -38,8 +38,9 @@ transitioning_t listen_next_state(transition_e t){
 			return transitioning_init(SYN_SENT, (action_f)tcp_connection_LISTEN_to_SYN_SENT);
 		case receiveRST:
 			/* RFC says ignore rst when in LISTEN */
-			return transitioning_init(LISTEN, (action_f)tcp_connection_NO_ACTION_transition);
-			
+			return transitioning_init(LISTEN, (action_f)tcp_connection_NO_ACTION_transition);		
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);			
 		default:
 			return transitioning_init(LISTEN, (action_f)tcp_connection_invalid_transition);
 	}
@@ -60,7 +61,8 @@ transitioning_t syn_sent_next_state(transition_e t){
 		case receiveRST:
 			/* your connection was refused */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);	
-			
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);			
 		default:
 			return transitioning_init(SYN_SENT, (action_f)tcp_connection_invalid_transition);
 	}
@@ -71,12 +73,17 @@ transitioning_t syn_received_next_state(transition_e t){
 		case receiveACK:
 			/* must be the ACK of your SYN */
 			return transitioning_init(ESTABLISHED, (action_f)tcp_connection_SYN_RECEIVED_to_ESTABLISHED);
+		case receiveFIN:
+			/* they closed on us -- we are now passive closers */
+			return transitioning_init(CLOSE_WAIT, (action_f)tcp_connection_transition_CLOSE_WAIT);		
 		case CLOSE:
 			/* send FIN */
 			return transitioning_init(FIN_WAIT_1, (action_f)tcp_connection_SYN_RECEIVED_to_FIN_WAIT_1);
 		case receiveRST:
 			/* your connection was refused */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);	
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);		
 		default:
 			return transitioning_init(SYN_RECEIVED, (action_f)tcp_connection_invalid_transition);
 	}
@@ -85,14 +92,16 @@ transitioning_t syn_received_next_state(transition_e t){
 transitioning_t established_next_state(transition_e t){
 	switch(t){
 		case receiveFIN:
-			/* send ACK */
-			return transitioning_init(CLOSE_WAIT, (action_f)tcp_connection_ESTABLISHED_to_CLOSE_WAIT);
+			/* they closed on us -- we are now passive closers: send ACK */
+			return transitioning_init(CLOSE_WAIT, (action_f)tcp_connection_transition_CLOSE_WAIT);
 		case CLOSE:
 			/* send FIN */
 			return transitioning_init(FIN_WAIT_1, (action_f)tcp_connection_ESTABLISHED_to_FIN_WAIT_1);
 		case receiveRST:
 			/* reset */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);	
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);		
 		default:
 			return transitioning_init(ESTABLISHED, (action_f)tcp_connection_invalid_transition);
 	}
@@ -112,7 +121,7 @@ transitioning_t fin_wait_1_next_state(transition_e t){
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);			
 		case ABORT:
 			/* we call this transition when they never ack our fin */
-			return transitioning_init(CLOSED, (action_f)tcp_connection_ABORT);
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);
 		
 		default:
 			return transitioning_init(FIN_WAIT_1, (action_f)tcp_connection_invalid_transition);
@@ -134,6 +143,8 @@ transitioning_t fin_wait_2_next_state(transition_e t){
 		case receiveRST:
 			/* reset */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);			
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);				
 		default:
 			return transitioning_init(FIN_WAIT_2, (action_f)tcp_connection_invalid_transition);
 	}
@@ -145,10 +156,15 @@ transitioning_t close_wait_next_state(transition_e t){
 			/* RFC seems to contradict diagram :   Queue this request until all preceding SENDs have been
       		segmentized; then send a FIN segment, enter CLOSING state. */
 			/* send FIN */
-			return transitioning_init(LAST_ACK, (action_f)tcp_connection_CLOSE_WAIT_to_LAST_ACK);
+			return transitioning_init(LAST_ACK, (action_f)tcp_connection_CLOSE_WAIT_to_LAST_ACK);		
+		case receiveFIN:
+			/* Jeez another FIN? They must not have gotten our ack -- guess we've got to resend ack */
+			return transitioning_init(CLOSE_WAIT, (action_f)tcp_connection_transition_CLOSE_WAIT);		
 		case receiveRST:
 			/* reset */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);	
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);		
 		default:
 			return transitioning_init(CLOSE_WAIT, (action_f)tcp_connection_invalid_transition);
 	}
@@ -160,12 +176,23 @@ transitioning_t last_ack_next_state(transition_e t){
 			/* must be ACK of your FIN */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_LAST_ACK_to_CLOSED);
 		
+		case receiveFIN:
+			/* RFC: Remain in the LAST-ACK state.  Is this a bad idea?? They want to close and so do we! 
+				So here I'm resending the FIN */
+			return transitioning_init(LAST_ACK, (action_f)tcp_connection_send_fin);
 		case CLOSE: 
 			/*RFC: Respond with "error:  connection closing". */
 			return transitioning_init(TIME_WAIT, (action_f)tcp_connection_CLOSING_error);
 		case receiveRST:
 			/* reset */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);				
+		case TIME_ELAPSED:
+			/* we'll call this transition in the thread after user time out because:
+				RFC: If an ACK is not forthcoming, after the user timeout the connection is 
+				aborted and the user is told.*/
+			return transitioning_init(CLOSED, (action_f)tcp_connection_ABORT);		
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);				
 		default:
 			return transitioning_init(LAST_ACK, (action_f)tcp_connection_invalid_transition);
 	}
@@ -182,8 +209,9 @@ transitioning_t time_wait_next_state(transition_e t){
 		case receiveFIN:
 			/* retransmission of the remote FIN.  Acknowledge it, and restart
           	the 2 MSL timeout. */
-          	return transitioning_init(TIME_WAIT, (action_f)tcp_connection_transition_TIME_WAIT); 
-		
+          	return transitioning_init(TIME_WAIT, (action_f)tcp_connection_FIN_WAIT_2_to_TIME_WAIT); 
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);		
 		case receiveRST:
 			/* reset */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);			
@@ -196,15 +224,18 @@ transitioning_t closing_next_state(transition_e t){
 	switch(t){
 		case receiveACK:
 			/* must be ACK of your FIN */
-			return transitioning_init(TIME_WAIT, (action_f)tcp_connection_invalid_transition);
-		
+			return transitioning_init(TIME_WAIT, (action_f)tcp_connection_CLOSING_to_TIME_WAIT);
+		case receiveFIN:
+			/* Remain in the CLOSE-WAIT state.  Maybe they didn't get our ack?  Here we resend it */
+			return transitioning_init(CLOSING, (action_f)tcp_connection_FIN_WAIT_1_to_CLOSING);
 		case CLOSE: 
 			/*RFC: Respond with "error:  connection closing". */
 			return transitioning_init(TIME_WAIT, (action_f)tcp_connection_CLOSING_error);
 		case receiveRST:
 			/* reset */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);			
-			
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);			
 		default:
 			return transitioning_init(CLOSING, (action_f)tcp_connection_invalid_transition);
 	}
