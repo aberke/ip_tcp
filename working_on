@@ -255,7 +255,15 @@ alex's questions for tas:
 	
 TODO: TO HANDLE:
 
+	put in closing boolean so that as soon as close requested it can be handled
+
 	put user time outs into the closing protocol
+	
+	recvfile
+	
+	simultaneous open thing
+	
+	deal with an interface going down
 
 	receiveRST when in ESTABLISHED state	
 	handle all closed by RST cases

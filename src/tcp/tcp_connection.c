@@ -75,6 +75,7 @@ struct tcp_connection{
 
 	pthread_t read_send_thread; //has thread that handles the my_to_read queue and window timeouts in a loop
 
+	int closing; //have we requested to close yet? 0 when either in CLOSED state of CLOSE requested, 1 otherwise
 	int running; //are we running still?  1 for true, 0 for false -- indicates to thread to shut down
 };
 
@@ -104,6 +105,7 @@ tcp_connection_t tcp_connection_init(tcp_node_t tcp_node, int socket, bqueue_t *
 	tcp_connection_t connection = (tcp_connection_t)malloc(sizeof(struct tcp_connection));
 	
 	connection->tcp_node = tcp_node;
+	connection->closing = 1; //start off in CLOSED state when initialized
 	connection->running = 1;
 	
 	/* Set what it needs in order to interact with tcp_api */
@@ -1170,7 +1172,12 @@ accept_queue_data_t tcp_connection_accept_queue_dequeue(tcp_connection_t connect
     accept_queue_data_t data;
     int ret;
 
-    while((connection->running)&&(tcp_node_running(connection->tcp_node))){ 
+    while((!(connection->closing))&&(connection->running)&&(tcp_node_running(connection->tcp_node))){ 
+        
+        if(tcp_connection_get_state(connection) != LISTEN){ //this might be redundant with the closing boolean
+        	// we should only be dequeuing like this if we're in the LISTEN state 
+        	return NULL;
+        }
         
         gettimeofday(&now, NULL);   
         wait_cond.tv_sec = now.tv_sec+0;
@@ -1184,7 +1191,7 @@ accept_queue_data_t tcp_connection_accept_queue_dequeue(tcp_connection_t connect
         if(ret!= -ETIMEDOUT)
             break;
     }
-    if(ret != 0)
+    if((ret != 0) || (tcp_connection_get_state(connection) != LISTEN) || (connection->closing))
         return NULL;
 
 	return data;

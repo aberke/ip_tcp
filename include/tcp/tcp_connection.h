@@ -7,10 +7,6 @@
 #include "send_window.h"
 #include "recv_window.h"
 #include "state_machine.h"
-
-/* for tcp_packet_data_t HA!
-#include "ip_utils.h"
-#include "tcp_utils.h" */
 #include "tcp_node.h"
 #include "int_queue.h"
 
@@ -30,7 +26,7 @@
         RETRANSMISSION TIMEOUT
         TIME-WAIT TIMEOUT */
 
-#define USER_TIMEOUT 300 //meh lets do 5 minutes
+#define USER_TIMEOUT 300 //lets do 5 minutes
 #define RETRANSMISSION_TIMEOUT 2 //replaced SYN_TIMEOUT -- 2 seconds at first, and doubles each time next syn_sent
 
 /* Must wait for 2MSL during time-wait */

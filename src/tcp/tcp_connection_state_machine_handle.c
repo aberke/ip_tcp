@@ -19,6 +19,10 @@ int tcp_connection_in_closing_state(tcp_connection_t connection){
 /* 0o0o0oo0o0o0o0o0o0o0o0o0o0o0o0o0o0o Establishing Connection 0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o */
 
 int tcp_connection_passive_open(tcp_connection_t connection){
+	
+	/* We're no longer in CLOSED state */
+	connection->closing = 0;
+	
 	return state_machine_transition(connection->state_machine, passiveOPEN);	
 }
 
@@ -87,6 +91,9 @@ int tcp_connection_LISTEN_to_SYN_RECEIVED(tcp_connection_t connection){
 /* this function should actually be called ONLY by tcp_node, because 
 	don't we need to first verify that this is a valid IP? */
 int tcp_connection_active_open(tcp_connection_t connection, uint32_t ip_addr, uint16_t port){
+
+	/* We're no longer in CLOSED state */
+	connection->closing = 0;
 
 	/* set the remote and then transition */
 	tcp_connection_set_remote(connection, ip_addr, port);
@@ -330,8 +337,21 @@ int tcp_connection_LAST_ACK_to_CLOSED(tcp_connection_t connection){
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////	
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////	
 /*****aCaCaCaCaCaCaCaCaCaCaCaaCaCCaCaC Active Close aCaCaCaCaCaCaCaCaCaCaCaCaCaaCaCaCaCaCaC**********/
+
+// before we call CLOSE we need to set this boolean!
+void tcp_connection_set_close(tcp_connection_t connection){
+	connection->closing = 1;
+}
+// boolean 1 if closing, 0 otherwise
+int tcp_connection_get_close_boolean(tcp_connection_t connection){
+	return connection->closing;
+}	
 // called when user commands CLOSE
 int tcp_connection_close(tcp_connection_t connection){
+	
+	/* We're going into CLOSED state */
+	connection->closing = 1;	
+	
 	connection->syn_fin_count = 0;
 	return state_machine_transition(connection->state_machine, CLOSE);
 }	
@@ -427,6 +447,9 @@ int tcp_connection_TIME_WAIT_to_CLOSED(tcp_connection_t connection){
 
 int tcp_connection_LISTEN_to_CLOSED(tcp_connection_t connection){	
 	print(("LISTEN --> CLOSED"), STATES_PRINT);
+
+	/* We're going into CLOSED state */
+	connection->closing = 1;
 	
 	/* RFC:   Any outstanding RECEIVEs are returned with "error:  closing"
       responses.  Delete TCB, enter CLOSED state, and return. */
@@ -452,6 +475,9 @@ int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection){
 
 	print(("SYN_SENT --> CLOSED"), STATES_PRINT);
 
+	/* We're going into CLOSED state */
+	connection->closing = 1;
+
 	if(connection->send_window)
 		send_window_destroy(&(connection->send_window));
 	if(connection->receive_window)
@@ -467,6 +493,10 @@ int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection){
 	ip addresses) */
 int tcp_connection_CLOSED_by_RST(tcp_connection_t connection){
 	print(("CLOSED by RST"), STATES_PRINT);
+	
+	/* We're going into CLOSED state */
+	connection->closing = 1;	
+	
 	if(connection->send_window)
 		send_window_destroy(&(connection->send_window));
 	if(connection->receive_window)
@@ -482,7 +512,7 @@ int tcp_connection_CLOSED_by_RST(tcp_connection_t connection){
 // and not pthread_cond_wait indefinitely?
 int tcp_connection_CLOSING_error(tcp_connection_t connection){
 	/*RFC: Respond with "error:  connection closing". */
-	puts("TODO: make transition to handle: RFC: Respond with 'error:  connection closing'");
+	puts("Error:  connection closing");
 	tcp_connection_api_signal(connection, -EBADF); //fd isn't a valid open file descriptor.
 	return -1;
 }
@@ -491,7 +521,10 @@ int tcp_connection_CLOSING_error(tcp_connection_t connection){
 
 // sometimes we just need to give up.  eg ABORT transition called in thread after fin never acked
 int tcp_connection_ABORT(tcp_connection_t connection){
-
+	
+	/* We're going into CLOSED state */
+	connection->closing = 1;
+	
 	connection->syn_fin_count = 0;
 
 	if(connection->send_window)

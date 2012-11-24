@@ -1,3 +1,18 @@
+********************************** TCP ********************************************************************
+
+
+HOW TO RUN:
+The make-file has a lot of targets in it for help with debugging and running the program. 
+In order to build everything, type make build/make rebuild (which will clean first). 
+In order to run the tests, type make test. 
+To run a single node (A.lnx) through valgrind, type make valgrind. 
+
+
+
+QUITTING NODE:
+	We do not clean-close.  We send an rst before deleting the TCB from the node.
+
+
 DESIGN-SKETCH:
 
 [[ packet in ]]
@@ -47,8 +62,16 @@ DESIGN-SKETCH:
 	-> the rest of the packet is destroyed
 		at the bottom of this function
 
+********************************** End of TCP ********************************************************************
+///////////////////////////////////////////////////////////////////////////////////////////
+********************************** IP ********************************************************************
+
 HOW TO RUN:
-The make-file has a lot of targets in it for help with debugging and running the program. In order to build everything, type make build/make rebuild (which will clean first). In order to run the tests, type make test. To run a single node (A.lnx) through valgrind, type make valgrind. To run the network (loop.net), type make runNetwork. In order to change any of these default args, just go into the makefile and change the variables titled DEFAULT_ARGS, and DEFAULT_NETWORK_ARGS.
+The make-file has a lot of targets in it for help with debugging and running the program. 
+In order to build everything, type make build/make rebuild (which will clean first). 
+In order to run the tests, type make test. 
+To run a single node (A.lnx) through valgrind, type make valgrind. 
+To run the network (loop.net), type make runNetwork. In order to change any of these default args, just go into the makefile and change the variables titled DEFAULT_ARGS, and DEFAULT_NETWORK_ARGS.
 
 
 ARCHITECTURE (design decisions):

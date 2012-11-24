@@ -409,79 +409,83 @@ returns new socket handle on success or negative number on failure
 int v accept(int socket, struct in addr *node); */
 int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 
-	while(1){ //if first connection doesn't become all the way ESTABLISHED, want to repeat
-
 	tcp_connection_t listening_connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(listening_connection == NULL)
 		return -EBADF;
 
-	/* Lock up api on this connection -- BLOCK  -- really we don't want to 
-		be able to call this if another api call in process */
-	tcp_connection_api_lock(listening_connection);
+	while(!tcp_connection_get_close_boolean(listening_connection)){ //if first connection doesn't become all the way ESTABLISHED, want to repeat
 	
-	/* listening connection must actually be listening */
-	if(tcp_connection_get_state(listening_connection) != LISTEN){
-		tcp_connection_api_unlock(listening_connection);
-		return -EINVAL; //Socket is not listening for connections, or addrlen is invalid (e.g., is negative).
-	}	
-
-	/* calls on the listening_connection to dequeue its triple and node creates new connection with information
-	 new socket is the socket assigned to that new connection.  This connection will then go on to finish
-	 the three-way handshake to reach ESTABLISHED state */
-	/* THIS CALL IS BLOCKING -- because the accept_queue is a bqueue -- call returns when accept_data_t dequeued */
-	tcp_connection_t new_connection = tcp_node_connection_accept(tcp_node, listening_connection);	
-	if(new_connection == NULL){
-		// NULL is returned when we've reached max number of file descriptors
-		tcp_connection_api_unlock(listening_connection);
-		return -ENFILE;	//The system limit on the total number of open files has been reached.
-	}
-	// set state of this new_connection to LISTEN so that we can send it through transition LISTEN_to_SYN_RECEIVED
-	tcp_connection_set_state(new_connection, LISTEN);
-	
-	// have connection transition from LISTEN to SYN_RECEIVED
-	if(tcp_connection_state_machine_transition(new_connection, receiveSYN)<0)
-		CRASH_AND_BURN("Alex and Neil go debug: tcp_connection_state_machine_transition(new_connection, receiveSYN)) returned negative value in tcp_node_connection_accept");
-	
-	//now set addr appropriately
-	addr->s_addr = tcp_connection_get_remote_ip(new_connection);
-	
-	/* Now wait until connection ESTABLISHED 
-		when established connection should call tcp_api_accept_help which will signal the accept_cond */
-	int ret = tcp_connection_api_result(new_connection); // if successful = new_connection->socket_id;
-	if(ret == SIGNAL_DESTROYING){
-		// is there anything else we can do here?
-		tcp_connection_api_unlock(listening_connection);
-		return SIGNAL_DESTROYING;
-	}
-	if(ret == API_TIMEOUT){ //changing from SYN_RECEIVED to ESTABLISHED timed out
-		// want to close it but don't want to block -- let's thread the close??! (which will also remove it)
-		tcp_api_args_t args = tcp_api_args_init();
-		args->node = tcp_node;
-		args->socket = socket;
-		args->function_call = "v_close";		
-		tcp_node_thread(tcp_node, tcp_api_close_entry, args);
+		/* Lock up api on this connection -- BLOCK  -- really we don't want to 
+			be able to call this if another api call in process */
+		// The problem with blocking here is that we can't close the connection while waiting for connections to queue
+		tcp_connection_api_lock(listening_connection);
 		
-		tcp_connection_api_unlock(listening_connection);
-		continue; //try again
-	}
-	if(ret == REMOTE_CONNECTION_CLOSED){	//Instead of sending back ack they sent back fin
-		// lets close this connection responsibly and try again
-		tcp_api_args_t args = tcp_api_args_init();
-		args->node = tcp_node;
-		args->socket = socket;
-		args->function_call = "v_close";		
-		tcp_node_thread(tcp_node, tcp_api_close_entry, args);
-		
-		tcp_connection_api_unlock(listening_connection);
-		continue; //try again
-	}	
-	tcp_connection_api_unlock(listening_connection);
-
-	/* Our connection has been established! 
-	TODO:HANDLE bad ret value */
+		/* listening connection must actually be listening */
+		if(tcp_connection_get_state(listening_connection) != LISTEN){
+			tcp_connection_api_unlock(listening_connection);
+			return -EINVAL; //Socket is not listening for connections, or addrlen is invalid (e.g., is negative).
+		}	
 	
-	return ret;	
+		/* calls on the listening_connection to dequeue its triple and node creates new connection with information
+		 new socket is the socket assigned to that new connection.  This connection will then go on to finish
+		 the three-way handshake to reach ESTABLISHED state */
+		/* THIS CALL IS BLOCKING -- because the accept_queue is a bqueue -- call returns when accept_data_t dequeued */
+		tcp_connection_t new_connection = tcp_node_connection_accept(tcp_node, listening_connection);	
+		if(new_connection == NULL){
+			// NULL is returned when we've reached max number of file descriptors
+			tcp_connection_api_unlock(listening_connection);
+			return -ENFILE;	//The system limit on the total number of open files has been reached.
+		}
+		
+		
+		// set state of this new_connection to LISTEN so that we can send it through transition LISTEN_to_SYN_RECEIVED
+		tcp_connection_set_state(new_connection, LISTEN);
+		
+		// have connection transition from LISTEN to SYN_RECEIVED
+		if(tcp_connection_state_machine_transition(new_connection, receiveSYN)<0)
+			CRASH_AND_BURN("Alex and Neil go debug: tcp_connection_state_machine_transition(new_connection, receiveSYN)) returned negative value in tcp_node_connection_accept");
+		
+		//now set addr appropriately
+		addr->s_addr = tcp_connection_get_remote_ip(new_connection);
+		
+		/* Now wait until connection ESTABLISHED 
+			when established connection should call tcp_api_accept_help which will signal the accept_cond */
+		int ret = tcp_connection_api_result(new_connection); // if successful = new_connection->socket_id;
+		if(ret == SIGNAL_DESTROYING){
+			// is there anything else we can do here?
+			tcp_connection_api_unlock(listening_connection);
+			return SIGNAL_DESTROYING;
+		}
+		else if(ret == API_TIMEOUT){ //changing from SYN_RECEIVED to ESTABLISHED timed out
+			// want to close it but don't want to block -- let's thread the close??! (which will also remove it)
+			tcp_api_args_t args = tcp_api_args_init();
+			args->node = tcp_node;
+			args->socket = socket;
+			args->function_call = "v_close";		
+			tcp_node_thread(tcp_node, tcp_api_close_entry, args);
+			
+			tcp_connection_api_unlock(listening_connection);
+			continue; //try again
+		}
+		else if(ret == REMOTE_CONNECTION_CLOSED){	//Instead of sending back ack they sent back fin
+			// lets close this connection responsibly and try again
+			tcp_api_args_t args = tcp_api_args_init();
+			args->node = tcp_node;
+			args->socket = socket;
+			args->function_call = "v_close";		
+			tcp_node_thread(tcp_node, tcp_api_close_entry, args);
+			
+			tcp_connection_api_unlock(listening_connection);
+			continue; //try again
+		}	
+		tcp_connection_api_unlock(listening_connection);
+	
+		/* Our connection has been established! 
+		TODO:HANDLE bad ret value */
+		
+		return ret;	
  	} //end of while loop which allowed us to call continue
+ 	return 0; //I guess someone tried to close
 }
 // Not for driver use -- just for our use when we only want to accept once
 void* tcp_api_accept_entry(void* _args){
@@ -557,10 +561,7 @@ int tcp_api_close(tcp_node_t tcp_node, int socket){
 	if(connection == NULL){
 		return -EBADF;
 	}
-	/* It's okay to lock the api for this entire time because once we close, its not like we can call anything
-		else on this socket anyhow -- we killed it */	
-	tcp_connection_api_lock(connection);
-
+	/* NOTE ON LOCKING: We lock in shutdown -- we need to be able to set the closing boolean before we lock! */
 	int ret;
 		
 	// CLOSE and close reading part
@@ -572,7 +573,6 @@ int tcp_api_close(tcp_node_t tcp_node, int socket){
 
 	/* invalidate socket (remove from kernal) only after we unlock -- otherwise thats a logical error because
 		calling unlock on a mutex we destroyed */	
-	tcp_connection_api_unlock(connection);
 	tcp_node_remove_connection_kernal(tcp_node, connection);	
 	
 	if(ret < 0) //error
@@ -593,7 +593,7 @@ void* tcp_api_close_entry(void* _args){
 		
 		Also, for calls like sendfile we want to be able to use close, and might as well lock there too */	
 	
-	// THEREFORE WE LOCK IN THE API CALL
+	// THEREFORE WE LOCK IN THE API SHUTDOWN CALL
 		
 	int ret = tcp_api_close(args->node, args->socket);
 
@@ -612,26 +612,39 @@ int tcp_api_shutdown(tcp_node_t tcp_node, int socket, int type){
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(connection == NULL)
 		return -EBADF;
+		
 	int ret;
 	
 	if(type == 1){
+		// sets the closing boolean now so that locking accept can unlock and return and then we can close yay
+		tcp_connection_set_close(connection);
+		// okay now we're ready to lock
+		tcp_connection_api_lock(connection);
 		ret = tcp_connection_close(connection);		
+		tcp_connection_api_unlock(connection);
 		if(ret < 0) //error
 			return ret;	
 		return 0; //success
 	}
 	if(type == 2){
 		/* just close reading capability */
+		tcp_connection_api_lock(connection);
 		tcp_connection_close_recv_window(connection);
+		tcp_connection_api_unlock(connection);
 		if(ret < 0) //error
 			return ret;
 		return 0; //success
 	}
 	if(type == 3){
+		// sets the closing boolean now so that locking accept can unlock and return and then we can close yay
+		tcp_connection_set_close(connection);
+		// okay now we're ready to lock
+		tcp_connection_api_lock(connection);
 		/* close reading capability */
 		tcp_connection_close_recv_window(connection);
 		/* CLOSE */
 		ret = tcp_connection_close(connection);
+		tcp_connection_api_unlock(connection);
 		if(ret < 0)
 			return ret;
 		return 0; //success
@@ -654,10 +667,8 @@ void* tcp_api_shutdown_entry(void* _args){
 		_return(args,-EBADF);
 		return NULL;
 	}
-
-	tcp_connection_api_lock(connection);	
+	
 	int ret = tcp_api_shutdown(args->node, args->socket, type);
-	tcp_connection_api_unlock(connection);
 	
 	_return(args, ret);
 	return NULL;

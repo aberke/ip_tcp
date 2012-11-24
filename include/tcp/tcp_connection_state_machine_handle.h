@@ -69,6 +69,12 @@ int tcp_connection_CLOSE_WAIT_to_LAST_ACK(tcp_connection_t connection);
 int tcp_connection_LAST_ACK_to_CLOSED(tcp_connection_t connection);
 
 /*****aCaCaCaCaCaCaCaCaCaCaCaaCaCCaCaC Active Close aCaCaCaCaCaCaCaCaCaCaCaCaCaaCaCaCaCaCaC**********/
+
+// before we call CLOSE we need to set this boolean!
+void tcp_connection_set_close(tcp_connection_t connection);
+// boolean 1 if closing, 0 otherwise
+int tcp_connection_get_close_boolean(tcp_connection_t connection);
+
 // called when user commands CLOSE
 int tcp_connection_close(tcp_connection_t connection);
 
