@@ -258,8 +258,6 @@ alex's questions for tas:
 	
 TODO: TO HANDLE:
 
-	put in closing boolean so that as soon as close requested it can be handled
-
 	put user time outs into the closing protocol
 	
 	recvfile
@@ -278,7 +276,7 @@ TODO: TO HANDLE:
 		do we want to stop that infinite thread loop in transition TIME_WAIT_to_CLOSED
 			- like we could set connection->running = 0 and just restart thread if connect/listen called
 	
-ssh key: 
+ssh key: ssh-add it really isn't that hard
 		
 
 	
