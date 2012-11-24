@@ -334,6 +334,7 @@ void* tcp_api_read_entry(void* _args){
 		// was there nothing to read, or did connection close? let's check
 		if(state == CLOSED || state == CLOSE_WAIT || state == LAST_ACK){
 			puts("Remote Connection Closed");
+			free(to_read);
 			//inform application layer that we need to close -- is this the right way to do it?
 			_return(args,0);	//return 0?
 			return NULL;
