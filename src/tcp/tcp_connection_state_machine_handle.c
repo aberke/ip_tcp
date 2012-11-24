@@ -519,23 +519,6 @@ int tcp_connection_CLOSING_error(tcp_connection_t connection){
 
 /********** End of State Changing Functions *******/
 
-// sometimes we just need to give up.  eg ABORT transition called in thread after fin never acked
-int tcp_connection_ABORT(tcp_connection_t connection){
-	
-	/* We're going into CLOSED state */
-	connection->closing = 1;
-	
-	connection->syn_fin_count = 0;
-
-	if(connection->send_window)
-		send_window_destroy(&(connection->send_window));
-	if(connection->receive_window)
-		recv_window_destroy(&(connection->receive_window));
-	
-	printf("[Socket %d]: Connection Aborted\n", connection->socket_id);
-	tcp_connection_api_signal(connection, -ETIMEDOUT);
-	return 1;	
-}
 
 // sometimes RFC specifies that if in a given state an action should be ignored
 int tcp_connection_NO_ACTION_transition(tcp_connection_t connection){

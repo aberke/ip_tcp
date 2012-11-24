@@ -99,6 +99,7 @@ int tcp_connection_TIME_WAIT_to_CLOSED(tcp_connection_t connection);
 int tcp_connection_CLOSED_by_RST(tcp_connection_t connection);
 
 // sometimes we just need to give up.  eg ABORT transition called in thread after fin never acked
+/* send rst and transition to closed by ABORT */
 int tcp_connection_ABORT(tcp_connection_t connection);
 
 // there are times when the CLOSE call is illegal given the state - we should reflect this to user, yes? 

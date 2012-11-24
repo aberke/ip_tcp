@@ -1096,7 +1096,7 @@ void *_handle_read_send(void *tcpconnection){
 			if(time_elapsed > WINDOW_DEFAULT_TIMEOUT){ // lets use same timeout as send_window
 				if((connection->syn_fin_count)==SYN_COUNT_MAX){
 					// lets give up on them ever acking it
-					state_machine_transition(connection->state_machine, ABORT);
+					tcp_connection_ABORT(connection);
 				}
 				else
 					tcp_connection_send_fin(connection);	
@@ -1333,44 +1333,93 @@ int tcp_connection_api_result(tcp_connection_t connection){
 	else 
 		return ret;
 }
+// sometimes we just need to give up.  eg ABORT transition called in thread after fin never acked
+/* send rst and transition to closed by ABORT */
+int tcp_connection_ABORT(tcp_connection_t connection){
+	
+	/* We're going into CLOSED state */
+	connection->closing = 1;
+	
+	connection->syn_fin_count = 0;
+	
+	state_e state = state_machine_get_state(connection->state_machine);
+	// if state one of the following, RFC says we should send rst
+	if(state==SYN_RECEIVED || state==ESTABLISHED || state==FIN_WAIT_1 || state==FIN_WAIT_2 || state == CLOSE_WAIT){
+ 		//send rst
+		tcp_connection_refuse_connection(connection, NULL);
+	}
+	
+	// transition
+	state_machine_transition(connection->state_machine, ABORT);
+
+	if(connection->receive_window)
+		recv_window_destroy(&(connection->receive_window));
+	
+	printf("[Socket %d]: Connection Aborted\n", connection->socket_id);
+	tcp_connection_api_signal(connection, -ETIMEDOUT);
+	return 1;	
+}
 
 /* refuse the connection (send a RST) */
 void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_data_t packet){
-/*  
-	RFC 793: pg 35
-	If the connection does not exist (CLOSED) then a reset is sent
-    in response to any incoming segment except another reset.	****
-    In particular, SYNs addressed to a non-existent connection are rejected
-    by this means.
-*/  
-	struct tcphdr* incoming_header = (struct tcphdr*)packet->packet;
 
-	if(tcp_rst_bit(incoming_header))
-		return; //by **** a few lines right above
+ 	if(state_machine_get_state(connection->state_machine) == CLOSED){
+ 		//this is a fictional TCB
+ 		return;
+ 	}
+ 	
+ 	struct tcphdr* outgoing_header;
+ 	
+ 	/* We also want to be able to use this when instead of receiving a bad packet, we want our
+ 		connection to abort - so we send an RST */
+ 	if(packet == NULL){
+		outgoing_header = tcp_header_init(0); 		
 
-	struct tcphdr* outgoing_header = tcp_header_init(0);
+		/* PORTS */
+		tcp_set_dest_port(outgoing_header, connection->remote_addr.virt_port);
+		tcp_set_source_port(outgoing_header, connection->local_addr.virt_port);
 
-	/* PORTS */
-	tcp_set_dest_port(outgoing_header, tcp_source_port(incoming_header));
-	tcp_set_source_port(outgoing_header, tcp_dest_port(incoming_header));
+		/* SEQNUM */
+		tcp_set_seq(outgoing_header, send_window_get_next_seq(connection->send_window));
+		
+		/* ACK  not specified by RST for abort call */
+	}
+	else{			
+		/*  RFC 793: pg 35
+		If the connection does not exist (CLOSED) then a reset is sent
+		in response to any incoming segment except another reset.	****
+		In particular, SYNs addressed to a non-existent connection are rejected
+		by this means. */  
+		struct tcphdr* incoming_header = (struct tcphdr*)packet->packet;
+	
+		if(tcp_rst_bit(incoming_header))
+			return; //by **** a few lines right above
+	
+		outgoing_header = tcp_header_init(0);
+	
+		/* PORTS */
+		tcp_set_dest_port(outgoing_header, tcp_source_port(incoming_header));
+		tcp_set_source_port(outgoing_header, tcp_dest_port(incoming_header));
+	
+		/* SEQNUM */
+			/*If the incoming segment has an ACK field, the reset takes its
+			sequence number from the ACK field of the segment, otherwise the
+			reset has sequence number zero and the ACK field is set to the sum
+			of the sequence number and segment length of the incoming segment.
+			The connection remains in the CLOSED state.*/
+		if(tcp_ack_bit(incoming_header))
+			tcp_set_seq(outgoing_header, tcp_ack(incoming_header));
+		else
+			tcp_set_seq(outgoing_header, 0);
+	
+		/* ACK */
+		int seg_length = packet->packet_size - tcp_offset_in_bytes(incoming_header);
+		tcp_set_ack(outgoing_header, (tcp_seqnum(outgoing_header)+seg_length));
+	}
+
 
 	/* RST */
 	tcp_set_rst_bit(outgoing_header);
-	
-	/* SEQNUM */
-		/*If the incoming segment has an ACK field, the reset takes its
-		sequence number from the ACK field of the segment, otherwise the
-		reset has sequence number zero and the ACK field is set to the sum
-		of the sequence number and segment length of the incoming segment.
-		The connection remains in the CLOSED state.*/
-	if(tcp_ack_bit(incoming_header))
-		tcp_set_seq(outgoing_header, tcp_ack(incoming_header));
-	else
-		tcp_set_seq(outgoing_header, 0);
-
-	/* ACK */
-	int seg_length = packet->packet_size - tcp_offset_in_bytes(incoming_header);
-	tcp_set_ack(outgoing_header, (tcp_seqnum(outgoing_header)+seg_length));
 
 	/* CHECKSUM */
 	tcp_utils_add_checksum(outgoing_header, tcp_offset_in_bytes(outgoing_header), connection->local_addr.virt_ip, connection->remote_addr.virt_ip, TCP_DATA);
@@ -1378,8 +1427,8 @@ void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_da
 	tcp_packet_data_t packet_data = tcp_packet_data_init(
 										(char*)outgoing_header, 
 										tcp_offset_in_bytes(outgoing_header)+0,
-										tcp_connection_get_local_ip(connection),
-										tcp_connection_get_remote_ip(connection));
+										connection->local_addr.virt_ip,
+										connection->remote_addr.virt_ip);
 
 	if(tcp_connection_queue_ip_send(connection, packet_data) < 0){
 		puts("Something wrong with sending tcp_packet to_send queue--How do we want to handle this??");	

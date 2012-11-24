@@ -41,9 +41,7 @@ typedef struct tcp_connection* tcp_connection_t;
 tcp_connection_t tcp_connection_init(tcp_node_t tcp_node, int socket, bqueue_t *to_send);
 void tcp_connection_destroy(tcp_connection_t connection);
 
-/* TODO: Start using this in our implemenation:
-give to tcp_connection:
-
+/*
 	tcp_connection	
 		int ret_value; // return value for the calling tcp_api function
 		pthread_mutex_t api_mutex
@@ -161,7 +159,9 @@ void tcp_connection_push_data(tcp_connection_t connection, void* to_write, int n
 // queues chunks off from send_window and handles sending them for as long as send_window wants to send more chunks
 int tcp_connection_send_next(tcp_connection_t connection);
 void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_data_t data);
-
+// sometimes we just need to give up.  eg ABORT transition called in thread after fin never acked
+/* send rst and transition to closed by ABORT */
+int tcp_connection_ABORT(tcp_connection_t connection);
 // called by v_write
 int tcp_connection_send_data(tcp_connection_t connection, const unsigned char* to_write, int num_bytes);
 void tcp_connection_ack(tcp_connection_t connection, uint32_t ack);
