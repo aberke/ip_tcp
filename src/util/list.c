@@ -191,13 +191,15 @@ void plain_list_remove(plain_list_t list, plain_list_el_t el){
 	list->length--;
 	if(!el->prev){
 		list->head = el->next;
-        if(el->next)
+        if(el->next){
             el->next->prev = NULL;
+        }
 		free(el);
 	}
 	else{
 		el->prev->next = el->next;
-		el->next->prev = el->prev;
+		if(el->next)
+			el->next->prev = el->prev;
 		free(el);
 	}
 	pthread_mutex_unlock(&(list->lock));

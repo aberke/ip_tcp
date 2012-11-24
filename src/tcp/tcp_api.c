@@ -26,7 +26,10 @@ int tcp_api_args_destroy(tcp_api_args_t* args){
 	if(connection){
 		//lets cancel any blocks on the api signal so that shutting down doesn't take a while
 		tcp_connection_api_cancel(connection); 
+		/* unlock */
+		tcp_connection_api_unlock(connection);
 	}
+		
     pthread_join((*args)->thread, NULL);
     int result = (*args)->result;
 	/* For this not to go wrong we had better set args->addr to NULL at first.  See function init() */
@@ -139,7 +142,6 @@ void* tcp_api_sendfile_entry(void* _args){
 	FILE* f = fopen(args->buffer, "r");
 	if(!f){
 		fprintf(stderr, "Unable to open given file: %s\n", args->buffer);
-		tcp_connection_api_unlock(connection);
 		_return(args, -EINVAL);	//Invalid argument passed
 		return NULL;
 	}
@@ -148,7 +150,6 @@ void* tcp_api_sendfile_entry(void* _args){
 	int ret = tcp_api_connect(args->node, args->socket, args->addr, args->port);
 	if(ret<0){
 		args->function_call = "sendfile: v_socket()";
-		tcp_connection_api_unlock(connection);
 		_return(args, ret);
 		return NULL;		
  	}
@@ -158,7 +159,6 @@ void* tcp_api_sendfile_entry(void* _args){
 		ret = tcp_connection_send_data(connection, (unsigned char*)input_line, strlen(input_line));
 		if (ret < 0){
 			args->function_call = "sendfile: v_write()";
-			tcp_connection_api_unlock(connection);
 			_return(args, ret);
 			return NULL;
 		}
@@ -166,8 +166,7 @@ void* tcp_api_sendfile_entry(void* _args){
 	
 	//clean up
 	fclose(f);
-	tcp_connection_api_unlock(connection);
-	// close connection we opened -- this will also call tcp_connection_api_lock/unlock and block
+	// close connection we opened 
 	tcp_api_close(args->node, args->socket); //locks and blocks but we don't need this anymore anyhow
 	/* and use my macro to return it 
 		(first arg is size of retal) */
@@ -200,9 +199,6 @@ void* tcp_api_connect_entry(void* _args){
 	
 	/* then get the result */
 	int ret = tcp_api_connect(args->node, args->socket, args->addr, args->port);
-	
-	/* unlock */
-	tcp_connection_api_unlock(connection);
 
 	/* and use my macro to return it 
 		(first arg is size of retal) */
@@ -319,6 +315,8 @@ void* tcp_api_read_entry(void* _args){
 		_return(args,-EBADF);
 		return NULL;
 	}
+	tcp_connection_api_lock(connection);
+	
 	/* I think this is the correct place to check state because if we're in the connect/accept state for example,
 		we might already be blocking and then it wouldn't make sense to call lock on the connection */
 
@@ -328,15 +326,11 @@ void* tcp_api_read_entry(void* _args){
 	
 	state_e state = tcp_connection_get_state(connection);
 	if(state == CLOSED || state == CLOSE_WAIT || state == LAST_ACK){
-		tcp_connection_api_unlock(connection);
 		puts("Remote Connection Closed");
 		//inform application layer that we need to close -- is this the right way to do it?
 		_return(args,0);	//return 0?
 		return NULL;
 	}
-	
-	/* we'll use the macro thread_return in order to return a value */
-	tcp_connection_api_lock(connection);
 	
 	//tacked on an extra 1 for null character for pretty print
 	char* to_read = (char*)malloc(sizeof(char)*(args->num + 1));
@@ -347,7 +341,6 @@ void* tcp_api_read_entry(void* _args){
 	if(ret == 0){ 
 		// was there nothing to read, or did connection close? let's check
 		if(state == CLOSED || state == CLOSE_WAIT || state == LAST_ACK){
-			tcp_connection_api_unlock(connection);
 			puts("Remote Connection Closed");
 			//inform application layer that we need to close -- is this the right way to do it?
 			_return(args,0);	//return 0?
@@ -365,7 +358,6 @@ void* tcp_api_read_entry(void* _args){
 		int read = ret;	
 		while(ret < args->num){
 			if(read < 0){
-				tcp_connection_api_unlock(connection);
 				free(to_read);
 				_return(args, read);
 				return NULL;
@@ -378,7 +370,6 @@ void* tcp_api_read_entry(void* _args){
 				int result = tcp_connection_api_result(connection); // will block until it gets the result
 
 				if(result<0){
-					tcp_connection_api_unlock(connection);
 					free(to_read);
 					if(result == REMOTE_CONNECTION_CLOSED){
 						_return(args, 0); //return 0 to signify remote connection closed
@@ -399,7 +390,6 @@ void* tcp_api_read_entry(void* _args){
 	printf("[read for socket %d]:\n\t%s\n", args->socket, to_read); 
 	
 	free(to_read);
-	tcp_connection_api_unlock(connection);
 	_return(args, ret);
 	return NULL;
 }
@@ -415,14 +405,9 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 
 	while(!tcp_connection_get_close_boolean(listening_connection)){ //if first connection doesn't become all the way ESTABLISHED, want to repeat
 	
-		/* Lock up api on this connection -- BLOCK  -- really we don't want to 
-			be able to call this if another api call in process */
-		// The problem with blocking here is that we can't close the connection while waiting for connections to queue
-		tcp_connection_api_lock(listening_connection);
 		
 		/* listening connection must actually be listening */
 		if(tcp_connection_get_state(listening_connection) != LISTEN){
-			tcp_connection_api_unlock(listening_connection);
 			return -EINVAL; //Socket is not listening for connections, or addrlen is invalid (e.g., is negative).
 		}	
 	
@@ -432,8 +417,9 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 		/* THIS CALL IS BLOCKING -- because the accept_queue is a bqueue -- call returns when accept_data_t dequeued */
 		tcp_connection_t new_connection = tcp_node_connection_accept(tcp_node, listening_connection);	
 		if(new_connection == NULL){
-			// NULL is returned when we've reached max number of file descriptors
-			tcp_connection_api_unlock(listening_connection);
+			// NULL is returned when we've reached max number of file descriptors or trying to close
+			if(tcp_connection_get_close_boolean(listening_connection)) // we were just rying to close
+				return CONNECTION_CLOSED;
 			return -ENFILE;	//The system limit on the total number of open files has been reached.
 		}
 		
@@ -453,7 +439,6 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 		int ret = tcp_connection_api_result(new_connection); // if successful = new_connection->socket_id;
 		if(ret == SIGNAL_DESTROYING){
 			// is there anything else we can do here?
-			tcp_connection_api_unlock(listening_connection);
 			return SIGNAL_DESTROYING;
 		}
 		else if(ret == API_TIMEOUT){ //changing from SYN_RECEIVED to ESTABLISHED timed out
@@ -463,8 +448,7 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 			args->socket = socket;
 			args->function_call = "v_close";		
 			tcp_node_thread(tcp_node, tcp_api_close_entry, args);
-			
-			tcp_connection_api_unlock(listening_connection);
+		
 			continue; //try again
 		}
 		else if(ret == REMOTE_CONNECTION_CLOSED){	//Instead of sending back ack they sent back fin
@@ -475,10 +459,8 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 			args->function_call = "v_close";		
 			tcp_node_thread(tcp_node, tcp_api_close_entry, args);
 			
-			tcp_connection_api_unlock(listening_connection);
 			continue; //try again
 		}	
-		tcp_connection_api_unlock(listening_connection);
 	
 		/* Our connection has been established! 
 		TODO:HANDLE bad ret value */
@@ -494,6 +476,12 @@ void* tcp_api_accept_entry(void* _args){
 	// verifies that these fields are valid (node != NULL, socket >=0, ...) 
 	_verify_node(args);
 	_verify_socket(args);
+
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
+	if(connection == NULL)
+		_return(args, -EBADF);
+	
+	tcp_connection_api_lock(connection);
 	
 	struct in_addr addr;
 	// blocks until gets new connection or bad value
@@ -517,15 +505,14 @@ void* tcp_driver_accept_entry(void* _args){
 	/* verifying fields */
 	_verify_node(args);
 	_verify_socket(args);
-	
-	tcp_node_t tcp_node = args->node;
 		
 	// before we call this a million times, lets first make sure everything's valid
-	tcp_connection_t listening_connection = tcp_node_get_connection_by_socket(tcp_node, args->socket);
+	tcp_connection_t listening_connection = tcp_node_get_connection_by_socket(args->node, args->socket);
 	if(listening_connection == NULL){
 		_return(args, -EBADF);
 		return NULL; // this won't do anything
 	}
+	tcp_connection_api_lock(listening_connection);
 	
 	int ret;
 	while(tcp_node_running(args->node)){
@@ -542,7 +529,9 @@ void* tcp_driver_accept_entry(void* _args){
 		
 		printf("v_accept() returned socket: %d\n", ret);
 	}
-
+	if(ret == CONNECTION_CLOSED)
+		ret = 0;
+	
 	//* we'll use the macro _return in order to return a value * //<--- nah lets have it just be successful
 	_return(args, ret);
 	return NULL; // this won't do anything
@@ -561,20 +550,19 @@ int tcp_api_close(tcp_node_t tcp_node, int socket){
 	if(connection == NULL){
 		return -EBADF;
 	}
-	/* NOTE ON LOCKING: We lock in shutdown -- we need to be able to set the closing boolean before we lock! */
 	int ret;
 		
 	// CLOSE and close reading part
 	ret = tcp_api_shutdown(tcp_node, socket, 3);
-	if(ret == 0) //success
+
+	if(ret == 0 && (tcp_connection_get_state(connection)!=CLOSED)) //success
 		/* everything's going well and all, but we're still in the process of closing so let's not delete
 		this connection until it has finished closing with its peer */
 		ret = tcp_connection_api_result(connection);
 
-	/* invalidate socket (remove from kernal) only after we unlock -- otherwise thats a logical error because
-		calling unlock on a mutex we destroyed */	
-	tcp_node_remove_connection_kernal(tcp_node, connection);	
-	
+	/* invalidate socket -- delete TCB 
+		tcp_api_args checks that connection not null before calling unlock so no worries about deleting it */	
+	tcp_node_remove_connection_kernal(tcp_node, connection);
 	if(ret < 0) //error
 		return ret;
 	return 0; //success	
@@ -585,15 +573,15 @@ void* tcp_api_close_entry(void* _args){
 	/* verifies that these fields are valid (node != NULL, socket >=0, ...) */
 	_verify_node(args);
 	_verify_socket(args);
-	
-	/* invalidate socket (remove from kernal) only after we unlock -- otherwise thats a logical error because
-		calling unlock on a mutex we destroyed 
-		So let's put the locking logic and destroying logic -- and therefore all the other logic in the 
-		actual api call 
-		
-		Also, for calls like sendfile we want to be able to use close, and might as well lock there too */	
-	
-	// THEREFORE WE LOCK IN THE API SHUTDOWN CALL
+
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
+	if(connection == NULL){
+		_return(args, -EBADF);
+	}
+	// sets the closing boolean now so that locking accept can unlock and return and then we can close yay
+	tcp_connection_set_close(connection);
+	// WE LOCK HERE AND UNLOCK IN TCP_API_ARGS_DESTROY which will check if connection null or not before calling unlock	
+	tcp_connection_api_lock(connection);
 		
 	int ret = tcp_api_close(args->node, args->socket);
 
@@ -616,35 +604,24 @@ int tcp_api_shutdown(tcp_node_t tcp_node, int socket, int type){
 	int ret;
 	
 	if(type == 1){
-		// sets the closing boolean now so that locking accept can unlock and return and then we can close yay
-		tcp_connection_set_close(connection);
 		// okay now we're ready to lock
-		tcp_connection_api_lock(connection);
-		ret = tcp_connection_close(connection);		
-		tcp_connection_api_unlock(connection);
+		ret = tcp_connection_close(connection);
 		if(ret < 0) //error
 			return ret;	
 		return 0; //success
 	}
 	if(type == 2){
 		/* just close reading capability */
-		tcp_connection_api_lock(connection);
-		tcp_connection_close_recv_window(connection);
-		tcp_connection_api_unlock(connection);
+		ret = tcp_connection_close_recv_window(connection);
 		if(ret < 0) //error
 			return ret;
 		return 0; //success
 	}
 	if(type == 3){
-		// sets the closing boolean now so that locking accept can unlock and return and then we can close yay
-		tcp_connection_set_close(connection);
-		// okay now we're ready to lock
-		tcp_connection_api_lock(connection);
 		/* close reading capability */
 		tcp_connection_close_recv_window(connection);
 		/* CLOSE */
 		ret = tcp_connection_close(connection);
-		tcp_connection_api_unlock(connection);
 		if(ret < 0)
 			return ret;
 		return 0; //success
@@ -667,6 +644,12 @@ void* tcp_api_shutdown_entry(void* _args){
 		_return(args,-EBADF);
 		return NULL;
 	}
+	if(type == 1 || type == 3){
+		// sets the closing boolean now so that locking accept can unlock and return and then we can close yay
+		tcp_connection_set_close(connection);
+	}
+	//WE LOCK HERE AND UNLOCK IN TCP_API_ARGS_DESTROY
+	tcp_connection_api_lock(connection);
 	
 	int ret = tcp_api_shutdown(args->node, args->socket, type);
 	

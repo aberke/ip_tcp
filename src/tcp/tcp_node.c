@@ -131,7 +131,6 @@ tcp_node_t tcp_node_init(iplist_t* links){
 	ip_node_t ip_node = ip_node_init(links);
 	if(!ip_node)
 		return NULL;
-
 	// create tcp_node
 	tcp_node_t tcp_node = (tcp_node_t)malloc(sizeof(struct tcp_node));	
 	tcp_node->ip_node = ip_node;

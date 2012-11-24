@@ -453,10 +453,8 @@ int tcp_connection_LISTEN_to_CLOSED(tcp_connection_t connection){
 	
 	/* RFC:   Any outstanding RECEIVEs are returned with "error:  closing"
       responses.  Delete TCB, enter CLOSED state, and return. */
-	
 	tcp_connection_accept_queue_destroy(connection);
 	tcp_connection_api_signal(connection, 0); //0 for success, right?
-	
 	/*  there's not much to do here, except for get rid of the 
 	   	data you were buffering (from the other side?) and getting
 	   	rid of the queued connections. For now, just return */

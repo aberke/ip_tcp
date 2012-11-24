@@ -16,6 +16,7 @@
 #define API_TIMEOUT -555
 #define REMOTE_CONNECTION_CLOSED -444
 #define CONNECTION_RESET -333
+#define CONNECTION_CLOSED -222
 
 
 #define SYN_COUNT_MAX 3 // how many syns we send before timing out

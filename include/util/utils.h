@@ -20,8 +20,8 @@
 #define PACKET_PRINT	  	8
 
 #define ALEX_PRINT			9 //yup I did it.
-#define ALEXS_SEGFAULT		10
-#define PORT_PRINT			11
+//#define ALEXS_SEGFAULT		10 --she found it!  It was that plainlist all along (NOT Alex's fault whoo)
+#define PORT_PRINT			10
 
 #define mask (  0									\
 		  /* | (1<<(IP_PRINT-1))		*/    		\
@@ -33,7 +33,6 @@
 		   | (1<<(CLOSING_PRINT-1))	 		    \
 		    | (1<<(PACKET_PRINT-1))				\
 		    /* | (1<<(ALEX_PRINT-1))		*/			\
-		   /*| (1<<(ALEXS_SEGFAULT-1))		*/  	\
 		   /*| (1<<(PORT_PRINT-1))			*/		\
 			 )
 

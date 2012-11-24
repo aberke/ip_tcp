@@ -6,6 +6,9 @@ printf("hello %d", num)
 print( ("hello %d", num), TCP_PRINT)
 
 STDIN thread
+where we lock:  we lock in the tcp_api_function_entry thread call after we call 
+				tcp_node_get_connection_by_socket and check connection not null
+where we unlock: in tcp_api_args_destroy
 
 linked_list<thread> threads;
 while(1){
