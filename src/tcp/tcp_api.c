@@ -282,7 +282,7 @@ int tcp_api_read(tcp_node_t tcp_node, int socket, char *buffer, uint32_t nbyte){
 	}
 
 	state_e state = tcp_connection_get_state(connection);
-	if(state == CLOSED || state == CLOSE_WAIT || state == LAST_ACK){
+	if(state == CLOSED || state == LAST_ACK){
 		return 0;
 	}
 	
@@ -319,24 +319,16 @@ void* tcp_api_read_entry(void* _args){
 	
 	/* I think this is the correct place to check state because if we're in the connect/accept state for example,
 		we might already be blocking and then it wouldn't make sense to call lock on the connection */
-
-	//TODO: HANDLE CORRECT RESPONSES BASED ON STATE
-	
-	// CAN continue to read in the FIN-WAIT-1 state
-	
-	state_e state = tcp_connection_get_state(connection);
-	if(state == CLOSED || state == CLOSE_WAIT || state == LAST_ACK){
-		puts("Remote Connection Closed");
-		//inform application layer that we need to close -- is this the right way to do it?
-		_return(args,0);	//return 0?
-		return NULL;
-	}
 	
 	//tacked on an extra 1 for null character for pretty print
 	char* to_read = (char*)malloc(sizeof(char)*(args->num + 1));
 	//char to_read[args->num + 1];
 
 	int ret = tcp_api_read(args->node, args->socket, to_read, args->num);	
+
+	//TODO: HANDLE CORRECT RESPONSES BASED ON STATE
+	// CAN continue to read in the FIN-WAIT-1 state	
+	state_e state = tcp_connection_get_state(connection);	
 	
 	if(ret == 0){ 
 		// was there nothing to read, or did connection close? let's check
