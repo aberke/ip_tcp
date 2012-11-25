@@ -45,6 +45,10 @@ int tcp_connection_SYN_SENT_to_SYN_RECEIVED(tcp_connection_t connection);
 int tcp_connection_SYN_RECEIVED_to_ESTABLISHED(tcp_connection_t connection);
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// they send us keep-alive messages and probably want them back
+int tcp_connection_send_keep_alive(tcp_connection_t connection);
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /* 0o0o0oo0o0o0o0o0o0o0o0o0o0o0o0o0o0o Closing Connection 0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o */
 /* 0o0o0oo0o0o0o0o0o0o0o0o0o0o0o0o0o0o Closing Connection 0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o0o */
