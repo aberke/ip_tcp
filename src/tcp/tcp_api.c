@@ -120,6 +120,7 @@ int tcp_api_write(tcp_node_t tcp_node, int socket, const unsigned char* to_write
 	ret = tcp_connection_send_data(connection, to_write, num_bytes);
 	return ret;
 }
+
 void* tcp_api_sendfile_entry(void* _args){
 	tcp_api_args_t args = (tcp_api_args_t) _args;
 	
@@ -173,6 +174,61 @@ void* tcp_api_sendfile_entry(void* _args){
 	_return(args, 0);
 	return NULL;
 }
+void* tcp_api_recvfile_entry(void* _args){
+	tcp_api_args_t args = (tcp_api_args_t) _args;
+	/* verify that the necessary args were set */
+	_verify_node(args);
+	_verify_socket(args);
+	_verify_addr(args);
+	_verify_buffer(args);
+	_verify_port(args);
+	
+	/* lock it up */	
+	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
+	if(connection == NULL){	
+		_return(args, -EBADF); 	 // = The file descriptor is not a valid index in the descriptor table.
+		return NULL;
+	}
+	tcp_connection_api_lock(connection);// make sure no one else is messing with the socket/connection
+		
+	/* open file so we can verify valid before we open any connections that we'll then need to close */
+	FILE* f = fopen(args->buffer, "r");
+	if(!f){
+		fprintf(stderr, "Unable to open given file: %s\n", args->buffer);
+		_return(args, -EINVAL);	//Invalid argument passed
+		return NULL;
+	}
+	
+	/* open connection */
+	int ret = tcp_api_connect(args->node, args->socket, args->addr, args->port);
+	if(ret<0){
+		args->function_call = "sendfile: v_socket()";
+		_return(args, ret);
+		return NULL;		
+ 	}
+	
+	char input_line[BUFFER_SIZE];
+	while(fgets(input_line, BUFFER_SIZE-1, f)){
+		ret = tcp_connection_send_data(connection, (unsigned char*)input_line, strlen(input_line));
+		if (ret < 0){
+			args->function_call = "sendfile: v_write()";
+			_return(args, ret);
+			return NULL;
+		}
+	}
+	
+	//clean up
+	fclose(f);
+	// close connection we opened 
+	tcp_api_close(args->node, args->socket); //locks and blocks but we don't need this anymore anyhow
+	/* and use my macro to return it 
+		(first arg is size of retal) */
+	_return(args, 0);
+	return NULL;
+}	
+
+
+
 /* entry function for letting the above function be called by a thread
 
 	design defense: this way tcp_api_connect doesn't need to know that 
@@ -439,7 +495,7 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 			// want to close it but don't want to block -- let's thread the close??! (which will also remove it)
 			tcp_api_args_t args = tcp_api_args_init();
 			args->node = tcp_node;
-			args->socket = socket;
+			args->socket = tcp_connection_get_socket(new_connection);
 			args->function_call = "v_close";		
 			tcp_node_thread(tcp_node, tcp_api_close_entry, args);
 		
@@ -449,7 +505,7 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 			// lets close this connection responsibly and try again
 			tcp_api_args_t args = tcp_api_args_init();
 			args->node = tcp_node;
-			args->socket = socket;
+			args->socket = tcp_connection_get_socket(new_connection);
 			args->function_call = "v_close";		
 			tcp_node_thread(tcp_node, tcp_api_close_entry, args);
 			

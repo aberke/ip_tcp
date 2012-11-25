@@ -210,13 +210,10 @@ int tcp_utils_validate_checksum(void* packet, uint16_t total_length, uint32_t sr
 	uint16_t our_checksum = tcp_utils_calc_checksum(packet, total_length, src_ip, dest_ip, protocol);
 
 	uint16_t our_nchecksum = ntohs(our_checksum);
-
-	uint16_t checksum1 = tcp_utils_calc_checksum(packet, total_length, dest_ip, src_ip, protocol);
-	uint16_t nchecksum1 = ntohs(checksum1);
 	
 	printf("their_sum: %u their_nsum: %u\n", their_checksum, their_nchecksum);
-	printf("our_sum: %u   our_nsum: %u  our_swapped_sum: %u  our_swapped_nsum: %u\n", 
-			our_checksum, our_nchecksum, checksum1, nchecksum1);
+	printf("our_sum: %u   our_nsum: %u\n", 
+			our_checksum, our_nchecksum);
 
 /* !!!!!!!!!!!!!!!LADFJSLADJSFLASDFJDKLSFJ ASDLFKJAS DLFKA */
 	/* XOR the actual checksum and the given checksum, 
