@@ -495,7 +495,7 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 			// want to close it but don't want to block -- let's thread the close??! (which will also remove it)
 			tcp_api_args_t args = tcp_api_args_init();
 			args->node = tcp_node;
-			args->socket = socket;
+			args->socket = tcp_connection_get_socket(new_connection);
 			args->function_call = "v_close";		
 			tcp_node_thread(tcp_node, tcp_api_close_entry, args);
 		
@@ -505,7 +505,7 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 			// lets close this connection responsibly and try again
 			tcp_api_args_t args = tcp_api_args_init();
 			args->node = tcp_node;
-			args->socket = socket;
+			args->socket = tcp_connection_get_socket(new_connection);
 			args->function_call = "v_close";		
 			tcp_node_thread(tcp_node, tcp_api_close_entry, args);
 			
