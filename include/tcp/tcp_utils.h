@@ -221,7 +221,7 @@ struct memchunk* tcp_unwrap_data(void* packet, int length);
 #define tcp_set_ack(header, ack) ((((struct tcphdr*)header)->th_ack) = ((uint32_t)htonl(ack)))
 #define tcp_set_seq(header, seq) ((((struct tcphdr*)header)->th_seq) = ((uint32_t)htonl(seq)))
 #define tcp_set_offset(header) ((((struct tcphdr*)header)->th_off) = NO_OPTIONS_HEADER_LENGTH)
-#define tcp_set_checksum(header, sum) ((((struct tcphdr*)header)->th_sum) = sum)
+#define tcp_set_checksum(header, sum) ((((struct tcphdr*)header)->th_sum) = (sum))
 #define tcp_set_dest_port(header, port) ((((struct tcphdr*)header)->th_dport) = htons(port))
 #define tcp_set_source_port(header, port) ((((struct tcphdr*)header)->th_sport) = htons(port))
 

@@ -105,29 +105,13 @@ int ip_decrement_TTL(char* packet){
 
 // returns source address of packet
 uint32_t ip_get_src_addr(char* buffer){
-	//char header[sizeof(struct ip)];
-	//memcpy(header, buffer, IP_HEADER_SIZE);
 	struct ip *ip_header = (struct ip *)buffer;
 	return ip_header->ip_src.s_addr;
-//	
-//	struct in_addr src_ip;
-//	uint32_t src_addr;
-//	src_ip = ip_header->ip_src;
-//	src_addr = ntohl(src_ip.s_addr);
-//	return src_addr;
 }
 // returns destination address of packet
 uint32_t ip_get_dest_addr(char* buffer){
-	//char header[sizeof(struct ip)];
-	//memcpy(header, buffer, IP_HEADER_SIZE);
 	struct ip *ip_header = (struct ip *)buffer;
 	return ip_header->ip_dst.s_addr;
-	
-//	struct in_addr dest_ip;
-//	uint32_t d_addr;
-//	dest_ip = ip_header->ip_dst;
-//	d_addr = ntohl(dest_ip.s_addr);
-//	return d_addr;
 }
 
 // int is type: RIP vs other  --return -1 if bad packet
@@ -138,14 +122,6 @@ int ip_unwrap_packet(char* buffer, char** packet_unwrapped, int packet_data_size
 	u_int header_len = ((struct ip*)buffer)->ip_hl*4; //// from wikipedia: header length in bytes = value set in ip_hl x 4
 	*packet_unwrapped = malloc(packet_data_size);
 	memcpy(*packet_unwrapped, buffer+header_len, packet_data_size);
-/*
-	char header[IP_HEADER_SIZE];
-	u_int header_len;
-	memcpy(header, buffer, IP_HEADER_SIZE);
-	struct ip *ip_header = (struct ip *)header;
-*/
-
-//	memcpy(packet_unwrapped, buffer+header_len, packet_data_size);
 	
 	switch(ip_p){
 		case RIP_DATA:
@@ -158,7 +134,6 @@ int ip_unwrap_packet(char* buffer, char** packet_unwrapped, int packet_data_size
 			puts("Received packet of unknown protocol");
 			return -1;
 	}
-
 }
 
 // fills wraps ip header around data and sends through interface li
