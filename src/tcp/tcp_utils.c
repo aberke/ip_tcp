@@ -142,7 +142,7 @@ uint16_t tcp_utils_calc_checksum(void* packet, uint16_t total_length, uint32_t s
 	uint16_t odd_byte = 0;
 	// why 16?????
 	uint16_t* pseudo_packet = (uint16_t*)malloc(total_length+12); // 12 is size in bytes of pseudo-header
-	memset(pseudo_packet, 0, total_length);
+	memset(pseudo_packet, 0, total_length+12);
 	((uint32_t*)pseudo_packet)[0] = src_ip;
 	((uint32_t*)pseudo_packet)[1] = dest_ip; //why of 1 and not 2??
 	((uint8_t*)pseudo_packet) [9] = (uint8_t)TCP_DATA;
@@ -166,7 +166,7 @@ uint16_t tcp_utils_calc_checksum(void* packet, uint16_t total_length, uint32_t s
 	uint16_t result;
 	result = ~sum;
 
-	free(*pseudo_packet);
+	free(pseudo_packet);
 	return result;
 }
 
@@ -182,7 +182,7 @@ void tcp_utils_add_checksum(void* packet, uint16_t total_length, uint32_t src_ip
 	uint16_t checksum = tcp_utils_calc_checksum(packet, total_length, src_ip, dest_ip, protocol);
 
 	/* set it back (sets it in network byte order now) */
-	tcp_set_checksum(packet, htons(checksum));
+	tcp_set_checksum(packet, checksum);
 }
 
 /* 

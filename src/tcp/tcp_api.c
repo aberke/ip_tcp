@@ -457,8 +457,7 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 		}	
 	
 		/* Our connection has been established! 
-		TODO:HANDLE bad ret value */
-		
+		TODO:HANDLE bad ret value */		
 		return ret;	
  	} //end of while loop which allowed us to call continue
  	return 0; //I guess someone tried to close
@@ -509,12 +508,12 @@ void* tcp_driver_accept_entry(void* _args){
 	tcp_connection_api_lock(listening_connection);
 	
 	int ret;
-	while(tcp_node_running(args->node)){
+	while(tcp_node_running(args->node)&&!tcp_connection_get_close_boolean(listening_connection)){
 		
 		struct in_addr addr;
 		// blocks until gets new connection or bad value
 		ret = tcp_api_accept(args->node, args->socket, &addr);
-		if(!(tcp_node_running(args->node))){
+		if(!(tcp_node_running(args->node)) || !tcp_connection_get_close_boolean(listening_connection)){
 			ret = 0;
 			break; //we might have broken out with an error value because tcp_node started destroying stuff already
 		}
