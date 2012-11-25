@@ -18,6 +18,8 @@
 #define CONNECTION_RESET -333
 #define CONNECTION_CLOSED -222
 
+#define KEEP_ALIVE_FREQUENCY 1 //we send a keep-alive message every second
+
 
 #define SYN_COUNT_MAX 3 // how many syns we send before timing out
 /* TIMEOUTS DEFINED BY RFC:
