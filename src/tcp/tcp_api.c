@@ -495,7 +495,7 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 			// want to close it but don't want to block -- let's thread the close??! (which will also remove it)
 			tcp_api_args_t args = tcp_api_args_init();
 			args->node = tcp_node;
-			args->socket = socket;
+			args->socket = tcp_connection_get_socket(new_connection);
 			args->function_call = "v_close";		
 			tcp_node_thread(tcp_node, tcp_api_close_entry, args);
 		
@@ -505,7 +505,7 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 			// lets close this connection responsibly and try again
 			tcp_api_args_t args = tcp_api_args_init();
 			args->node = tcp_node;
-			args->socket = socket;
+			args->socket = tcp_connection_get_socket(new_connection);
 			args->function_call = "v_close";		
 			tcp_node_thread(tcp_node, tcp_api_close_entry, args);
 			
@@ -652,21 +652,20 @@ int tcp_api_shutdown(tcp_node_t tcp_node, int socket, int type){
 		
 	int ret;
 	
-	if(type == 1){
-		// okay now we're ready to lock
-		ret = tcp_connection_close(connection);
+	if(type == SHUTDOWN_WRITE){
+		ret = tcp_connection_close(connection);		
 		if(ret < 0) //error
 			return ret;	
 		return 0; //success
 	}
-	if(type == 2){
+	else if(type == SHUTDOWN_READ){
 		/* just close reading capability */
 		ret = tcp_connection_close_recv_window(connection);
 		if(ret < 0) //error
 			return ret;
 		return 0; //success
 	}
-	if(type == 3){
+	else if(type == SHUTDOWN_BOTH){
 		/* close reading capability */
 		tcp_connection_close_recv_window(connection);
 		/* CLOSE */

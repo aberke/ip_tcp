@@ -6,6 +6,10 @@
 #include "tcp_connection.h"
 #include "utils.h"
 
+#define SHUTDOWN_READ 1
+#define SHUTDOWN_WRITE 2
+#define SHUTDOWN_BOTH 3
+
 //forward declaration:
 struct tcp_connection;
 

@@ -22,10 +22,6 @@
 
 #define FILE_BUF_SIZE	1024
 
-#define SHUTDOWN_READ	0
-#define SHUTDOWN_WRITE	1
-#define SHUTDOWN_BOTH	2
-
 // TODO remove the below #defines, replace by linking with API implementation 	
 #define v_close(a)	-ENOTSUP
 
@@ -246,13 +242,13 @@ void shutdown_cmd(const char* line, tcp_node_t tcp_node){
 		return;
 	}
 	if((!strcmp(r_w_both, "write")) || (!strcmp(r_w_both, "w"))){
-		r_w_option = 1;
+		r_w_option = SHUTDOWN_WRITE;
 	}
 	else if((!strcmp(r_w_both, "read")) || (!strcmp(r_w_both, "r"))){
-		r_w_option = 2;
+		r_w_option = SHUTDOWN_READ;
 	}
 	else if(!strcmp(r_w_both, "both")){
-		r_w_option = 3;
+		r_w_option = SHUTDOWN_BOTH;
 	}
 	else{
 		fprintf(stderr, "syntax error (usage: shutdown [socket] [read/write/both])\n");
