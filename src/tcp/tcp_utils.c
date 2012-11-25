@@ -166,7 +166,7 @@ uint16_t tcp_utils_calc_checksum(void* packet, uint16_t total_length, uint32_t s
 	uint16_t result;
 	result = ~sum;
 
-	free(pseudo_packet);
+	free(*pseudo_packet);
 	return result;
 }
 
