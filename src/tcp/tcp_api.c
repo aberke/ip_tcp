@@ -97,7 +97,7 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint1
 	if(transition_result < 0){
 		// error or timeout so lets get rid of this
 		tcp_node_remove_connection_kernal(tcp_node, connection); 
-		if(transition_result == -CONNECTION_RESET)
+		if(transition_result == CONNECTION_RESET)
 			return -ECONNREFUSED;
 		else
 			return transition_result;
