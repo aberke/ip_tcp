@@ -137,12 +137,11 @@ struct tcphdr* tcp_header_init(int data_size){
 	well as information for the pseudo-header (see below) */
 uint16_t tcp_utils_calc_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t protocol){
 
-	uint16_t *p = (uint16_t*)packet;
-	uint32_t sum = 0;
+	uint32_t sum 	  = 0;
 	uint16_t odd_byte = 0;
 
 	uint16_t* pseudo_packet = (uint16_t*)malloc(total_length+12); // 12 is size in bytes of pseudo-header
-	memset(pseudo_packet, 0, total_length);
+	memset(pseudo_packet, 0, total_length+12);
 	((uint32_t*)pseudo_packet)[0] = src_ip;
 	((uint32_t*)pseudo_packet)[1] = dest_ip;
 	((uint8_t*)pseudo_packet) [9] = (uint8_t)TCP_DATA;
@@ -161,12 +160,14 @@ uint16_t tcp_utils_calc_checksum(void* packet, uint16_t total_length, uint32_t s
 		sum += odd_byte;
 	}
 
+	// free it
+	free(pseudo_packet);
+
 	sum = (sum >> 16) + (sum & 0xffff);
 	sum += (sum >> 16);
 	uint16_t result;
 	result = ~sum;
 
-	free(pseudo_packet);
 	return result;
 }
 

@@ -246,6 +246,11 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	int i;
 	for(i=0; i<(tcp_node->num_connections); i++){
 		// use void tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection) instead??
+		if(!tcp_node->connections[i])
+		{
+			print(("ERROR : connection was already null when trying to destroy it in tcp_node_destroy"), CLOSING_PRINT);
+			continue;
+		}
 		tcp_connection_destroy(tcp_node->connections[i]);
 	}
 	// free the array itself

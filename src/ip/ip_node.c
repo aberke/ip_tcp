@@ -247,7 +247,7 @@ int ip_node_read(ip_node_t ip_node, char* packet, int packet_size, uint32_t loca
 		return -1;
 	
 	if(packet_size > MTU)
-		printf("Received tcp packet of size %d which is larger than the tcp MTU %u.  Will only keep MTU bytes\n", packet_size, MTU);
+		printf("Received tcp packet of size %d which is larger than the tcp MTU %lu.  Will only keep MTU bytes\n", packet_size, MTU);
 	
 	tcp_packet_data_t tcp_packet = tcp_packet_data_init(packet, packet_size, local_virt_ip, remote_virt_ip);
 		
@@ -664,7 +664,10 @@ static void _handle_to_send_queue(ip_node_t ip_node, void* packet){
 	// get next hop for sending message to send_to_vip
 	uint32_t next_hop_addr = forwarding_table_get_next_hop(ip_node->forwarding_table, send_to_vip);
 	if(next_hop_addr == -1){
-		printf("Cannot reach address %d.\n", send_to_vip);
+		char addr_str[INET_ADDRSTRLEN];
+		inet_ntop(AF_INET, &send_to_vip, addr_str, INET_ADDRSTRLEN);
+
+		printf("Cannot reach address %s\n", addr_str);
 		free(packet);
 		free(tcp_packet_data);
 		return;

@@ -614,20 +614,20 @@ int tcp_api_shutdown(tcp_node_t tcp_node, int socket, int type){
 		return -EBADF;
 	int ret;
 	
-	if(type == 1){
+	if(type == SHUTDOWN_WRITE){
 		ret = tcp_connection_close(connection);		
 		if(ret < 0) //error
 			return ret;	
 		return 0; //success
 	}
-	if(type == 2){
+	else if(type == SHUTDOWN_READ){
 		/* just close reading capability */
 		tcp_connection_close_recv_window(connection);
 		if(ret < 0) //error
 			return ret;
 		return 0; //success
 	}
-	if(type == 3){
+	else if(type == SHUTDOWN_BOTH){
 		/* close reading capability */
 		tcp_connection_close_recv_window(connection);
 		/* CLOSE */
