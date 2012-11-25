@@ -338,7 +338,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
     		/* If SEG.ACK =< ISS, or SEG.ACK > SND.NXT, send a reset 
     		(unless the RST bit is set, if so drop the segment and return) */
 			if((tcp_ack(tcp_packet)<=connection->last_seq_sent)||(tcp_ack(tcp_packet)>connection->last_seq_sent+1)){
-				printf("[Socket %d]: Received invalid ack while in the LISTEN state -- dropping packet\n", 
+				printf("[Socket %d]: Received invalid ack while in the SYN_SENT state -- dropping packet\n", 
 					connection->socket_id);
 				if(tcp_rst_bit(tcp_packet)){
     				tcp_packet_data_destroy(&tcp_packet_data);
@@ -1414,12 +1414,9 @@ void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_da
 			tcp_set_seq(outgoing_header, 0);
 			/* ACK */
 			int seg_length = packet->packet_size - tcp_offset_in_bytes(incoming_header);
-			tcp_set_ack(outgoing_header, (tcp_seqnum(outgoing_header)+seg_length));
+			tcp_set_ack(outgoing_header, (tcp_seqnum(incoming_header)+seg_length));
 			tcp_set_ack_bit(outgoing_header);
 		}
-		/* ACK */
-		//int seg_length = packet->packet_size - tcp_offset_in_bytes(incoming_header);
-		//tcp_set_ack(outgoing_header, (tcp_seqnum(outgoing_header)+seg_length));
 	}
 
 
