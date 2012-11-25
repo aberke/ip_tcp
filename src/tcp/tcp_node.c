@@ -750,14 +750,16 @@ void tcp_node_refuse_connection(tcp_node_t tcp_node, tcp_packet_data_t packet){
 		reset has sequence number zero and the ACK field is set to the sum
 		of the sequence number and segment length of the incoming segment.
 		The connection remains in the CLOSED state.*/
-	if(tcp_ack_bit(incoming_header))
+	if(tcp_ack_bit(incoming_header)){
 		tcp_set_seq(outgoing_header, tcp_ack(incoming_header));
-	else
+	}
+	else{
 		tcp_set_seq(outgoing_header, 0);
-
-	/* ack */
-	int seg_length = packet->packet_size - tcp_offset_in_bytes(incoming_header);
-	tcp_set_ack(outgoing_header, (tcp_seqnum(outgoing_header)+seg_length));
+		/* ack */
+		int seg_length = packet->packet_size - tcp_offset_in_bytes(incoming_header);
+		tcp_set_ack(outgoing_header, (tcp_seqnum(outgoing_header)+seg_length));
+		tcp_set_ack_bit(outgoing_header);
+	}
 
 	/* CHECKSUM */
 	tcp_utils_add_checksum(outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip, TCP_DATA);
