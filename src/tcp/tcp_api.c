@@ -176,6 +176,7 @@ void* tcp_api_sendfile_entry(void* _args){
 }
 void* tcp_api_recvfile_entry(void* _args){
 	tcp_api_args_t args = (tcp_api_args_t) _args;
+
 	/* verify that the necessary args were set */
 	_verify_node(args);
 	_verify_socket(args);

@@ -924,15 +924,18 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 		free(data);
 	}
 	
+	uint32_t local_ip = connection->local_addr.virt_ip, 
+			remote_ip = connection->remote_addr.virt_ip;
+	
 	/* CHECKSUM */
-	tcp_utils_add_checksum(header, total_length, connection->local_addr.virt_ip, connection->remote_addr.virt_ip, TCP_DATA);
+	tcp_utils_add_checksum(header, total_length, local_ip, remote_ip, TCP_DATA);
 	
 	/* init the packet */
 	tcp_packet_data_t packet_data = tcp_packet_data_init(
 										(char*)header, 
 										total_length,
-										tcp_connection_get_local_ip(connection),
-										tcp_connection_get_remote_ip(connection));										
+										local_ip, remote_ip);
+
 	/* queue it */
 	if(tcp_connection_queue_ip_send(connection, packet_data) < 0){
 		//TODO: HANDLE!
