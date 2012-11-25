@@ -14,7 +14,8 @@ transitioning_t closed_next_state(transition_e t){
 		case activeOPEN:
 			/* create TCB and send SYN */
 			return transitioning_init(SYN_SENT, (action_f)tcp_connection_CLOSED_to_SYN_SENT);
-
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);
 		default:
 			return transitioning_init(CLOSED, (action_f)tcp_connection_invalid_transition); //TODO: SUPPLY ACTION FOR BAD CALL
 	}
