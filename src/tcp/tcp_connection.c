@@ -1320,9 +1320,6 @@ int tcp_connection_api_result(tcp_connection_t connection){
 		// otherwise you timedout, keep waiting
 	}
 
-	/* log success */
-	tcp_connection_api_unlock(connection); // make sure someone else can use it now
-	
 	int ret = connection->api_ret;
 	if(ret == SIGNAL_CRASH_AND_BURN)
 		CRASH_AND_BURN("Received crash_and_burn from the connection result");

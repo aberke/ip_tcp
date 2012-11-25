@@ -745,11 +745,11 @@ void tcp_node_refuse_connection(tcp_node_t tcp_node, tcp_packet_data_t packet){
 	tcp_set_rst_bit(outgoing_header);
 	
 	/* seqnum */
-		/*If the incoming segment has an ACK field, the reset takes its
+		/* If the incoming segment has an ACK field, the reset takes its
 		sequence number from the ACK field of the segment, otherwise the
 		reset has sequence number zero and the ACK field is set to the sum
 		of the sequence number and segment length of the incoming segment.
-		The connection remains in the CLOSED state.*/
+		The connection remains in the CLOSED state. */
 	if(tcp_ack_bit(incoming_header)){
 		tcp_set_seq(outgoing_header, tcp_ack(incoming_header));
 	}
