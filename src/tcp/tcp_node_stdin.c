@@ -170,16 +170,19 @@ void connect_cmd(const char *line, tcp_node_t tcp_node){
 	ret = sscanf(line, "connect %s %d", addr_buffer, &port);
 	if((ret != 2)&&(sscanf(line, "c %s %d", addr_buffer, &port)!=2)){
 		fprintf(stderr, "syntax error (usage: connect [remote ip address] [remote port])\n");
+		free(addr);
 		return;
 	}	
 	//convert string ip address to real ip address
 	if(inet_pton(AF_INET, addr_buffer, addr) <= 0){ // IPv4
 		fprintf(stderr, "syntax error - could not parse ip address (usage: connect [remote ip address] [remote port])\n");
+		free(addr);
 		return;
 	}
 	// first initialize new socket that will do the connecting
 	if((socket = tcp_api_socket(tcp_node))<0){
 		printf("Error: v_socket() returned value %d\n", socket);
+		free(addr);
 		return;
 	}
 
@@ -203,11 +206,13 @@ void v_connect(const char *line, tcp_node_t tcp_node){
 	ret = sscanf(line, "v_connect %d %s %d", &socket, addr_buffer, &port);
 	if(ret != 3){
 		fprintf(stderr, "syntax error (usage: v_connect [socket] [ip address] [port])\n");
+		free(addr);
 		return;
 	}	
 	//convert string ip address to real ip address
 	if(inet_pton(AF_INET, addr_buffer, addr) <= 0){ // IPv4
 		fprintf(stderr, "syntax error - could not parse ip address (usage: v_conect [socket] [ip address] [port])\n");
+		free(addr);
 		return;
 	}
 
@@ -440,8 +445,10 @@ void help_cmd(const char *line, tcp_node_t tcp_node){
 }
 
 void quit_cmd(const char *line, tcp_node_t tcp_node){
+	// first must ABORT all connections
+	tcp_node_ABORT_connections(tcp_node);
+
 	tcp_node_stop(tcp_node);
-	//tcp_node_command_ip(tcp_node, line);;	
 	return;
 }
 
@@ -715,11 +722,8 @@ void* _handle_tcp_node_stdin(void* node){
 					
 					else
 						printf("%s on socket %d returned value: %d\n", args->function_call, args->socket, args->result);
-					print(("1"), ALEXS_SEGFAULT);
 					tcp_api_args_destroy(&args);
-					print(("2"), ALEXS_SEGFAULT);
 					plain_list_remove(list, el);
-					print( ("3"), ALEXS_SEGFAULT);
 				}			
 			PLAIN_LIST_ITER_DONE(list);
 

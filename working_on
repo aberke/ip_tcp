@@ -6,6 +6,9 @@ printf("hello %d", num)
 print( ("hello %d", num), TCP_PRINT)
 
 STDIN thread
+where we lock:  we lock in the tcp_api_function_entry thread call after we call 
+				tcp_node_get_connection_by_socket and check connection not null
+where we unlock: in tcp_api_args_destroy
 
 linked_list<thread> threads;
 while(1){
@@ -251,11 +254,19 @@ alex's questions for neil:
 
 alex's questions for tas:
 	
+alex's checksum changes:
+
 	
 	
 TODO: TO HANDLE:
 
 	put user time outs into the closing protocol
+	
+	recvfile
+	
+	simultaneous open thing
+	
+	deal with an interface going down
 
 	receiveRST when in ESTABLISHED state	
 	handle all closed by RST cases
@@ -267,7 +278,7 @@ TODO: TO HANDLE:
 		do we want to stop that infinite thread loop in transition TIME_WAIT_to_CLOSED
 			- like we could set connection->running = 0 and just restart thread if connect/listen called
 	
-ssh key: 
+ssh key: ssh-add it really isn't that hard
 		
 
 	

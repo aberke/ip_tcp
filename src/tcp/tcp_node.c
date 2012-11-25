@@ -131,7 +131,6 @@ tcp_node_t tcp_node_init(iplist_t* links){
 	ip_node_t ip_node = ip_node_init(links);
 	if(!ip_node)
 		return NULL;
-
 	// create tcp_node
 	tcp_node_t tcp_node = (tcp_node_t)malloc(sizeof(struct tcp_node));	
 	tcp_node->ip_node = ip_node;
@@ -186,6 +185,15 @@ tcp_node_t tcp_node_init(iplist_t* links){
 
 	return tcp_node;
 }
+// before shutting down, first must ABORT all connections
+void tcp_node_ABORT_connections(tcp_node_t tcp_node){
+	int i;
+	for(i=0; i<(tcp_node->num_connections); i++){
+		// we quickly send RST rather than gracefully CLOSEing
+		if(tcp_node->connections[i] != NULL) //it could be NULL
+			tcp_connection_ABORT(tcp_node->connections[i]);
+	}
+}
 
 /* will this do it? */
 void tcp_node_stop(tcp_node_t tcp_node){
@@ -220,11 +228,6 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	PLAIN_LIST_ITER_DONE(list);
 	/*****************************/
   	print(("tcp_node_destroy 1"), CLOSING_PRINT);	
-	
-	// gracefully CLOSE all connections
-	// this blocks for a little until all connections CLOSED - and presumably kernal empty?
-	tcp_node_close_all_connections(tcp_node);
-	  	print(("tcp_node_destroy 2"), CLOSING_PRINT);
 	// wait for mutex so we can ensure we destroy e'erthang
 	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 	//// iterate through the hash maps and destroy all of the keys/values,
@@ -245,14 +248,12 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	//// NOW destroy all the connections
 	int i;
 	for(i=0; i<(tcp_node->num_connections); i++){
-		// use void tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection) instead??
-		if(!tcp_node->connections[i])
-		{
-			print(("ERROR : connection was already null when trying to destroy it in tcp_node_destroy"), CLOSING_PRINT);
-			continue;
-		}
-		tcp_connection_destroy(tcp_node->connections[i]);
+		// we already aborted it when we called quit_cmd
+		if(tcp_node->connections[i] != NULL)
+			tcp_connection_destroy(tcp_node->connections[i]);
+
 	}
+
 	// free the array itself
 	free(tcp_node->connections);
 	// get rid of kernal mutex
@@ -413,11 +414,7 @@ void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, int port){
 	
 	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 }
-//ALEX TODO:
-// gracefully CLOSE all connections
-void tcp_node_close_all_connections(tcp_node_t tcp_node){
-	print(("ALEX TODO: GRACEFULLY CLOSE ALL CONNECTIONS BEFORE DESTROYING NODE"),ALEX_PRINT);
-}
+
 //###TODO: FINISH LOGIC ####
 //needs to be called when close connection so that we can return port/socket to available queue for reuse
 // returns new number of connections in kernal
@@ -755,14 +752,16 @@ void tcp_node_refuse_connection(tcp_node_t tcp_node, tcp_packet_data_t packet){
 		reset has sequence number zero and the ACK field is set to the sum
 		of the sequence number and segment length of the incoming segment.
 		The connection remains in the CLOSED state.*/
-	if(tcp_ack_bit(incoming_header))
+	if(tcp_ack_bit(incoming_header)){
 		tcp_set_seq(outgoing_header, tcp_ack(incoming_header));
-	else
+	}
+	else{
 		tcp_set_seq(outgoing_header, 0);
-
-	/* ack */
-	int seg_length = packet->packet_size - tcp_offset_in_bytes(incoming_header);
-	tcp_set_ack(outgoing_header, (tcp_seqnum(outgoing_header)+seg_length));
+		/* ack */
+		int seg_length = packet->packet_size - tcp_offset_in_bytes(incoming_header) + 1;
+		tcp_set_ack(outgoing_header, (tcp_seqnum(incoming_header)+seg_length));
+		tcp_set_ack_bit(outgoing_header);
+	}
 
 	/* CHECKSUM */
 	tcp_utils_add_checksum(outgoing_header, sizeof(*outgoing_header), packet->local_virt_ip, packet->remote_virt_ip, TCP_DATA);

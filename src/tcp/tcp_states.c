@@ -14,7 +14,8 @@ transitioning_t closed_next_state(transition_e t){
 		case activeOPEN:
 			/* create TCB and send SYN */
 			return transitioning_init(SYN_SENT, (action_f)tcp_connection_CLOSED_to_SYN_SENT);
-
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);
 		default:
 			return transitioning_init(CLOSED, (action_f)tcp_connection_invalid_transition); //TODO: SUPPLY ACTION FOR BAD CALL
 	}
@@ -38,8 +39,9 @@ transitioning_t listen_next_state(transition_e t){
 			return transitioning_init(SYN_SENT, (action_f)tcp_connection_LISTEN_to_SYN_SENT);
 		case receiveRST:
 			/* RFC says ignore rst when in LISTEN */
-			return transitioning_init(LISTEN, (action_f)tcp_connection_NO_ACTION_transition);
-			
+			return transitioning_init(LISTEN, (action_f)tcp_connection_NO_ACTION_transition);		
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);			
 		default:
 			return transitioning_init(LISTEN, (action_f)tcp_connection_invalid_transition);
 	}
@@ -60,7 +62,8 @@ transitioning_t syn_sent_next_state(transition_e t){
 		case receiveRST:
 			/* your connection was refused */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);	
-			
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);			
 		default:
 			return transitioning_init(SYN_SENT, (action_f)tcp_connection_invalid_transition);
 	}
@@ -80,6 +83,8 @@ transitioning_t syn_received_next_state(transition_e t){
 		case receiveRST:
 			/* your connection was refused */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);	
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);		
 		default:
 			return transitioning_init(SYN_RECEIVED, (action_f)tcp_connection_invalid_transition);
 	}
@@ -96,6 +101,8 @@ transitioning_t established_next_state(transition_e t){
 		case receiveRST:
 			/* reset */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);	
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);		
 		default:
 			return transitioning_init(ESTABLISHED, (action_f)tcp_connection_invalid_transition);
 	}
@@ -115,7 +122,7 @@ transitioning_t fin_wait_1_next_state(transition_e t){
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);			
 		case ABORT:
 			/* we call this transition when they never ack our fin */
-			return transitioning_init(CLOSED, (action_f)tcp_connection_ABORT);
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);
 		
 		default:
 			return transitioning_init(FIN_WAIT_1, (action_f)tcp_connection_invalid_transition);
@@ -137,6 +144,8 @@ transitioning_t fin_wait_2_next_state(transition_e t){
 		case receiveRST:
 			/* reset */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);			
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);				
 		default:
 			return transitioning_init(FIN_WAIT_2, (action_f)tcp_connection_invalid_transition);
 	}
@@ -155,6 +164,8 @@ transitioning_t close_wait_next_state(transition_e t){
 		case receiveRST:
 			/* reset */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);	
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);		
 		default:
 			return transitioning_init(CLOSE_WAIT, (action_f)tcp_connection_invalid_transition);
 	}
@@ -181,6 +192,8 @@ transitioning_t last_ack_next_state(transition_e t){
 				RFC: If an ACK is not forthcoming, after the user timeout the connection is 
 				aborted and the user is told.*/
 			return transitioning_init(CLOSED, (action_f)tcp_connection_ABORT);		
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);				
 		default:
 			return transitioning_init(LAST_ACK, (action_f)tcp_connection_invalid_transition);
 	}
@@ -198,7 +211,8 @@ transitioning_t time_wait_next_state(transition_e t){
 			/* retransmission of the remote FIN.  Acknowledge it, and restart
           	the 2 MSL timeout. */
           	return transitioning_init(TIME_WAIT, (action_f)tcp_connection_FIN_WAIT_2_to_TIME_WAIT); 
-		
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);		
 		case receiveRST:
 			/* reset */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);			
@@ -221,7 +235,8 @@ transitioning_t closing_next_state(transition_e t){
 		case receiveRST:
 			/* reset */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);			
-			
+		case ABORT:
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);			
 		default:
 			return transitioning_init(CLOSING, (action_f)tcp_connection_invalid_transition);
 	}
