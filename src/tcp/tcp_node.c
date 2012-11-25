@@ -251,7 +251,9 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 		// we already aborted it when we called quit_cmd
 		if(tcp_node->connections[i] != NULL)
 			tcp_connection_destroy(tcp_node->connections[i]);
+
 	}
+
 	// free the array itself
 	free(tcp_node->connections);
 	// get rid of kernal mutex
