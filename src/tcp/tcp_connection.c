@@ -1407,14 +1407,19 @@ void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_da
 			reset has sequence number zero and the ACK field is set to the sum
 			of the sequence number and segment length of the incoming segment.
 			The connection remains in the CLOSED state.*/
-		if(tcp_ack_bit(incoming_header))
+		if(tcp_ack_bit(incoming_header)){
 			tcp_set_seq(outgoing_header, tcp_ack(incoming_header));
-		else
+		}
+		else{
 			tcp_set_seq(outgoing_header, 0);
-	
+			/* ACK */
+			int seg_length = packet->packet_size - tcp_offset_in_bytes(incoming_header);
+			tcp_set_ack(outgoing_header, (tcp_seqnum(outgoing_header)+seg_length));
+			tcp_set_ack_bit(outgoing_header);
+		}
 		/* ACK */
-		int seg_length = packet->packet_size - tcp_offset_in_bytes(incoming_header);
-		tcp_set_ack(outgoing_header, (tcp_seqnum(outgoing_header)+seg_length));
+		//int seg_length = packet->packet_size - tcp_offset_in_bytes(incoming_header);
+		//tcp_set_ack(outgoing_header, (tcp_seqnum(outgoing_header)+seg_length));
 	}
 
 
