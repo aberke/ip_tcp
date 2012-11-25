@@ -264,10 +264,10 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	void* tcp_packet = tcp_packet_data->packet;
 	
 	/* Printing packet here */
-	if(state_machine_get_state(connection->state_machine) != ESTABLISHED){
+	//if(state_machine_get_state(connection->state_machine) != ESTABLISHED){
 		print(("Received Packet of size %d", tcp_packet_data->packet_size), PACKET_PRINT);
 		view_packet((struct tcphdr*)tcp_packet, tcp_packet+20, tcp_packet_data->packet_size-20); 
-	}
+	//}
 	
 	/* First thing: ensure the integrity */
 	int checksum_result = tcp_utils_validate_checksum(tcp_packet, 
@@ -918,10 +918,10 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 	uint32_t total_length = tcp_offset_in_bytes(header) + data_len;
     
     /* print it */
-    if(tcp_connection_get_state(connection) != ESTABLISHED){
+    //if(tcp_connection_get_state(connection) != ESTABLISHED){
     	print(("Sending Packet of length %u", total_length), PACKET_PRINT);
     	view_packet(header, data, data_len); 
-    }   
+    //}   
     
 	if((data != NULL)&&(data_len)){
 		memcpy(((char*)header)+tcp_offset_in_bytes(header), data, data_len);
