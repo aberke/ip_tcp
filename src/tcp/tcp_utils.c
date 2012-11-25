@@ -140,11 +140,11 @@ uint16_t tcp_utils_calc_checksum(void* packet, uint16_t total_length, uint32_t s
 	uint16_t *p = (uint16_t*)packet;
 	uint32_t sum = 0;
 	uint16_t odd_byte = 0;
-
+	// why 16?????
 	uint16_t* pseudo_packet = (uint16_t*)malloc(total_length+12); // 12 is size in bytes of pseudo-header
 	memset(pseudo_packet, 0, total_length);
 	((uint32_t*)pseudo_packet)[0] = src_ip;
-	((uint32_t*)pseudo_packet)[1] = dest_ip;
+	((uint32_t*)pseudo_packet)[1] = dest_ip; //why of 1 and not 2??
 	((uint8_t*)pseudo_packet) [9] = (uint8_t)TCP_DATA;
 	((uint16_t*)pseudo_packet)[5] = ntohs((uint16_t)total_length);
 	
@@ -173,7 +173,7 @@ uint16_t tcp_utils_calc_checksum(void* packet, uint16_t total_length, uint32_t s
 /* calculates the checksum and adds it to the tcphdr */
 void tcp_utils_add_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t protocol){
 	
-	return; //was segfaulting so ALEX commented out until NEIL fixes
+	//return; //was segfaulting so ALEX commented out until NEIL fixes
 	
 	/* zero out the checksum */
 	tcp_set_checksum(packet, 0);
@@ -181,8 +181,8 @@ void tcp_utils_add_checksum(void* packet, uint16_t total_length, uint32_t src_ip
 	/* calculate it */
 	uint16_t checksum = tcp_utils_calc_checksum(packet, total_length, src_ip, dest_ip, protocol);
 
-	/* set it back */
-	tcp_set_checksum(packet, checksum);
+	/* set it back (sets it in network byte order now) */
+	tcp_set_checksum(packet, htons(checksum));
 }
 
 /* 
@@ -195,31 +195,34 @@ returns
 */
 int tcp_utils_validate_checksum(void* packet, uint16_t total_length, uint32_t src_ip, uint32_t dest_ip, uint16_t protocol){
 	
-	return 1; // was segfaulting so ALEX commented out until NEIL fixes
+	//return 1; // was segfaulting so ALEX commented out until NEIL fixes
 	
 	/* store the original checksum */
-	uint16_t checksum = tcp_checksum(packet);
-
+	uint16_t their_checksum = tcp_checksum(packet);
+	
+	uint16_t their_nchecksum = ntohs(their_checksum);
+	
 	/* zero out the checksum to calculate it */
 	tcp_set_checksum(packet, 0);
 
 	/* get the actual checksum */
-	uint16_t actual_checksum = tcp_utils_calc_checksum(packet, total_length, src_ip, dest_ip, protocol);
+	uint16_t our_checksum = tcp_utils_calc_checksum(packet, total_length, src_ip, dest_ip, protocol);
 
-	uint16_t nchecksum = ntohs(actual_checksum);
+	uint16_t our_nchecksum = ntohs(our_checksum);
 
 	uint16_t checksum1 = tcp_utils_calc_checksum(packet, total_length, dest_ip, src_ip, protocol);
 	uint16_t nchecksum1 = ntohs(checksum1);
 	
-	printf("%u %u %u\n", nchecksum, checksum1, nchecksum1);
-
+	printf("their_sum: %u their_nsum: %u\n", their_checksum, their_nchecksum);
+	printf("our_sum: %u   our_nsum: %u  our_swapped_sum: %u  our_swapped_nsum: %u\n", 
+			our_checksum, our_nchecksum, checksum1, nchecksum1);
 
 /* !!!!!!!!!!!!!!!LADFJSLADJSFLASDFJDKLSFJ ASDLFKJAS DLFKA */
 	/* XOR the actual checksum and the given checksum, 
 	   if it's not 0, then they're not the same */
-	if(checksum ^ actual_checksum){
-		tcp_set_checksum(packet, checksum);
-		return 1; // actually i mean -1
+	if(their_checksum ^ our_checksum){
+		tcp_set_checksum(packet, their_checksum);
+		return -1; 
 	}
 	else
 		return 1;
