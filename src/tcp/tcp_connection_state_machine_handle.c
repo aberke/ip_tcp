@@ -500,7 +500,7 @@ int tcp_connection_CLOSED_by_RST(tcp_connection_t connection){
 	if(connection->receive_window)
 		recv_window_destroy(&(connection->receive_window));
 	
-	tcp_connection_api_signal(connection, -CONNECTION_RESET);
+	tcp_connection_api_signal(connection, CONNECTION_RESET);
 
 	/* just closing up, nothing to do */
 	return -ECONNREFUSED;	
