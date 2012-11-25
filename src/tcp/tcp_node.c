@@ -190,7 +190,8 @@ void tcp_node_ABORT_connections(tcp_node_t tcp_node){
 	int i;
 	for(i=0; i<(tcp_node->num_connections); i++){
 		// we quickly send RST rather than gracefully CLOSEing
-		tcp_connection_ABORT(tcp_node->connections[i]);
+		if(tcp_node->connections[i] != NULL) //it could be NULL
+			tcp_connection_ABORT(tcp_node->connections[i]);
 	}
 }
 
@@ -248,7 +249,8 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	int i;
 	for(i=0; i<(tcp_node->num_connections); i++){
 		// we already aborted it when we called quit_cmd
-		tcp_connection_destroy(tcp_node->connections[i]);
+		if(tcp_node->connections[i] != NULL)
+			tcp_connection_destroy(tcp_node->connections[i]);
 	}
 	// free the array itself
 	free(tcp_node->connections);
