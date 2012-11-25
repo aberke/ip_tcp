@@ -1056,9 +1056,14 @@ void *_handle_read_send(void *tcpconnection){
 
 		time_elapsed = now.tv_sec - connection->state_timer.tv_sec;
 		time_elapsed += now.tv_usec/1000000.0 - connection->state_timer.tv_usec/1000000.0;
-
+		
+		if(state == ESTABLISHED){
+			//let's send a keep-alive message
+			if(time_elapsed > KEEP_ALIVE_FREQUENCY)
+				tcp_connection_send_keep_alive(connection);
+		}
 		/* check if you're waiting for an ACK to come back */
-		if(state == SYN_SENT){	         
+		else if(state == SYN_SENT){	         
 			if(time_elapsed > (1 << ((connection->syn_fin_count)-1))*RETRANSMISSION_TIMEOUT){
 				// we timeout connect or resend
 
