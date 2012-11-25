@@ -1362,11 +1362,6 @@ int tcp_connection_ABORT(tcp_connection_t connection){
 
 /* refuse the connection (send a RST) */
 void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_data_t packet){
-
- 	if(state_machine_get_state(connection->state_machine) == CLOSED){
- 		//this is a fictional TCB
- 		return;
- 	}
  	
  	struct tcphdr* outgoing_header;
  	
@@ -1413,7 +1408,7 @@ void tcp_connection_refuse_connection(tcp_connection_t connection, tcp_packet_da
 		else{
 			tcp_set_seq(outgoing_header, 0);
 			/* ACK */
-			int seg_length = packet->packet_size - tcp_offset_in_bytes(incoming_header);
+			int seg_length = packet->packet_size - tcp_offset_in_bytes(incoming_header) + 1;
 			tcp_set_ack(outgoing_header, (tcp_seqnum(incoming_header)+seg_length));
 			tcp_set_ack_bit(outgoing_header);
 		}
