@@ -444,8 +444,10 @@ void help_cmd(const char *line, tcp_node_t tcp_node){
 }
 
 void quit_cmd(const char *line, tcp_node_t tcp_node){
+	// first must ABORT all connections
+	tcp_node_ABORT_connections(tcp_node);
+
 	tcp_node_stop(tcp_node);
-	//tcp_node_command_ip(tcp_node, line);;	
 	return;
 }
 

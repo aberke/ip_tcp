@@ -49,6 +49,12 @@ typedef struct tcp_packet_data{
 /* Notice below outward facing commands mimic ip_node -- I think keeping to one pattern will help us stay organized */
 tcp_node_t tcp_node_init(iplist_t* links);
 void tcp_node_destroy(tcp_node_t ip_node);
+
+/* ADDED BY NEIL: stops everything */
+void tcp_node_stop(tcp_node_t tcp_node);
+// before shutting down, first must ABORT all connections
+void tcp_node_ABORT_connections(tcp_node_t tcp_node);
+
 void tcp_node_print(tcp_node_t tcp_node);
 
 void tcp_node_start(tcp_node_t tcp_node);
@@ -108,9 +114,6 @@ int tcp_node_ip_running(tcp_node_t tcp_node);
 	
 /* ADDED BY NEIL: tells the tcp_node to pass the command on to the ip_node */
 void tcp_node_command_ip(tcp_node_t tcp_node, const char* command);
-
-/* ADDED BY NEIL: stops everything */
-void tcp_node_stop(tcp_node_t tcp_node);
 
 /* ADDED BY NEIL: sends packet to ip */
 void tcp_node_send(tcp_node_t tcp_node, char* to_write, int socket, uint32_t num_bytes);

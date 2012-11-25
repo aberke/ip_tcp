@@ -185,6 +185,14 @@ tcp_node_t tcp_node_init(iplist_t* links){
 
 	return tcp_node;
 }
+// before shutting down, first must ABORT all connections
+void tcp_node_ABORT_connections(tcp_node_t tcp_node){
+	int i;
+	for(i=0; i<(tcp_node->num_connections); i++){
+		// we quickly send RST rather than gracefully CLOSEing
+		tcp_connection_ABORT(tcp_node->connections[i]);
+	}
+}
 
 /* will this do it? */
 void tcp_node_stop(tcp_node_t tcp_node){
@@ -239,8 +247,7 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	//// NOW destroy all the connections
 	int i;
 	for(i=0; i<(tcp_node->num_connections); i++){
-		// we quickly send RST rather than gracefully CLOSEing
-		tcp_connection_ABORT(tcp_node->connections[i]);
+		// we already aborted it when we called quit_cmd
 		tcp_connection_destroy(tcp_node->connections[i]);
 	}
 	// free the array itself

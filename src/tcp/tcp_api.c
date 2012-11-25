@@ -381,7 +381,8 @@ void* tcp_api_read_entry(void* _args){
 	// for us, on linux this won't be the case  <-- k thanx
 	to_read[ret] = '\0';
 	printf("[read for socket %d]:\n\t%s\n", args->socket, to_read); 
-	
+	if(state == CLOSED || state == CLOSE_WAIT || state == LAST_ACK)
+		printf("[Socket %d]: Remote Connection Closed\n", args->socket);
 	free(to_read);
 	_return(args, ret);
 	return NULL;
