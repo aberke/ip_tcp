@@ -140,8 +140,10 @@ int ip_unwrap_packet(char* buffer, char** packet_unwrapped, int packet_data_size
 int ip_wrap_send_packet(void* data, int data_len, int protocol, struct in_addr ip_src, struct in_addr ip_dst, link_interface_t li){
 	
 	if(protocol == TCP_DATA){	
-		uint16_t checksum = tcp_checksum(data);
-		print(("ip_wrap_send_packet: checksum: %u data_len: %d", checksum, data_len), PACKET_PRINT);
+		tcp_utils_validate_checksum(data, data_len, ip_src.s_addr, ip_dst.s_addr, protocol);
+	
+//		uint16_t checksum = tcp_checksum(data);
+//		print(("ip_wrap_send_packet: checksum: %u data_len: %d", checksum, data_len), PACKET_PRINT);
 	}
 	//make sure not to send more than UDP_PACKET_MAX_SIZE
 	if(data_len > (UDP_PACKET_MAX_SIZE - IP_HEADER_SIZE)){
