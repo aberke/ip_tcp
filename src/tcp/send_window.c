@@ -121,11 +121,12 @@ double _recalculate_RTO(send_window_t send_window, double RTT){
 	else{
 		send_window->SRTT = ((send_window->ALPHA)*(send_window->SRTT)) + ((1-send_window->ALPHA)*RTT);
 	}
+	send_window->RTO = 1.0;
 	if(send_window->SRTT == 0){
 		return 1.0;
 	}
 	//send_window->RTO = MIN(send_window->UBOUND, MAX(send_window->LBOUND, (send_window->BETA)*(send_window->SRTT)));
-	send_window->RTO = 1.0;
+	
 	//print(("new RTT: %f, new SRTT: %f, new RTO: %f", RTT, send_window->SRTT, send_window->RTO), SEND_WINDOW_PRINT);
 	
 	return send_window->RTO;
@@ -220,9 +221,6 @@ send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window)
 	if((sw_chunk=(send_window_chunk_t)queue_pop(send_window->timed_out_chunks)) != NULL){
 		/* restart its timer (it's still on the sent list!) */
 		gettimeofday(&(sw_chunk->send_time), NULL);
-
-		//printf("sw_chunk :: [length : %d] [data : %d]\n", sw_chunk->length, sw_chunk->data);
-
 		return sw_chunk;
 	}
 
@@ -343,7 +341,7 @@ int send_window_check_timers_synchronized(send_window_t send_window){
 		if(time_elapsed > send_window->RTO){
 			print(("------------resending---------------"), SEND_WINDOW_PRINT);
 			chunk->resent = (chunk->resent) + 1;
-			queue_push_front(send_window->timed_out_chunks, (void*)chunk);
+			queue_push(send_window->timed_out_chunks, (void*)chunk);
 		}
 		
 	PLAIN_LIST_ITER_DONE(list);

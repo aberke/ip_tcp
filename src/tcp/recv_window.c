@@ -76,8 +76,10 @@ returns
 	-1 otherwise
 */
 int recv_window_validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint32_t length){
-	if(seqnum==(recv_window->left+1) || seqnum==(recv_window->left) || seqnum==(recv_window->left-1))
-        return 0;
+	if(seqnum==(recv_window->left+1) || seqnum==(recv_window->left) || seqnum==(recv_window->left-1)){
+		printf("ACCEPTED\n");
+	        return 0;
+	}
     
 	int ret;
 		
