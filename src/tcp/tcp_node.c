@@ -24,9 +24,9 @@
 // port_tuple = remote_port -- local_port
 #define _port_tuple_init(to_set, local_port, remote_port)	\
 do{															\
-	*to_set = 0;											\
-	*to_set += local_port;									\
-	*to_set += ( remote_port << 16 );						\
+	*(to_set) = 0;											\
+	*(to_set) += (uint16_t)local_port;						\
+	*(to_set) += (uint32_t)(remote_port << 16);				\
 }															\
 while(0);
 

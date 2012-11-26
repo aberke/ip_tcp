@@ -69,6 +69,7 @@ uint32_t tcp_connection_get_local_ip(tcp_connection_t connection);
 /* If waiting for api signal and trying to shutdown, we end up blocking -- need way out
 	to be called before pthread_destroy on api thread
 	sets ret to SIGNAL_DESTROYING --should be something else? */
+pthread_mutex_t* tcp_connection_get_api_mutex(tcp_connection_t connection);
 void tcp_connection_api_cancel(tcp_connection_t connection);
 void tcp_connection_api_signal(tcp_connection_t connection, int ret);
 void tcp_connection_api_lock(tcp_connection_t connection);
