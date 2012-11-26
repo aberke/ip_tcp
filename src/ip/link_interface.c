@@ -109,7 +109,10 @@ int link_interface_send_packet(link_interface_t li, void* data, int data_len){
 	int sent, bytes_sent;
 	sent = sendto(socket_fd, data, data_len, 0, (struct sockaddr*)&remoteaddr, size);
 	bytes_sent = sent;
+	int i=0;
 	while(bytes_sent < data_len){
+		i++;
+		print(("link_interface_send_packet: %d", i), PACKET_PRINT);
 		if(sent < 0){
 			// interface needs to go down
 			printf("Remote connection %u closed.\n", li->remote_virt_ip);

@@ -141,17 +141,13 @@ int ip_wrap_send_packet(void* data, int data_len, int protocol, struct in_addr i
 	
 	if(protocol == TCP_DATA){	
 		uint16_t checksum = tcp_checksum(data);
-		print(("ip_wrap_send_packet: checksum: %u", checksum), PACKET_PRINT);
+		print(("ip_wrap_send_packet: checksum: %u data_len: %d", checksum, data_len), PACKET_PRINT);
 	}
 	//make sure not to send more than UDP_PACKET_MAX_SIZE
 	if(data_len > (UDP_PACKET_MAX_SIZE - IP_HEADER_SIZE)){
 		data_len = UDP_PACKET_MAX_SIZE - IP_HEADER_SIZE;
 		puts("packet too long -- truncating data");
 	}
-
-	// convert addresses to network byte order
-	//ip_src.s_addr = htonl(ip_src.s_addr);
-	//ip_dst.s_addr = htonl(ip_dst.s_addr);
 
 	// fill in header
 	struct ip* ip_header = (struct ip*)malloc(IP_HEADER_SIZE);

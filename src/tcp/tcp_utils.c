@@ -184,7 +184,6 @@ void tcp_utils_add_checksum(void* packet, uint16_t total_length, uint32_t src_ip
 	uint16_t checksum = tcp_utils_calc_checksum(packet, total_length, src_ip, dest_ip, protocol);
 
 	print(("Setting our checksum: %u", checksum), PACKET_PRINT);
-
 	/* set it back (sets it in network byte order now) */
 	tcp_set_checksum(packet, checksum);
 }
