@@ -280,7 +280,51 @@ void close_cmd(const char* line, tcp_node_t node){
 		
 	tcp_node_thread(node, tcp_api_close_entry, args);			
 }
-
+/* recvfile filename port 
+	Listen for a connection on the given port. Once established, write every-
+	thing you can read from the socket to the given file. Once the other side closes the connection,
+	close the connection as well. Your driver must continue to accept other commands. */
+void recvfile_cmd(const char* line, tcp_node_t tcp_node){
+	int ret, socket, port;
+	char* filename_buffer = (char*)malloc(sizeof(char)*FILE_BUF_SIZE);
+	
+	ret = sscanf(line, "recvfile %s %d", filename_buffer, &port);
+	if(ret != 2){
+		fprintf(stderr, "syntax error (usage: recvfile [filename] [port])\n");
+		return;
+	}	
+	// create new socket
+	if((socket = tcp_api_socket(tcp_node))<0){
+		printf("Error: v_socket() returned: %s\n", strerror(-socket));
+		free(filename_buffer);
+		return;
+	}
+	// now bind
+	struct in_addr addr;	
+	ret = tcp_api_bind(tcp_node, socket, &addr, port);
+	if(ret < 0){
+		printf("Error: v_bind returned: %s\n", strerror(-ret));
+		free(filename_buffer);
+		return;
+	}
+	// now listen
+	ret = tcp_api_listen(tcp_node, socket);	
+	if(ret < 0){
+		printf("Error: v_listen returned: %s\n", strerror(-ret));
+		free(filename_buffer);
+		return;
+	}
+	// now accept and write	
+	tcp_api_args_t args = tcp_api_args_init();
+	args->node = tcp_node;
+	args->socket = socket;
+	args->buffer = filename_buffer;
+	args->port = port;
+	args->function_call = "recvfile()";
+	
+	tcp_node_thread(tcp_node, tcp_api_recvfile_entry, args);	
+	return;
+}
 /*
 recv/r socket numbytes y/n Try to read data from a given socket. If the last argument is y, then
 you should block until numbytes is received, or the connection closes. If n, then don’t block;
@@ -324,7 +368,53 @@ void recv_cmd(const char* line, tcp_node_t tcp_node){
 		args->boolean = 1;
 	tcp_node_thread(tcp_node, tcp_api_read_entry, args);
 }
+/* 
+sendfile_cmd
+	parses the given command into a socket and a file to send, 
+	and then upon successful parsing of the arguments tries to
+	open the file and then sends it off 
+*/
+void sendfile_cmd(const char* line, tcp_node_t tcp_node){
+	int ret, socket, port;
+	char* filename_buffer = (char*)malloc(sizeof(char)*FILE_BUF_SIZE);
 
+	struct in_addr* addr = malloc(sizeof(struct in_addr));
+	char addr_buffer[INET_ADDRSTRLEN];
+	
+	ret = sscanf(line, "sendfile %s %s %d", filename_buffer, addr_buffer, &port);
+	if(ret != 3){
+		fprintf(stderr, "syntax error (usage: sendfile [filename] [ip] [port])\n");
+		free(filename_buffer);
+		free(addr);
+		return;
+	}		
+	//convert string ip address to real ip address
+	if(inet_pton(AF_INET, addr_buffer, addr) <= 0){ // IPv4
+		fprintf(stderr, "syntax error - could not parse ip address (usage: connect [remote ip address] [remote port])\n");
+		free(filename_buffer);
+		free(addr);
+		return;
+	}
+
+	// first initialize new socket that will do the connecting
+	if((socket = tcp_api_socket(tcp_node))<0){
+		printf("Error: v_socket() returned value %d\n", socket);
+		free(filename_buffer);
+		free(addr);
+		return;
+	}
+
+	tcp_api_args_t args = tcp_api_args_init();
+	args->node = tcp_node;
+	args->socket = socket;
+	args->addr = addr;
+	args->buffer = filename_buffer;
+	args->port = port;
+	args->function_call = "sendfile()";
+	
+	tcp_node_thread(tcp_node, tcp_api_sendfile_entry, args);	
+	return;
+}
 /*send/s/w socket data Send a string on a socket. */
 void send_cmd(const char* line, tcp_node_t tcp_node){
 
@@ -484,49 +574,6 @@ void up_cmd(const char *line, tcp_node_t tcp_node){
 }
 
 
-
-/* 
-sendfile_cmd
-	parses the given command into a socket and a file to send, 
-	and then upon successful parsing of the arguments tries to
-	open the file and then sends it off 
-*/
-void sendfile_cmd(const char* line, tcp_node_t tcp_node){
-	int ret, socket, port;
-	char* filename_buffer = (char*)malloc(sizeof(char)*FILE_BUF_SIZE);
-
-	struct in_addr* addr = malloc(sizeof(struct in_addr));
-	char addr_buffer[INET_ADDRSTRLEN];
-	
-	ret = sscanf(line, "sendfile %s %s %d", filename_buffer, addr_buffer, &port);
-	if(ret != 3){
-		fprintf(stderr, "syntax error (usage: sendfile [filename] [ip] [port])\n");
-		return;
-	}		
-	//convert string ip address to real ip address
-	if(inet_pton(AF_INET, addr_buffer, addr) <= 0){ // IPv4
-		fprintf(stderr, "syntax error - could not parse ip address (usage: connect [remote ip address] [remote port])\n");
-		return;
-	}
-
-	// first initialize new socket that will do the connecting
-	if((socket = tcp_api_socket(tcp_node))<0){
-		printf("Error: v_socket() returned value %d\n", socket);
-		return;
-	}
-
-	tcp_api_args_t args = tcp_api_args_init();
-	args->node = tcp_node;
-	args->socket = socket;
-	args->addr = addr;
-	args->buffer = filename_buffer;
-	args->port = port;
-	args->function_call = "sendfile()";
-	
-	tcp_node_thread(tcp_node, tcp_api_sendfile_entry, args);	
-	return;
-}
-
 void command_1(const char *line, tcp_node_t tcp_node){
 	char cmd[256];
 	strcpy(cmd, "v_connect 0 10.10.168.73 13");
@@ -644,7 +691,7 @@ struct {
   {"sendfile", sendfile_cmd},
   {"shutdown", shutdown_cmd},
 
-  /*{"recvfile", recvfile_cmd},*/
+  {"recvfile", recvfile_cmd},
   {"close", close_cmd},
   {"quit", quit_cmd},	// last two quit commands added by alex -- is this how we want to deal with quitting?
   {"q", quit_cmd},

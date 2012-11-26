@@ -180,14 +180,12 @@ void* tcp_api_recvfile_entry(void* _args){
 	/* verify that the necessary args were set */
 	_verify_node(args);
 	_verify_socket(args);
-	_verify_addr(args);
 	_verify_buffer(args);
 	_verify_port(args);
 	
 	/* lock it up */	
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
-	if(connection == NULL)
-	{	
+	if(connection == NULL){	
 		_return(args, -EBADF); 	 // = The file descriptor is not a valid index in the descriptor table.
 		return NULL;
 	}
@@ -201,39 +199,35 @@ void* tcp_api_recvfile_entry(void* _args){
 		_return(args, -EINVAL);	//Invalid argument passed
 		return NULL;
 	}
-
-/* GET THE NEXT INCOMING CONNECTION REQUEST */
-	// get the next accept_queue_data
-	accept_queue_data_t data = tcp_connection_accept_queue_dequeue(listening_connection);
-	if(data == NULL){
-		_return(args, -EBADF); // or somethin else?
-		return NULL; 
+	/* Get new accepted connection -- this call will block */
+	struct in_addr *addr;	
+	int reading_socket = tcp_api_accept(args->node, args->socket, addr);
+	if(reading_socket < 0){
+		_return(args, reading_socket);
+		return NULL;
 	}
-
-	// assign values from triple to that connection (tcp_node_new_connection assigned it a unique port)
-	tcp_connection_set_local_ip(connection, accept_queue_data_get_local_ip(data));
-	tcp_connection_set_remote(connection, accept_queue_data_get_remote_ip(data), accept_queue_data_get_remote_port(data));
-	tcp_connection_set_last_seq_received(connection, accept_queue_data_get_seq(data));
-		
-	// destroy data -- all done with it
-	accept_queue_data_destroy(&data);
+	tcp_connection_t reading_connection = tcp_node_get_connection_by_socket(args->node, reading_socket);
+	if(reading_connection == NULL){	
+		puts("ERROR: Bug: See recvfile_entry");
+		_return(args, -EBADF); 	 // = The file descriptor is not a valid index in the descriptor table.
+		return NULL;
+	}	
 	
-	while(tcp_node_running(args->node) && tcp_connection_get_state(connection) != CLOSE_WAIT){
+	while(tcp_node_running(args->node) && tcp_connection_get_state(new_connection) != CLOSE_WAIT){
 		
 		
 	
-
-/* CLEAN UP */
-	// close connection we opened 
+	}
+	/* CLEAN UP */
+	// close connections we opened 
+	tcp_api_close(args->node, reading_socket);
 	tcp_api_close(args->node, args->socket); //locks and blocks but we don't need this anymore anyhow
-
 	// clean up the file
 	fclose(f);
 
 	/* and use my macro to return it 
 		(first arg is size of retal) */
 	_return(args, 0);
-
 	return NULL;
 }	
 
