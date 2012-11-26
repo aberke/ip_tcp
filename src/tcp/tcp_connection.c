@@ -935,6 +935,8 @@ void *_handle_read_send(void *tcpconnection){
 		}
 		/* check if you're waiting for an ACK to come back */
 		else if(state == SYN_SENT){	         
+//			printf("[elapsed %f] [(1 << (BACKOFF_MULTIPLER*(connection->syn_fin_count)-1))*RTO) %f]\n", time_elapsed, (1 << (BACKOFF_MULTIPLER*(connection->syn_fin_count)-1))*RTO);
+
 			if(time_elapsed > (1 << (BACKOFF_MULTIPLER*(connection->syn_fin_count)-1))*RTO){
 				// we timeout connect or resend
 
@@ -952,6 +954,7 @@ void *_handle_read_send(void *tcpconnection){
 		else if(state == SYN_RECEIVED){
 			/* after a conservative amount of time, let's let the SYN_RECEIVED time out so that accept doesn't 
 				block waiting for the api signal forever */
+//			printf("elapsed %f [((1 << 3)*RTO %f]\n", (1 << 3)*RTO);
 			if(time_elapsed > (1 << 3)*RTO){
 				// right now we're letting the api close and remove it when it sees this timeout
 				tcp_connection_api_signal(connection, API_TIMEOUT);
