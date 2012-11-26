@@ -141,7 +141,7 @@ int ip_wrap_send_packet(void* data, int data_len, int protocol, struct in_addr i
 	
 	if(protocol == TCP_DATA){	
 		uint16_t checksum = tcp_checksum(data);
-		print(("ip_wrap_send_packet: checksum: %u\n", checksum), PACKET_PRINT);
+		print(("ip_wrap_send_packet: checksum: %u", checksum), PACKET_PRINT);
 	}
 	//make sure not to send more than UDP_PACKET_MAX_SIZE
 	if(data_len > (UDP_PACKET_MAX_SIZE - IP_HEADER_SIZE)){
