@@ -208,9 +208,8 @@ int tcp_utils_validate_checksum(void* packet, uint16_t total_length, uint32_t sr
 	/* get the actual checksum */
 	uint16_t our_checksum = tcp_utils_calc_checksum(packet, total_length, src_ip, dest_ip, protocol);
 	
-	printf("their_sum: %u their_nsum: %u\n", their_checksum, their_nchecksum);
-	printf("our_sum: %u   our_nsum: %u\n", 
-			our_checksum, our_nchecksum);
+	printf("their_sum: %u\n", their_checksum);
+	printf("our_sum: %u\n", our_checksum);
 
 
 /* !!!!!!!!!!!!!!!LADFJSLADJSFLASDFJDKLSFJ ASDLFKJAS DLFKA */
