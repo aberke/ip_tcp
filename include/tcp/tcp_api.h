@@ -61,6 +61,8 @@ int tcp_api_accept(struct tcp_node* tcp_node, int socket, struct in_addr *addr);
 // Not for driver use -- just for our use when we only want to accept once
 void* tcp_api_accept_entry(void* args);
 
+void* tcp_api_recvfile_entry(void* _args);
+
 /* read on an open socket (RECEIVE in the RFC)
 return num bytes read or negative number on failure or 0 on eof */
 //int v read(int socket, unsigned char *buf, uint32 t nbyte);

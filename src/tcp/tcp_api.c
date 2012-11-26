@@ -213,7 +213,7 @@ void* tcp_api_recvfile_entry(void* _args){
 		return NULL;
 	}	
 	
-	while(tcp_node_running(args->node) && tcp_connection_get_state(new_connection) != CLOSE_WAIT){
+	while(tcp_node_running(args->node) && tcp_connection_get_state(reading_connection) != CLOSE_WAIT){
 		
 			
 	
