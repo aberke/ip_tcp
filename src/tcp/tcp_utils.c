@@ -201,7 +201,7 @@ int tcp_utils_validate_checksum(void* packet, uint16_t total_length, uint32_t sr
 	//return 1; // was segfaulting so ALEX commented out until NEIL fixes
 	
 	/* store the original checksum */
-	uint16_t their_checksum = tcp_checksum(packet);
+	u_int16_t their_checksum = tcp_checksum(packet);
 	
 	/* zero out the checksum to calculate it */
 	tcp_set_checksum(packet, 0);
