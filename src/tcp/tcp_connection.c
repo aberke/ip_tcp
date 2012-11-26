@@ -266,8 +266,8 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 	
 	/* Printing packet here */
 	if(state_machine_get_state(connection->state_machine) != ESTABLISHED){
-		//print(("Received Packet of size %d", tcp_packet_data->packet_size), PACKET_PRINT);
-		//view_packet((struct tcphdr*)tcp_packet, tcp_packet+20, tcp_packet_data->packet_size-20); 
+		print(("Received Packet of size %d", tcp_packet_data->packet_size), PACKET_PRINT);
+		view_packet((struct tcphdr*)tcp_packet, tcp_packet+20, tcp_packet_data->packet_size-20); 
 	}
 	
 	/* First thing: ensure the integrity */
@@ -771,8 +771,8 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
     
     /* print it */
     if(tcp_connection_get_state(connection) != ESTABLISHED){
-    	//print(("Sending Packet of length %u", total_length), PACKET_PRINT);
-    	//view_packet(header, data, data_len); 
+    	print(("Sending Packet of length %u", total_length), PACKET_PRINT);
+    	view_packet(header, data, data_len); 
     }   
     
 	if((data != NULL)&&(data_len)){
