@@ -125,6 +125,7 @@ double _recalculate_RTO(send_window_t send_window, double RTT){
 	
 	return send_window->RTO;
 }
+
 send_window_t send_window_init(int window_size, int send_size, int ISN, 
 								double ALPHA, double BETA, double UBOUND, double LBOUND){
 	send_window_t send_window = (send_window_t)malloc(sizeof(struct send_window));
@@ -212,11 +213,10 @@ uint32_t send_window_get_next_seq(send_window_t send_window){
 send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window){
 	send_window_chunk_t sw_chunk;
 	if((sw_chunk=(send_window_chunk_t)queue_pop(send_window->timed_out_chunks)) != NULL){
-
 		/* restart its timer (it's still on the sent list!) */
 		gettimeofday(&(sw_chunk->send_time), NULL);
 
-		printf("sw_chunk :: [length : %d] [data : %d]\n", sw_chunk->length, sw_chunk->data);
+		//printf("sw_chunk :: [length : %d] [data : %d]\n", sw_chunk->length, sw_chunk->data);
 
 		return sw_chunk;
 	}
@@ -241,7 +241,7 @@ send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window)
 	/* increment the sent_left */
 	send_window->sent_left = (sent_left + chunk->length) % MAX_SEQNUM;
 
-	printf("[sw chunk size: %d] [regular chunk size: %d]\n", sw_chunk->length, chunk->length);
+	//printf("[sw chunk size: %d] [regular chunk size: %d]\n", sw_chunk->length, chunk->length);
 	return sw_chunk;
 }
 
@@ -286,7 +286,7 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 		free(chunk);
 	
 		/* you can delete this link in the list */
-		printf("removing from sentlist: %p\n", chunk);
+		//printf("removing from sentlist: %p\n", chunk);
 		plain_list_remove(list, el);
 	PLAIN_LIST_ITER_DONE(list);
 
@@ -326,7 +326,7 @@ int send_window_check_timers_synchronized(send_window_t send_window){
 		time_elapsed += now.tv_usec/1000000.0 - chunk_timer.tv_usec/1000000.0;
 		
 		if(time_elapsed > send_window->RTO){
-			puts("------------resending---------------");
+			//puts("------------resending---------------");
 			chunk->resent = (chunk->resent) + 1;
 			queue_push_front(send_window->timed_out_chunks, (void*)chunk);
 		}
