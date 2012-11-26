@@ -186,45 +186,54 @@ void* tcp_api_recvfile_entry(void* _args){
 	
 	/* lock it up */	
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
-	if(connection == NULL){	
+	if(connection == NULL)
+	{	
 		_return(args, -EBADF); 	 // = The file descriptor is not a valid index in the descriptor table.
 		return NULL;
 	}
 	tcp_connection_api_lock(connection);// make sure no one else is messing with the socket/connection
-		
+
+/* OPEN THE FILE */
 	/* open file so we can verify valid before we open any connections that we'll then need to close */
-	FILE* f = fopen(args->buffer, "r");
+	FILE* f = fopen(args->buffer, "w");
 	if(!f){
-		fprintf(stderr, "Unable to open given file: %s\n", args->buffer);
+		fprintf(stderr, "Unable to open file for writing: %s\n", args->buffer);
 		_return(args, -EINVAL);	//Invalid argument passed
 		return NULL;
 	}
-	
-	/* open connection */
-	int ret = tcp_api_connect(args->node, args->socket, args->addr, args->port);
-	if(ret<0){
-		args->function_call = "sendfile: v_socket()";
-		_return(args, ret);
-		return NULL;		
- 	}
-	
-	char input_line[BUFFER_SIZE];
-	while(fgets(input_line, BUFFER_SIZE-1, f)){
-		ret = tcp_connection_send_data(connection, (unsigned char*)input_line, strlen(input_line));
-		if (ret < 0){
-			args->function_call = "sendfile: v_write()";
-			_return(args, ret);
-			return NULL;
-		}
+
+/* GET THE NEXT INCOMING CONNECTION REQUEST */
+	// get the next accept_queue_data
+	accept_queue_data_t data = tcp_connection_accept_queue_dequeue(listening_connection);
+	if(data == NULL){
+		_return(args, -EBADF); // or somethin else?
+		return NULL; 
 	}
+
+	// assign values from triple to that connection (tcp_node_new_connection assigned it a unique port)
+	tcp_connection_set_local_ip(connection, accept_queue_data_get_local_ip(data));
+	tcp_connection_set_remote(connection, accept_queue_data_get_remote_ip(data), accept_queue_data_get_remote_port(data));
+	tcp_connection_set_last_seq_received(connection, accept_queue_data_get_seq(data));
+		
+	// destroy data -- all done with it
+	accept_queue_data_destroy(&data);
 	
-	//clean up
-	fclose(f);
+	while(tcp_node_running(args->node) && tcp_connection_get_state(connection) != CLOSE_WAIT){
+		
+		
+	
+
+/* CLEAN UP */
 	// close connection we opened 
 	tcp_api_close(args->node, args->socket); //locks and blocks but we don't need this anymore anyhow
+
+	// clean up the file
+	fclose(f);
+
 	/* and use my macro to return it 
 		(first arg is size of retal) */
 	_return(args, 0);
+
 	return NULL;
 }	
 
@@ -347,11 +356,13 @@ int tcp_api_read(tcp_node_t tcp_node, int socket, char *buffer, uint32_t nbyte){
 	if(!chunk){
 		return 0;
 	}	
+
 	int read = nbyte;
 	if(chunk->length > nbyte){
 		puts("Error: Alex and Neil go debug tcp_api_read");
 		exit(-1);
 	}
+
 	if(chunk->length < nbyte)
 		read = chunk->length;
 	
@@ -360,6 +371,7 @@ int tcp_api_read(tcp_node_t tcp_node, int socket, char *buffer, uint32_t nbyte){
 	memchunk_destroy_total(&chunk, util_free);
 	return read;
 }
+
 void* tcp_api_read_entry(void* _args){
 	tcp_api_args_t args = (tcp_api_args_t)_args;
 
@@ -433,6 +445,7 @@ void* tcp_api_read_entry(void* _args){
 			ret = ret + read;
 		}
 	}
+
 	// NOTE! You can't just print the buffer because it's not null-teriminated!
 	// On mac's this will be no problem, because the memory is nicely 0-ed out 
 	// for us, on linux this won't be the case  <-- k thanx
