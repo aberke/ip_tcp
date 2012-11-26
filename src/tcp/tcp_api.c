@@ -24,13 +24,16 @@ int tcp_api_args_destroy(tcp_api_args_t* args){
 		if you're not done yet */ 
 	tcp_connection_t connection = tcp_node_get_connection_by_socket((*args)->node, (*args)->socket);
 	if(connection){
+		print(("tcp_api_args_destroy 1: %s", args->function_call), CLOSING_PRINT);
 		//lets cancel any blocks on the api signal so that shutting down doesn't take a while
 		tcp_connection_api_cancel(connection); 
 		/* unlock */
+		print(("tcp_api_args_destroy 2: %s", args->function_call), CLOSING_PRINT);
 		tcp_connection_api_unlock(connection);
 	}
-		
+	print(("tcp_api_args_destroy 3: %s", args->function_call), CLOSING_PRINT);		
     pthread_join((*args)->thread, NULL);
+	print(("tcp_api_args_destroy 4: %s", args->function_call), CLOSING_PRINT);
     int result = (*args)->result;
 	/* For this not to go wrong we had better set args->addr to NULL at first.  See function init() */
 	if((*args)->addr != NULL)
@@ -503,13 +506,11 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 		/* THIS CALL IS BLOCKING -- because the accept_queue is a bqueue -- call returns when accept_data_t dequeued */
 		tcp_connection_t new_connection = tcp_node_connection_accept(tcp_node, listening_connection);
 		if(new_connection == NULL){
-			puts("tcp_api_accept: NULL\n");	
 			// NULL is returned when we've reached max number of file descriptors or trying to close
 			if(tcp_connection_get_close_boolean(listening_connection)) // we were just rying to close
 				return CONNECTION_CLOSED;
 			return -ENFILE;	//The system limit on the total number of open files has been reached.
 		}
-		printf("tcp_api_accept: socket: %d\n", tcp_connection_get_socket(new_connection));	
 
 		// set state of this new_connection to LISTEN so that we can send it through transition LISTEN_to_SYN_RECEIVED
 		tcp_connection_set_state(new_connection, LISTEN);
@@ -634,7 +635,7 @@ any of these API functions. If the writing part of the socket has not been
 shutdown yet, then do so. The connection shouldn't be terminated, though;
 any data not yet ACKed should still be retransmitted. */
 int tcp_api_close(tcp_node_t tcp_node, int socket){
-	printf("tcp_api_close: socket %d\n", socket);
+
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(connection == NULL){
 		return -EBADF;
@@ -643,7 +644,6 @@ int tcp_api_close(tcp_node_t tcp_node, int socket){
 		
 	// CLOSE and close reading part
 	ret = tcp_api_shutdown(tcp_node, socket, 3);
-	printf("tcp_api_close: socket %d\n", socket);
 	if(ret == 0 && (tcp_connection_get_state(connection)!=CLOSED)) //success
 		/* everything's going well and all, but we're still in the process of closing so let's not delete
 		this connection until it has finished closing with its peer */
@@ -658,22 +658,17 @@ int tcp_api_close(tcp_node_t tcp_node, int socket){
 }
 void* tcp_api_close_entry(void* _args){
 	tcp_api_args_t args = (tcp_api_args_t)_args;
-	puts("tcp_api_close_entry 0");
 	/* verifies that these fields are valid (node != NULL, socket >=0, ...) */
 	_verify_node(args);
 	_verify_socket(args);
-	puts("tcp_api_close_entry 1");
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
 	if(connection == NULL){
 		_return(args, -EBADF);
 	}
-	puts("tcp_api_close_entry 2");
 	// sets the closing boolean now so that locking accept can unlock and return and then we can close yay
 	tcp_connection_set_close(connection);
-	puts("tcp_api_close_entry 3");
 	// WE LOCK HERE AND UNLOCK IN TCP_API_ARGS_DESTROY which will check if connection null or not before calling unlock	
 	tcp_connection_api_lock(connection);
-	puts("tcp_api_close_entry 4");		
 	int ret = tcp_api_close(args->node, args->socket);
 
 	_return(args, ret);
