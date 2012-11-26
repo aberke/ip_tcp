@@ -71,7 +71,7 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint1
 
 	/* Make sure connection has a unique port before sending anything so that node can multiplex response */
 	if(!tcp_connection_get_local_port(connection))
-		tcp_node_assign_port(tcp_node, connection, tcp_node_next_port(tcp_node));
+		tcp_node_assign_port(tcp_node, connection, tcp_node_next_port(tcp_node), 0);
 
 	//connection needs to know both its local and remote ip before sending
 	uint32_t local_ip = tcp_node_get_local_ip(tcp_node, (*addr).s_addr);
@@ -180,7 +180,6 @@ void* tcp_api_recvfile_entry(void* _args){
 	/* verify that the necessary args were set */
 	_verify_node(args);
 	_verify_socket(args);
-	_verify_addr(args);
 	_verify_buffer(args);
 	_verify_port(args);
 	
@@ -191,37 +190,41 @@ void* tcp_api_recvfile_entry(void* _args){
 		return NULL;
 	}
 	tcp_connection_api_lock(connection);// make sure no one else is messing with the socket/connection
-		
+
+/* OPEN THE FILE */
 	/* open file so we can verify valid before we open any connections that we'll then need to close */
-	FILE* f = fopen(args->buffer, "r");
+	FILE* f = fopen(args->buffer, "w");
 	if(!f){
-		fprintf(stderr, "Unable to open given file: %s\n", args->buffer);
+		fprintf(stderr, "Unable to open file for writing: %s\n", args->buffer);
 		_return(args, -EINVAL);	//Invalid argument passed
 		return NULL;
 	}
-	
-	/* open connection */
-	int ret = tcp_api_connect(args->node, args->socket, args->addr, args->port);
-	if(ret<0){
-		args->function_call = "sendfile: v_socket()";
-		_return(args, ret);
-		return NULL;		
- 	}
-	
-	char input_line[BUFFER_SIZE];
-	while(fgets(input_line, BUFFER_SIZE-1, f)){
-		ret = tcp_connection_send_data(connection, (unsigned char*)input_line, strlen(input_line));
-		if (ret < 0){
-			args->function_call = "sendfile: v_write()";
-			_return(args, ret);
-			return NULL;
-		}
+	/* Get new accepted connection -- this call will block */
+	struct in_addr *addr;	
+	int reading_socket = tcp_api_accept(args->node, args->socket, addr);
+	if(reading_socket < 0){
+		_return(args, reading_socket);
+		return NULL;
 	}
+	tcp_connection_t reading_connection = tcp_node_get_connection_by_socket(args->node, reading_socket);
+	if(reading_connection == NULL){	
+		puts("ERROR: Bug: See recvfile_entry");
+		_return(args, -EBADF); 	 // = The file descriptor is not a valid index in the descriptor table.
+		return NULL;
+	}	
 	
-	//clean up
-	fclose(f);
-	// close connection we opened 
+	while(tcp_node_running(args->node) && tcp_connection_get_state(reading_connection) != CLOSE_WAIT){
+		
+			
+	
+	}
+	/* CLEAN UP */
+	// close connections we opened 
+	tcp_api_close(args->node, reading_socket);
 	tcp_api_close(args->node, args->socket); //locks and blocks but we don't need this anymore anyhow
+	// clean up the file
+	fclose(f);
+
 	/* and use my macro to return it 
 		(first arg is size of retal) */
 	_return(args, 0);
@@ -279,7 +282,7 @@ returns 0 on success or negative number on failure */
 int tcp_api_bind(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint16_t port){
 
 	// check if port already in use
-	if(tcp_node_port_unused(tcp_node, port) < 0)		
+	if(tcp_node_port_unused(tcp_node, port, 0) < 0)		
 		return -EADDRINUSE;	//The given address is already in use.
 
 	// get corresponding tcp_connection
@@ -292,7 +295,7 @@ int tcp_api_bind(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint16_t
 	if(tcp_connection_get_local_port(connection)){
 		return -EINVAL; 	// The socket is already bound to an address.
 	}
-	tcp_node_assign_port(tcp_node, connection, port);
+	tcp_node_assign_port(tcp_node, connection, port, 0);
 	return 0;
 }
 
@@ -309,7 +312,7 @@ int tcp_api_listen(tcp_node_t tcp_node, int socket){
 	if(!tcp_connection_get_local_port(connection)){
 		// port not already set -- must bind to random port	
 		port = tcp_node_next_port(tcp_node);
-		tcp_node_assign_port(tcp_node, connection, port);
+		tcp_node_assign_port(tcp_node, connection, port, 0);
 	}
 	
 	if(tcp_connection_passive_open(connection) < 0){ // returns -1 on failure
@@ -347,11 +350,13 @@ int tcp_api_read(tcp_node_t tcp_node, int socket, char *buffer, uint32_t nbyte){
 	if(!chunk){
 		return 0;
 	}	
+
 	int read = nbyte;
 	if(chunk->length > nbyte){
 		puts("Error: Alex and Neil go debug tcp_api_read");
 		exit(-1);
 	}
+
 	if(chunk->length < nbyte)
 		read = chunk->length;
 	
@@ -360,6 +365,7 @@ int tcp_api_read(tcp_node_t tcp_node, int socket, char *buffer, uint32_t nbyte){
 	memchunk_destroy_total(&chunk, util_free);
 	return read;
 }
+
 void* tcp_api_read_entry(void* _args){
 	tcp_api_args_t args = (tcp_api_args_t)_args;
 
@@ -433,6 +439,7 @@ void* tcp_api_read_entry(void* _args){
 			ret = ret + read;
 		}
 	}
+
 	// NOTE! You can't just print the buffer because it's not null-teriminated!
 	// On mac's this will be no problem, because the memory is nicely 0-ed out 
 	// for us, on linux this won't be the case  <-- k thanx

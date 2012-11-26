@@ -21,6 +21,15 @@
 //// hash-map 
 #include "uthash.h"
 
+// port_tuple = remote_port -- local_port
+#define _port_tuple_init(to_set, local_port, remote_port)	\
+do{															\
+	*to_set = 0;											\
+	*to_set += local_port;									\
+	*to_set += ( remote_port << 16 );						\
+}															\
+while(0);
+
 
 // static functions
 static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet);
@@ -51,7 +60,7 @@ struct connection_virt_socket_keyed{
 
 struct connection_port_keyed{
 	tcp_connection_t connection;
-	uint16_t port;
+	uint32_t ports;
 
 	UT_hash_handle hh;
 };
@@ -79,7 +88,7 @@ void connection_virt_socket_keyed_destroy(connection_virt_socket_keyed_t* sock_k
 
 connection_port_keyed_t connection_port_keyed_init(tcp_connection_t connection){
 	connection_port_keyed_t port_keyed = malloc(sizeof(struct connection_port_keyed));
-	port_keyed->port = tcp_connection_get_local_port(connection);
+	_port_tuple_init(&(port_keyed->ports), tcp_connection_get_local_port(connection), tcp_connection_get_remote_port(connection));
 	port_keyed->connection = connection;
 	
 	return port_keyed;
@@ -317,7 +326,7 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 	tcp_connection_set_last_seq_received(new_connection, accept_queue_data_get_seq(data));
 
 	// don't we need to set the local port? because it needs to receive data
-	int port = tcp_node_assign_port(tcp_node, new_connection, -1); //-1 just assigns to next port
+	int port = tcp_node_assign_port(tcp_node, new_connection, -1, 0); //-1 just assigns to next port
 	
 	//to test:
 	print(("port = tcp_node_assign_port(tcp_node, new_connection, -1) = %d\n", port), PORT_PRINT);
@@ -389,26 +398,33 @@ void tcp_node_return_socket_to_kernal(tcp_node_t tcp_node, int socket){
 }
 
 //needs to be called when close connection so that we can return port/socket to available queue for reuse
-void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, int port){
+void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, uint16_t local_port, uint16_t remote_port){
 	
 	// port of zero means port wasn't actually set for that connection -- not a valid port
-	if(!port) 
+	if(!local_port) 
 		return;
 		
+	uint32_t combined;
+	_port_tuple_init(&combined, local_port, remote_port);
+
 	// return port to available queue
-	if(port<=MAX_FILE_DESCRIPTORS)
-		int_queue_push_front(tcp_node->ports_available_queue, port);
+	if(local_port<=MAX_FILE_DESCRIPTORS)
+		int_queue_push_front(tcp_node->ports_available_queue, local_port);
 	
 	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 		
 	connection_port_keyed_t port_keyed;
-	HASH_FIND(hh, tcp_node->portToConnection, &port, sizeof(uint16_t), port_keyed);
+	HASH_FIND(hh, tcp_node->portToConnection, &combined, sizeof(uint32_t), port_keyed);
 	if(!port_keyed){
-		puts("Error: Alex Neil see tcp_node_close_connection -- this SHOULD be in table");
-		pthread_mutex_unlock(&(tcp_node->kernal_mutex));
-		return;
+		/* try to find it without the remote_port */
+		uint32_t local_port_32 = (uint32_t)local_port;
+		HASH_FIND(hh, tcp_node->portToConnection, &local_port_32,  sizeof(uint32_t), port_keyed);
+		if(!port_keyed){
+			puts("Error: Alex Neil see tcp_node_close_connection -- this SHOULD be in table");
+			pthread_mutex_unlock(&(tcp_node->kernal_mutex));
+			return;
+		}
 	}
-
 	HASH_DEL(tcp_node->portToConnection, port_keyed);
 	connection_port_keyed_destroy(&port_keyed);
 	
@@ -433,13 +449,14 @@ int tcp_node_remove_connection_kernal(tcp_node_t tcp_node, tcp_connection_t conn
 		return tcp_node->num_connections;
 		
 	// return port and socket to available queue for reuse
-	int port = (int)tcp_connection_get_local_port(connection);
+	uint16_t local_port = (uint16_t)tcp_connection_get_local_port(connection);
+	uint16_t remote_port = (uint16_t)tcp_connection_get_remote_port(connection);
 	int socket = tcp_connection_get_socket(connection);
 	
 	// remove from kernal	- these calls lock/unlock kernal
 	tcp_node_return_socket_to_kernal(tcp_node, socket);
 	if(tcp_connection_get_local_port(connection))
-		tcp_node_return_port_to_kernal(tcp_node, port);
+		tcp_node_return_port_to_kernal(tcp_node, local_port, remote_port);
 	
 	// lock kernal
 	pthread_mutex_lock(&(tcp_node->kernal_mutex));
@@ -473,13 +490,24 @@ tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int sock
 }
 
 // returns tcp_connection corresponding to port
-tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t port){
+tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t local_port, uint16_t remote_port){
 
 	//lock kernal
 	pthread_mutex_lock(&(tcp_node->kernal_mutex));
 
+	uint32_t combined;
+	_port_tuple_init(&combined, local_port, remote_port);
+
 	connection_port_keyed_t port_keyed;
-	HASH_FIND(hh, tcp_node->portToConnection, &port, sizeof(uint16_t), port_keyed);
+
+	/* try to find it with the combination of remote/local */
+	HASH_FIND(hh, tcp_node->portToConnection, &combined, sizeof(uint32_t), port_keyed);
+
+	/* if unsuccessful try just the remote */
+	if(!port_keyed){
+		uint32_t local_port_32 = (uint32_t)local_port;
+		HASH_FIND(hh, tcp_node->portToConnection, &local_port_32, sizeof(uint32_t), port_keyed);
+	}
 	
 	//unlock kernal
 	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
@@ -490,27 +518,27 @@ tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t p
 		return port_keyed->connection;
 }
 
+
 // assigns port to tcp_connection and puts entry in hash table that hashes ports to tcp_connections
 // returns 1 if port successfully assigned, 0 otherwise
 
 /* just a note, I feel like 0 is traditional used to indicate success */
-int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int port){
+int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, uint16_t local_port, uint16_t remote_port){
 	
-	if(port<=0){
-		port = tcp_node_next_port(tcp_node);
-		print(("port = tcp_node_next_port(tcp_node) = %d\n", port), PORT_PRINT);
+	if(local_port<=0){
+		local_port = tcp_node_next_port(tcp_node);
+		print(("port = tcp_node_next_port(tcp_node) = %u\n", local_port), PORT_PRINT);
 	}
 		
-	if(tcp_node_port_unused(tcp_node, port)<0)
+	if(tcp_node_port_unused(tcp_node, local_port, remote_port)<0)
 		return -1; // port already in use
 	
 	// return previous port to kernal if it was previously set
 	if(tcp_connection_get_local_port(connection))
-		tcp_node_return_port_to_kernal(tcp_node, tcp_connection_get_local_port(connection));
+		tcp_node_return_port_to_kernal(tcp_node, tcp_connection_get_local_port(connection), tcp_connection_get_remote_port(connection));
 		
 	// set connection's port
-	uint16_t uport = (uint16_t)port;
-	tcp_connection_set_local_port(connection, uport);
+	tcp_connection_set_local_port(connection, local_port);
 	
 	// put port to connection in kernal
 	//lock kernal
@@ -518,23 +546,26 @@ int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int p
 	
 	// put port to connection in kernel
 	connection_port_keyed_t port_keyed = connection_port_keyed_init(connection);
-	HASH_ADD(hh, tcp_node->portToConnection, port, sizeof(uint16_t), port_keyed);
+	HASH_ADD(hh, tcp_node->portToConnection, ports, sizeof(uint32_t), port_keyed);
 	
 	//unlock kernal
 	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 
-	return port;
+	return local_port;
 }
 
 // returns 1 if the port is available for use, 0 if already in use
-int tcp_node_port_unused(tcp_node_t tcp_node, int port){	
+int tcp_node_port_unused(tcp_node_t tcp_node, uint16_t local_port, uint16_t remote_port){	
 
 	//lock kernal
 	pthread_mutex_lock(&(tcp_node->kernal_mutex));
+
+	uint32_t combined_ports;
+	_port_tuple_init(&combined_ports, local_port, remote_port);
 	
 	connection_port_keyed_t port_keyed;
 	// check that port not already in hashmap
-	HASH_FIND(hh, tcp_node->portToConnection, &port, sizeof(uint16_t), port_keyed);
+	HASH_FIND(hh, tcp_node->portToConnection, &combined_ports, sizeof(uint32_t), port_keyed);
 	
 	//unlock kernal
 	pthread_mutex_unlock(&(tcp_node->kernal_mutex));	
@@ -554,7 +585,7 @@ int tcp_node_next_port(tcp_node_t tcp_node){
 	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
 	
 	// check that next_port not already in use -- not already in hashmap	
-	while((tcp_node_port_unused(tcp_node, next_port))<0){
+	while((tcp_node_port_unused(tcp_node, next_port, 0))<0){
 		
 		pthread_mutex_lock(&(tcp_node->kernal_mutex));
 		next_port = int_queue_pop(tcp_node->ports_available_queue);
@@ -804,11 +835,12 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 		return;
 	}
 
-	uint16_t dest_port   = tcp_dest_port(tcp_packet->packet);
+	uint16_t local_port   = tcp_dest_port(tcp_packet->packet);
+	uint32_t remote_port  = tcp_source_port(tcp_packet->packet);
 
-	tcp_connection_t connection = tcp_node_get_connection_by_port(tcp_node, dest_port);
+	tcp_connection_t connection = tcp_node_get_connection_by_port(tcp_node, local_port, remote_port);
 	if(!connection){
-		printf("invalid port: %u\n", dest_port);
+		printf("invalid port: %u\n", local_port);
 		tcp_node_invalid_port(tcp_node, tcp_packet);
 		tcp_packet_data_destroy(&tcp_packet); //<--CAN'T JUST FREE -- caused segfaults
 		return;
@@ -816,8 +848,6 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 	// put it on that connection's my_to_read queue
 	tcp_connection_queue_to_read(connection, tcp_packet);
 }
-
-
 
 /* helper function to tcp_node_start -- does the work of starting up _handle_tcp_node_stdin() in a thread */
 static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t* tcp_stdin_thread){		
