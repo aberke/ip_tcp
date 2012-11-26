@@ -214,11 +214,10 @@ void* tcp_api_recvfile_entry(void* _args){
 	}	
 	
 	while(tcp_node_running(args->node) && tcp_connection_get_state(reading_connection) != CLOSE_WAIT){
-		
-			
 	
 	}
-	/* CLEAN UP */
+
+/* CLEAN UP */
 	// close connections we opened 
 	tcp_api_close(args->node, reading_socket);
 	tcp_api_close(args->node, args->socket); //locks and blocks but we don't need this anymore anyhow
