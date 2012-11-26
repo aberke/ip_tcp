@@ -127,6 +127,7 @@ double _recalculate_RTO(send_window_t send_window, double RTT){
 	
 	return send_window->RTO;
 }
+
 send_window_t send_window_init(int window_size, int send_size, int ISN, 
 								double ALPHA, double BETA, double UBOUND, double LBOUND){
 	send_window_t send_window = (send_window_t)malloc(sizeof(struct send_window));
@@ -214,11 +215,10 @@ uint32_t send_window_get_next_seq(send_window_t send_window){
 send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window){
 	send_window_chunk_t sw_chunk;
 	if((sw_chunk=(send_window_chunk_t)queue_pop(send_window->timed_out_chunks)) != NULL){
-
 		/* restart its timer (it's still on the sent list!) */
 		gettimeofday(&(sw_chunk->send_time), NULL);
 
-		print(("sw_chunk :: [length : %d] [data : %s]", sw_chunk->length, (char*)sw_chunk->data), SEND_WINDOW_PRINT);
+		//printf("sw_chunk :: [length : %d] [data : %d]\n", sw_chunk->length, sw_chunk->data);
 
 		return sw_chunk;
 	}
@@ -243,7 +243,7 @@ send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window)
 	/* increment the sent_left */
 	send_window->sent_left = (sent_left + chunk->length) % MAX_SEQNUM;
 
-	print(("[sw chunk size: %d] [regular chunk size: %d]", sw_chunk->length, chunk->length), SEND_WINDOW_PRINT);
+	//printf("[sw chunk size: %d] [regular chunk size: %d]\n", sw_chunk->length, chunk->length);
 	return sw_chunk;
 }
 

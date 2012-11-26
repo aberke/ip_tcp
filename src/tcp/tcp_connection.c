@@ -260,6 +260,8 @@ tcp_connection_handle_receive_packet
 
 void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packet_data_t tcp_packet_data){
 
+	//puts("packet received");
+
 	void* tcp_packet = tcp_packet_data->packet;
 	
 	/* Printing packet here */
@@ -386,9 +388,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		if(connection->receive_window != NULL){
 			int seqnum_valid = recv_window_validate_seqnum(connection->receive_window, tcp_seqnum(tcp_packet), 0);
 			if(seqnum_valid<0){
-				printf("connection on socket %d received packet with invalid sequence number\n", connection->socket_id);
-				CRASH_AND_BURN("dying...");
-
+				//printf("connection on socket %d received packet with invalid sequence number\n", connection->socket_id);
 				/* If an incoming segment is not acceptable, an acknowledgment
 				should be sent in reply (unless the RST bit is set, if so drop
 				the segment and return) */
@@ -712,7 +712,7 @@ int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t 
 	/* if the queue isn't there, then you're probably testing, so just
 		print it out for debugging purposes */
 	if(!connection->to_send){
-		printf("Trying to print packet: ");
+		//printf("Trying to print packet: ");
 		tcp_packet_print(packet);
 		return 1;
 	}
@@ -805,7 +805,7 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 
 void tcp_connection_send_next_chunk(tcp_connection_t connection, send_window_chunk_t next_chunk){
 	// mallocs enough memory for the header and the data
-	printf("[send chunk length: %d]\n", next_chunk->length);
+	//printf("[send chunk length: %d]\n", next_chunk->length);
 	struct tcphdr* header = tcp_header_init(next_chunk->length);
 		
 	/* the seqnum should be the seqnum in the next_chunk */
@@ -851,6 +851,7 @@ int tcp_connection_send_next(tcp_connection_t connection){
 
 		//send_window_chunk_destroy(&next_chunk);
 	}	
+
 	return bytes_sent;
 }
 
