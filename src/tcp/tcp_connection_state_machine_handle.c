@@ -390,7 +390,6 @@ int tcp_connection_SYN_RECEIVED_to_FIN_WAIT_1(tcp_connection_t connection){
 
 // transition occurs when in established state user commands to CLOSE
 int tcp_connection_ESTABLISHED_to_FIN_WAIT_1(tcp_connection_t connection){
-	puts("HANDLE tcp_connection_ESTABLISHED_to_FIN_WAIT_1");
 	/* RFC: Queue this until all preceding SENDs have been segmentized, then
       form a FIN segment and send it.  In any case, enter FIN-WAIT-1
       state.
