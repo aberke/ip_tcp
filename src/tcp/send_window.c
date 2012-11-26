@@ -123,6 +123,8 @@ double _recalculate_RTO(send_window_t send_window, double RTT){
 	}
 	send_window->RTO = MIN(send_window->UBOUND, MAX(send_window->LBOUND, (send_window->BETA)*(send_window->SRTT)));
 	
+	print(("new RTT: %f, new SRTT: %f, new RTO: %f", RTT, send_window->SRTT, send_window->RTO), SEND_WINDOW_PRINT);
+	
 	return send_window->RTO;
 }
 send_window_t send_window_init(int window_size, int send_size, int ISN, 
@@ -216,7 +218,7 @@ send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window)
 		/* restart its timer (it's still on the sent list!) */
 		gettimeofday(&(sw_chunk->send_time), NULL);
 
-		printf("sw_chunk :: [length : %d] [data : %d]\n", sw_chunk->length, sw_chunk->data);
+		print(("sw_chunk :: [length : %d] [data : %s]", sw_chunk->length, (char*)sw_chunk->data), SEND_WINDOW_PRINT);
 
 		return sw_chunk;
 	}
@@ -241,7 +243,7 @@ send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window)
 	/* increment the sent_left */
 	send_window->sent_left = (sent_left + chunk->length) % MAX_SEQNUM;
 
-	printf("[sw chunk size: %d] [regular chunk size: %d]\n", sw_chunk->length, chunk->length);
+	print(("[sw chunk size: %d] [regular chunk size: %d]", sw_chunk->length, chunk->length), SEND_WINDOW_PRINT);
 	return sw_chunk;
 }
 
@@ -270,6 +272,10 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 	plain_list_t list = send_window->sent_list;
 	plain_list_el_t el;
 	send_window_chunk_t chunk;
+	
+	double RTT;
+	struct timeval now, chunk_timer;
+	gettimeofday(&now, NULL);
 
 	PLAIN_LIST_ITER(list, el)
 		chunk = (send_window_chunk_t)el->data;
@@ -277,6 +283,12 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 			/* this is the chunk containing the ack, so move the pointer of 
 				chunk up until its pointing to the as-of-yet unsent data */ 
 			chunk->offset += WRAP_DIFF(chunk->seqnum, seqnum, MAX_SEQNUM);
+			if(!chunk->resent){
+				chunk_timer = chunk->send_time;
+				RTT = now.tv_sec - chunk_timer.tv_sec;
+				RTT += now.tv_usec/1000000.0 - chunk_timer.tv_usec/1000000.0;
+				_recalculate_RTO(send_window, RTT);						
+			}
 			break;
 		}
 
