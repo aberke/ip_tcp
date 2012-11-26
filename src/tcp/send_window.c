@@ -33,24 +33,6 @@ while(0)
 
 typedef struct timed_chunk* timed_chunk_t;
 
-///////////// WINDOW //////////////////
-struct send_window{
-	ext_array_t data_queue;
-	plain_list_t sent_list;
-	queue_t timed_out_chunks;
-
-	uint32_t sent_left;	
-	
-	double timeout;
-	uint32_t size;
-	uint32_t left;
-	uint32_t send_size;
-
-	/* for being thread safe,
-		synchronizes over all functions */
-	pthread_mutex_t mutex;
-};
-
 /////////////// AUXILIARY DATA STRUCTURES /////////////////////////
 
 ///////////// WINDOW CHUNK ////////////
@@ -58,10 +40,12 @@ struct send_window{
 /* gets data from left all the way up to (but NOT including) right */
 send_window_chunk_t send_window_chunk_init(send_window_t send_window, void* data, int length, uint32_t seqnum){
 	send_window_chunk_t send_window_chunk = malloc(sizeof(struct send_window_chunk));
-
+	
+	gettimeofday(&(send_window_chunk->send_time), NULL);
 	send_window_chunk->data   = data;
 	send_window_chunk->seqnum = seqnum;
 	send_window_chunk->length = length;
+	send_window_chunk->resent = 0;
 	
 	return send_window_chunk;
 }
@@ -83,20 +67,85 @@ void send_window_chunk_destroy_free(send_window_chunk_t* wc){
 
 
 /////////////////////////
+/* RFC:     An Example Retransmission Timeout Procedure
 
-send_window_t send_window_init(double timeout, int window_size, int send_size, int ISN){
+      Measure the elapsed time between sending a data octet with a
+      particular sequence number and receiving an acknowledgment that
+      covers that sequence number (segments sent do not have to match
+      segments received).  This measured elapsed time is the Round Trip
+      Time (RTT).  Next compute a Smoothed Round Trip Time (SRTT) as:
+
+        SRTT = ( ALPHA * SRTT ) + ((1-ALPHA) * RTT)
+
+      and based on this, compute the retransmission timeout (RTO) as:
+
+        RTO = min[UBOUND,max[LBOUND,(BETA*SRTT)]]
+
+      where UBOUND is an upper bound on the timeout (e.g., 1 minute),
+      LBOUND is a lower bound on the timeout (e.g., 1 second), ALPHA is
+      a smoothing factor (e.g., .8 to .9), and BETA is a delay variance
+      factor (e.g., 1.3 to 2.0). */
+///////////// WINDOW //////////////////
+struct send_window{
+	ext_array_t data_queue;
+	plain_list_t sent_list;
+	queue_t timed_out_chunks;
+
+	uint32_t sent_left;	
+	uint32_t size;
+	uint32_t left;
+	uint32_t send_size;
+
+	/* for being thread safe,
+		synchronizes over all functions */
+	pthread_mutex_t mutex;
+	
+	/* for calculating RTO */	
+	double RTO;
+	double SRTT;
+	double ALPHA;
+	double BETA;
+	double UBOUND; //upper bound
+	double LBOUND; //lower bound
+};
+// recalculates SRTT and RTO and returns new RTO
+double _recalculate_RTO(send_window_t send_window, double RTT){
+	/* RFC:       SRTT = ( ALPHA * SRTT ) + ((1-ALPHA) * RTT)
+					 and based on this, compute the retransmission timeout (RTO) as:
+				  RTO = min[UBOUND,max[LBOUND,(BETA*SRTT)]] 
+	*/
+	if((send_window->SRTT == 0) && (RTT != 0)){
+		//let's set our first SRTT value as this first RTT value
+		send_window->SRTT = RTT;
+	}
+	else{
+		send_window->SRTT = ((send_window->ALPHA)*(send_window->SRTT)) + ((1-send_window->ALPHA)*RTT);
+	}
+	send_window->RTO = MIN(send_window->UBOUND, MAX(send_window->LBOUND, (send_window->BETA)*(send_window->SRTT)));
+	
+	return send_window->RTO;
+}
+send_window_t send_window_init(int window_size, int send_size, int ISN, 
+								double ALPHA, double BETA, double UBOUND, double LBOUND){
 	send_window_t send_window = (send_window_t)malloc(sizeof(struct send_window));
 
 	send_window->data_queue 	  = ext_array_init(QUEUE_CAPACITY);
 	send_window->sent_list		  = plain_list_init();
 	send_window->timed_out_chunks = queue_init();
 
-	send_window->timeout 	= timeout;
 	send_window->send_size  = send_size;
 	send_window->size = window_size;
 	send_window->left = send_window->sent_left = ISN;
 
 	pthread_mutex_init(&(send_window->mutex), NULL);
+	
+	send_window->ALPHA = ALPHA;
+	send_window->BETA = BETA;
+	send_window->UBOUND = UBOUND;
+	send_window->LBOUND = LBOUND;
+	send_window->RTO = 0;
+	send_window->SRTT = 0;
+	_recalculate_RTO(send_window, 0);
 	
 	return send_window;
 }
@@ -110,6 +159,10 @@ void send_window_destroy(send_window_t* send_window){
 
 	free(*send_window);
 	*send_window = NULL;
+}
+
+double send_window_get_RTO(send_window_t send_window){
+	return send_window->RTO;
 }
 
 void send_window_set_size(send_window_t send_window, uint32_t size){
@@ -159,11 +212,12 @@ uint32_t send_window_get_next_seq(send_window_t send_window){
 send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window){
 	send_window_chunk_t sw_chunk;
 	if((sw_chunk=(send_window_chunk_t)queue_pop(send_window->timed_out_chunks)) != NULL){
-		// add it back to the list
-		gettimeofday(&(sw_chunk->send_time));
-		plain_list_append(send_window->sent_list, sw_chunk);
 
-		CRASH_AND_BURN("BLAH!!!!\n");
+		/* restart its timer (it's still on the sent list!) */
+		gettimeofday(&(sw_chunk->send_time), NULL);
+
+		printf("sw_chunk :: [length : %d] [data : %d]\n", sw_chunk->length, sw_chunk->data);
+
 		return sw_chunk;
 	}
 
@@ -179,20 +233,15 @@ send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window)
 	if(!chunk)	
 		return NULL;
 
-	sw_chunk = malloc(sizeof(struct send_window_chunk));
-	sw_chunk->data = chunk->data;
-	sw_chunk->length = chunk->length;
-	sw_chunk->seqnum = sent_left;
-	
-	// append to the sent_list
+	/* generate the chunk to send and add it to the sent_list */
+	sw_chunk = send_window_chunk_init(send_window, chunk->data, chunk->length, sent_left);
+	free(chunk);
 	plain_list_append(send_window->sent_list, sw_chunk);
 
-	// increment the sent_left
+	/* increment the sent_left */
 	send_window->sent_left = (sent_left + chunk->length) % MAX_SEQNUM;
 
 	printf("[sw chunk size: %d] [regular chunk size: %d]\n", sw_chunk->length, chunk->length);
-
-	free(chunk);
 	return sw_chunk;
 }
 
@@ -237,6 +286,7 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 		free(chunk);
 	
 		/* you can delete this link in the list */
+		printf("removing from sentlist: %p\n", chunk);
 		plain_list_remove(list, el);
 	PLAIN_LIST_ITER_DONE(list);
 
@@ -258,8 +308,9 @@ void send_window_ack(send_window_t sw, int seqnum){
 int send_window_check_timers_synchronized(send_window_t send_window){
 
 	/* get the time */
-	time_t now;
-	time(&now);
+	struct timeval now, chunk_timer;
+	gettimeofday(&now, NULL);
+	float time_elapsed;
 	
 	plain_list_t list = send_window->sent_list;
 	plain_list_el_t el;
@@ -269,10 +320,17 @@ int send_window_check_timers_synchronized(send_window_t send_window){
 	PLAIN_LIST_ITER(list, el)
 		i++;
 		chunk = (send_window_chunk_t)el->data;
-		if(difftime(now, chunk->send_time) > send_window->timeout){
-			print(("resending"), SEND_WINDOW_PRINT);
+		chunk_timer = chunk->send_time;
+		
+		time_elapsed = now.tv_sec - chunk_timer.tv_sec;
+		time_elapsed += now.tv_usec/1000000.0 - chunk_timer.tv_usec/1000000.0;
+		
+		if(time_elapsed > send_window->RTO){
+			puts("------------resending---------------");
+			chunk->resent = (chunk->resent) + 1;
 			queue_push_front(send_window->timed_out_chunks, (void*)chunk);
 		}
+		
 	PLAIN_LIST_ITER_DONE(list);
 
 	return i;

@@ -30,7 +30,7 @@
         TIME-WAIT TIMEOUT */
 
 #define USER_TIMEOUT 300 //lets do 5 minutes
-#define RETRANSMISSION_TIMEOUT 2 //replaced SYN_TIMEOUT -- 2 seconds at first, and doubles each time next syn_sent
+//#define RETRANSMISSION_TIMEOUT 2 //replaced SYN_TIMEOUT -- 2 seconds at first, and doubles each time next syn_sent
 
 /* Must wait for 2MSL during time-wait */
 /*The TCP standard defines MSL as being a value of 120 seconds (2 minutes). 
