@@ -24,16 +24,16 @@ int tcp_api_args_destroy(tcp_api_args_t* args){
 		if you're not done yet */ 
 	tcp_connection_t connection = tcp_node_get_connection_by_socket((*args)->node, (*args)->socket);
 	if(connection){
-		print(("tcp_api_args_destroy 1: %s", args->function_call), CLOSING_PRINT);
+		print(("tcp_api_args_destroy 1: %s", (*args)->function_call), CLOSING_PRINT);
 		//lets cancel any blocks on the api signal so that shutting down doesn't take a while
 		tcp_connection_api_cancel(connection); 
 		/* unlock */
-		print(("tcp_api_args_destroy 2: %s", args->function_call), CLOSING_PRINT);
+		print(("tcp_api_args_destroy 2: %s", (*args)->function_call), CLOSING_PRINT);
 		tcp_connection_api_unlock(connection);
 	}
-	print(("tcp_api_args_destroy 3: %s", args->function_call), CLOSING_PRINT);		
+	print(("tcp_api_args_destroy 3: %s", (*args)->function_call), CLOSING_PRINT);		
     pthread_join((*args)->thread, NULL);
-	print(("tcp_api_args_destroy 4: %s", args->function_call), CLOSING_PRINT);
+	print(("tcp_api_args_destroy 4: %s", (*args)->function_call), CLOSING_PRINT);
     int result = (*args)->result;
 	/* For this not to go wrong we had better set args->addr to NULL at first.  See function init() */
 	if((*args)->addr != NULL)
