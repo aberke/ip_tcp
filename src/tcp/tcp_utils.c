@@ -183,7 +183,7 @@ void tcp_utils_add_checksum(void* packet, uint16_t total_length, uint32_t src_ip
 	/* calculate it */
 	uint16_t checksum = tcp_utils_calc_checksum(packet, total_length, src_ip, dest_ip, protocol);
 
-	print(("Setting our checksum: %u", checksum), PACKET_PRINT);
+	print(("Setting our checksum: %u", checksum), CHECKSUM_PRINT);
 	/* set it back (sets it in network byte order now) */
 	tcp_set_checksum(packet, checksum);
 }
@@ -209,8 +209,8 @@ int tcp_utils_validate_checksum(void* packet, uint16_t total_length, uint32_t sr
 	/* get the actual checksum */
 	uint16_t our_checksum = tcp_utils_calc_checksum(packet, total_length, src_ip, dest_ip, protocol);
 	
-	printf("their_sum: %u\n", their_checksum);
-	printf("our_sum: %u\n", our_checksum);
+	print(("their_sum: %u\n", their_checksum), CHECKSUM_PRINT);
+	print(("our_sum: %u\n", our_checksum), CHECKSUM_PRINT);
 
 
 /* !!!!!!!!!!!!!!!LADFJSLADJSFLASDFJDKLSFJ ASDLFKJAS DLFKA */

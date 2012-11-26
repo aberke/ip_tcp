@@ -240,7 +240,6 @@ void recv_window_receive_synchronized(recv_window_t recv_window, void* data, uin
 	}	
 	
 	// inform any interested parties that you just got some new stuff
-	puts("SIGNALING");
 	pthread_cond_signal(&(recv_window->read_cond));
 }
   

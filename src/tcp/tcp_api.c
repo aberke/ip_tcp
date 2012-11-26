@@ -609,7 +609,7 @@ void* tcp_driver_accept_entry(void* _args){
 		struct in_addr addr;
 		// blocks until gets new connection or bad value
 		ret = tcp_api_accept(args->node, args->socket, &addr);
-		if(!(tcp_node_running(args->node)) || !tcp_connection_get_close_boolean(listening_connection)){
+		if(!(tcp_node_running(args->node)) || tcp_connection_get_close_boolean(listening_connection)){
 			ret = 0;
 			break; //we might have broken out with an error value because tcp_node started destroying stuff already
 		}
