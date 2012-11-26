@@ -430,18 +430,6 @@ void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, uint16_t local_port, ui
 	connection_port_keyed_destroy(&port_keyed);
 	
 	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
-}
-
-//###TODO: FINISH LOGIC ####
-//needs to be called when close connection so that we can return port/socket to available queue for reuse
-// returns new number of connections in kernal
-int tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection){
-	puts("in tcp_node_close_connection");
-	//TODO: CONNECTION CLOSING LOGIC
-	tcp_connection_state_machine_transition(connection, CLOSE);
-	//int num_connections = tcp_node_remove_connection_kernal(tcp_node);
-	//return num_connections;
-	return 0;
 }	
 	
 int tcp_node_remove_connection_kernal(tcp_node_t tcp_node, tcp_connection_t connection){
@@ -748,7 +736,6 @@ tcp_node_invalid_port
 void tcp_node_invalid_port(tcp_node_t tcp_node, tcp_packet_data_t packet){
 	/* anything else? */
 	tcp_node_refuse_connection(tcp_node, packet);
-	puts("invalid port. sent RST");
 }
 
 void tcp_node_refuse_connection(tcp_node_t tcp_node, tcp_packet_data_t packet){
@@ -834,9 +821,10 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 
 	uint16_t local_port   = tcp_dest_port(tcp_packet->packet);
 	uint32_t remote_port  = tcp_source_port(tcp_packet->packet);
+
 	tcp_connection_t connection = tcp_node_get_connection_by_port(tcp_node, local_port, remote_port);
 	if(!connection){
-		printf("invalid port: %u\n", local_port);
+		printf("invalid port: %u.  Sending RST\n", local_port);
 		tcp_node_invalid_port(tcp_node, tcp_packet);
 		tcp_packet_data_destroy(&tcp_packet); //<--CAN'T JUST FREE -- caused segfaults
 		return;

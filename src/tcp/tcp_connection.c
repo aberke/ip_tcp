@@ -811,8 +811,12 @@ void tcp_connection_send_next_chunk(tcp_connection_t connection, send_window_chu
 	/* the seqnum should be the seqnum in the next_chunk */
 	tcp_set_seq(header, next_chunk->seqnum);
 	
+	// replicate it!! the send window will take care of free()ing it's data 
+	void* data = malloc(next_chunk->length);
+	memcpy(data, next_chunk->data, next_chunk->length);
+
 	/* send it off! */
-	tcp_wrap_packet_send(connection, header, next_chunk->data, next_chunk->length);
+	tcp_wrap_packet_send(connection, header, data, next_chunk->length);
 }
 
 /* 
@@ -845,7 +849,7 @@ int tcp_connection_send_next(tcp_connection_t connection){
 		// increment bytes_sent
 		bytes_sent += next_chunk->length;
 
-		send_window_chunk_destroy(&next_chunk);
+		//send_window_chunk_destroy(&next_chunk);
 	}	
 	return bytes_sent;
 }
@@ -903,9 +907,14 @@ void *_handle_read_send(void *tcpconnection){
 
 	while(connection->running){	
         
-        state_e state = tcp_connection_get_state(connection);
-        RTO = send_window_get_RTO(connection->send_window);
-        
+        state_e state = state_machine_get_state(connection->state_machine);
+        if(connection->send_window){
+        	RTO = send_window_get_RTO(connection->send_window);
+        	//printf("_handle_read_send: *************************RTO: %f\n", RTO);
+        }
+        else{
+        	puts("_handle_read_send: *************************send_window NULL??");
+        }
 		gettimeofday(&now, NULL);	
 		wait_cond.tv_sec = now.tv_sec+0;
 		wait_cond.tv_nsec = 1000*now.tv_usec+TCP_CONNECTION_DEQUEUE_TIMEOUT_NSECS;
@@ -925,7 +934,7 @@ void *_handle_read_send(void *tcpconnection){
 		}
 		/* check if you're waiting for an ACK to come back */
 		else if(state == SYN_SENT){	         
-			if(time_elapsed > (1 << ((connection->syn_fin_count)-1))*RTO){
+			if(time_elapsed > (1 << (BACKOFF_MULTIPLER*(connection->syn_fin_count)-1))*RTO){
 				// we timeout connect or resend
 
 				if((connection->syn_fin_count)==SYN_COUNT_MAX){
