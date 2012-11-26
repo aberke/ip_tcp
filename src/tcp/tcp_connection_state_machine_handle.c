@@ -329,7 +329,7 @@ int tcp_connection_transition_CLOSE_WAIT(tcp_connection_t connection){
 
 // transition occurs when in CLOSE_WAIT and user commands CLOSE	
 int tcp_connection_CLOSE_WAIT_to_LAST_ACK(tcp_connection_t connection){
-	
+	print(("CLOSE-WAIT --> LAST-ACK"), STATES_PRINT);
 	/* RFC: The user will respond with a CLOSE, upon which the TCP can send a FIN to
     the other TCP after sending any remaining data.  The TCP then waits
     until its own FIN is acknowledged whereupon it deletes the
@@ -367,7 +367,7 @@ int tcp_connection_get_close_boolean(tcp_connection_t connection){
 }	
 // called when user commands CLOSE
 int tcp_connection_close(tcp_connection_t connection){
-	
+	print(("CLOSE"), STATES_PRINT);
 	/* We're going into CLOSED state */
 	connection->closing = 1;	
 	
