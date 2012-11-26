@@ -308,6 +308,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		return;
 	}
 	else if(state == LISTEN){
+		puts("tcp_connection_handle_receive_packet LISTEN 0");
 		/* RFC If the state is LISTEN then:
 			first check for an RST.  An incoming RST should be ignored.  Return. */
 		if(tcp_rst_bit(tcp_packet)){
@@ -316,12 +317,14 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 		}
 		/* second check for an ACK*/
 		else if(tcp_ack_bit(tcp_packet)){
+				puts("tcp_connection_handle_receive_packet LISTEN 1");
         	/* Any acknowledgment is bad if it arrives on a connection still in the LISTEN state.  
         	An acceptable reset segment should be formed. Return. */
         	tcp_connection_refuse_connection(connection, tcp_packet_data);
         }
 		/* third check for a SYN */
 		else if(tcp_syn_bit(tcp_packet)){
+        	puts("tcp_connection_handle_receive_packet LISTEN 2");
 			/* handle like we were before I redid this I suppose */
 
 			/* since listen binds to all interfaces, must be able to reset its ip addresses to receive connect requests */
@@ -329,7 +332,9 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 			tcp_connection_set_local_ip(connection, tcp_packet_data->local_virt_ip);
 		
             tcp_connection_handle_syn(connection, tcp_packet_data);
+        	puts("tcp_connection_handle_receive_packet LISTEN 3");
         }
+        puts("tcp_connection_handle_receive_packet LISTEN 4");
         tcp_packet_data_destroy(&tcp_packet_data);
         return;
     }
