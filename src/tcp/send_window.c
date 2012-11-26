@@ -121,6 +121,9 @@ double _recalculate_RTO(send_window_t send_window, double RTT){
 	else{
 		send_window->SRTT = ((send_window->ALPHA)*(send_window->SRTT)) + ((1-send_window->ALPHA)*RTT);
 	}
+	if(send_window->SRTT == 0){
+		return 1.0;
+	}
 	send_window->RTO = MIN(send_window->UBOUND, MAX(send_window->LBOUND, (send_window->BETA)*(send_window->SRTT)));
 	
 	print(("new RTT: %f, new SRTT: %f, new RTO: %f", RTT, send_window->SRTT, send_window->RTO), SEND_WINDOW_PRINT);
