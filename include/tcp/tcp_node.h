@@ -93,7 +93,7 @@ int tcp_node_port_unused(tcp_node_t tcp_node, uint16_t local_port, uint16_t remo
 
 // assigns port to tcp_connection and puts entry in hash table that hashes ports to tcp_connections
 // returns 1 if port successfully assigned, 0 otherwise
-int tcp_node_assign_port(tcp_node_t tcp_node, struct tcp_connection* connection, uint16_t local_port, uint16_t remote_port);
+int tcp_node_assign_port(tcp_node_t tcp_node, struct tcp_connection* connection, int local_port, uint16_t remote_port);
 
 // returns tcp_connection corresponding to socket
 struct tcp_connection* tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int socket);
