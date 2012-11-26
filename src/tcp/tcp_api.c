@@ -605,7 +605,7 @@ any of these API functions. If the writing part of the socket has not been
 shutdown yet, then do so. The connection shouldn't be terminated, though;
 any data not yet ACKed should still be retransmitted. */
 int tcp_api_close(tcp_node_t tcp_node, int socket){
-	
+	printf("tcp_api_close: socket %d\n", socket);
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(tcp_node, socket);
 	if(connection == NULL){
 		return -EBADF;
@@ -614,7 +614,7 @@ int tcp_api_close(tcp_node_t tcp_node, int socket){
 		
 	// CLOSE and close reading part
 	ret = tcp_api_shutdown(tcp_node, socket, 3);
-
+	printf("tcp_api_close: socket %d\n", socket);
 	if(ret == 0 && (tcp_connection_get_state(connection)!=CLOSED)) //success
 		/* everything's going well and all, but we're still in the process of closing so let's not delete
 		this connection until it has finished closing with its peer */
