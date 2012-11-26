@@ -17,7 +17,7 @@ transitioning_t closed_next_state(transition_e t){
 		case ABORT:
 			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);
 		default:
-			return transitioning_init(CLOSED, (action_f)tcp_connection_invalid_transition); //TODO: SUPPLY ACTION FOR BAD CALL
+			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition); //TODO: SUPPLY ACTION FOR BAD CALL
 	}
 }
 
@@ -43,7 +43,7 @@ transitioning_t listen_next_state(transition_e t){
 		case ABORT:
 			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);			
 		default:
-			return transitioning_init(LISTEN, (action_f)tcp_connection_invalid_transition);
+			return transitioning_init(LISTEN, (action_f)tcp_connection_NO_ACTION_transition);
 	}
 }
 
@@ -65,7 +65,7 @@ transitioning_t syn_sent_next_state(transition_e t){
 		case ABORT:
 			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);			
 		default:
-			return transitioning_init(SYN_SENT, (action_f)tcp_connection_invalid_transition);
+			return transitioning_init(SYN_SENT, (action_f)tcp_connection_NO_ACTION_transition);
 	}
 }
 
@@ -86,7 +86,7 @@ transitioning_t syn_received_next_state(transition_e t){
 		case ABORT:
 			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);		
 		default:
-			return transitioning_init(SYN_RECEIVED, (action_f)tcp_connection_invalid_transition);
+			return transitioning_init(SYN_RECEIVED, (action_f)tcp_connection_NO_ACTION_transition);
 	}
 }
 
@@ -104,7 +104,7 @@ transitioning_t established_next_state(transition_e t){
 		case ABORT:
 			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);		
 		default:
-			return transitioning_init(ESTABLISHED, (action_f)tcp_connection_invalid_transition);
+			return transitioning_init(ESTABLISHED, (action_f)tcp_connection_NO_ACTION_transition);
 	}
 }
 
@@ -125,7 +125,7 @@ transitioning_t fin_wait_1_next_state(transition_e t){
 			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);
 		
 		default:
-			return transitioning_init(FIN_WAIT_1, (action_f)tcp_connection_invalid_transition);
+			return transitioning_init(FIN_WAIT_1, (action_f)tcp_connection_NO_ACTION_transition);
 	}
 }
 
@@ -147,7 +147,7 @@ transitioning_t fin_wait_2_next_state(transition_e t){
 		case ABORT:
 			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);				
 		default:
-			return transitioning_init(FIN_WAIT_2, (action_f)tcp_connection_invalid_transition);
+			return transitioning_init(FIN_WAIT_2, (action_f)tcp_connection_NO_ACTION_transition);
 	}
 }
 
@@ -167,7 +167,7 @@ transitioning_t close_wait_next_state(transition_e t){
 		case ABORT:
 			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);		
 		default:
-			return transitioning_init(CLOSE_WAIT, (action_f)tcp_connection_invalid_transition);
+			return transitioning_init(CLOSE_WAIT, (action_f)tcp_connection_NO_ACTION_transition);
 	}
 }
 
@@ -195,7 +195,7 @@ transitioning_t last_ack_next_state(transition_e t){
 		case ABORT:
 			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);				
 		default:
-			return transitioning_init(LAST_ACK, (action_f)tcp_connection_invalid_transition);
+			return transitioning_init(LAST_ACK, (action_f)tcp_connection_NO_ACTION_transition);
 	}
 }
 
@@ -217,7 +217,7 @@ transitioning_t time_wait_next_state(transition_e t){
 			/* reset */
 			return transitioning_init(CLOSED, (action_f)tcp_connection_CLOSED_by_RST);			
 		default:
-			return transitioning_init(TIME_WAIT, (action_f)tcp_connection_invalid_transition);
+			return transitioning_init(TIME_WAIT, (action_f)tcp_connection_NO_ACTION_transition);
 	}
 }
 
@@ -238,7 +238,7 @@ transitioning_t closing_next_state(transition_e t){
 		case ABORT:
 			return transitioning_init(CLOSED, (action_f)tcp_connection_NO_ACTION_transition);			
 		default:
-			return transitioning_init(CLOSING, (action_f)tcp_connection_invalid_transition);
+			return transitioning_init(CLOSING, (action_f)tcp_connection_NO_ACTION_transition);
 	}
 }
 
