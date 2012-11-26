@@ -326,7 +326,8 @@ tcp_connection_t tcp_node_connection_accept(tcp_node_t tcp_node, tcp_connection_
 	tcp_connection_set_last_seq_received(new_connection, accept_queue_data_get_seq(data));
 
 	// don't we need to set the local port? because it needs to receive data
-	int port = tcp_node_assign_port(tcp_node, new_connection, -1, 0); //-1 just assigns to next port
+	int port = tcp_node_assign_port(tcp_node, new_connection, 
+		tcp_connection_get_local_port(listening_connection), accept_queue_data_get_remote_port(data)); 
 	
 	//to test:
 	print(("port = tcp_node_assign_port(tcp_node, new_connection, -1) = %d\n", port), PORT_PRINT);
