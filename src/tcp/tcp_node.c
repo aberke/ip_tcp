@@ -850,8 +850,6 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 	tcp_connection_queue_to_read(connection, tcp_packet);
 }
 
-
-
 /* helper function to tcp_node_start -- does the work of starting up _handle_tcp_node_stdin() in a thread */
 static int _start_stdin_thread(tcp_node_t tcp_node, pthread_t* tcp_stdin_thread){		
 	
