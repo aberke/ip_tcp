@@ -283,6 +283,88 @@ void test_send_window_scale(){
 	send_window_destroy(&window);
 }
 
+void test_send_window_1(){
+	send_window_t window = send_window_init(1.0, 1000, 5, 0);
+	
+	char buffer[BUFFER_SIZE];
+	
+	strcpy(buffer, "Hello");
+	send_window_push(window, buffer, strlen(buffer));
+	
+	strcpy(buffer, ", World!");
+	send_window_push(window, buffer, strlen(buffer));
+	
+	send_window_chunk_t chunk;
+
+	// get the first 5 bytes out of the window (should pull other stuff in)
+	chunk = send_window_get_next(window);
+	ASSERT(chunk!=NULL);
+	TEST_EQ(chunk->length, 5, "");
+	TEST_EQ(chunk->seqnum, 0, "");
+	
+	memcpy(buffer, chunk->data, 5);
+	buffer[5] = '\0';
+	TEST_STR_EQ(buffer, "Hello", "I will be amazed if this works");
+
+	send_window_chunk_destroy_total(&chunk, util_free);
+
+
+	// rinse and repeat
+	chunk = send_window_get_next(window);
+	ASSERT(chunk!=NULL);
+	TEST_EQ(chunk->length, 5, "");
+	TEST_EQ(chunk->seqnum, 5, "");
+	
+	memcpy(buffer, chunk->data, 5);
+	buffer[5] = '\0';
+	TEST_STR_EQ(buffer, ", Wor", "");
+
+	send_window_chunk_destroy_total(&chunk, util_free);
+
+
+ 	// now 10 bytes should be in flight. So let's ack the first 5
+	send_window_ack(window, 5);
+
+
+	// and try to get the tail 
+	chunk = send_window_get_next(window);
+	ASSERT(chunk!=NULL);
+	TEST_EQ(chunk->length, 3, "");
+	TEST_EQ(chunk->seqnum, 10, "");
+	
+	memcpy(buffer, chunk->data, 3);
+	buffer[3] = '\0';
+	TEST_STR_EQ(buffer, "ld!", "");
+
+	send_window_chunk_destroy_total(&chunk, util_free);
+
+	send_window_ack(window, 10);
+	send_window_ack(window, 13);
+
+	// now do some more
+	strcpy(buffer, "012345");
+	send_window_push(window, buffer, 6);
+	send_window_push(window, buffer, 6);
+	send_window_push(window, buffer, 6);
+
+	chunk = send_window_get_next(window);
+	ASSERT(chunk!=NULL);
+	send_window_ack(window, chunk->seqnum+chunk->length);
+	send_window_chunk_destroy_total(&chunk, util_free);		
+
+	chunk = send_window_get_next(window);
+	ASSERT(chunk!=NULL);
+	send_window_ack(window, chunk->seqnum+chunk->length);
+	send_window_chunk_destroy_total(&chunk, util_free);		
+
+	chunk = send_window_get_next(window);
+	ASSERT(chunk!=NULL);
+	send_window_ack(window, chunk->seqnum+chunk->length);
+	send_window_chunk_destroy_total(&chunk, util_free);		
+
+
+	send_window_destroy(&window);
+}
 void test_send_window(){
 	send_window_t window = send_window_init(1.0, 10, 5, 0);
 	
@@ -913,10 +995,10 @@ int main(int argc, char** argv){
 	TEST(test_wrapping);
 	*/
 
-	TEST(test_checksum);
+//	TEST(test_checksum);
 	
-//	TEST(test_send_window);
-//	TEST(test_send_window_scale);
+	TEST(test_send_window);
+	TEST(test_send_window_scale);
 //
 //	TEST(test_recv_window);
 //	TEST(test_recv_window_1);
