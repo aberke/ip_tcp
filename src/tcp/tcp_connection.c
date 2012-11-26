@@ -1259,8 +1259,8 @@ void tcp_connection_print_sockets(tcp_connection_t connection){
 	inet_ntop(AF_INET, &remote, remote_buffer, INET_ADDRSTRLEN);
 
 	printf("\n[Socket %d]:\n", socket);
-	printf("\t<Local Port: %d, Local IP: (%u) %s > <Remote Port: %d, Remote IP: (%u) %s > <State: ", 
-				local_port, local_ip, local_buffer, remote_port, remote_ip, remote_buffer);
+	printf("\t<Local Port: %d, Local IP: %s > <Remote Port: %d, Remote IP: %s > <State: ", 
+				local_port, local_buffer, remote_port, remote_buffer);
 	tcp_connection_print_state(connection);
 	printf(">\n");
 
