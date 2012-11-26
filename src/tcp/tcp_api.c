@@ -472,15 +472,16 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 		 new socket is the socket assigned to that new connection.  This connection will then go on to finish
 		 the three-way handshake to reach ESTABLISHED state */
 		/* THIS CALL IS BLOCKING -- because the accept_queue is a bqueue -- call returns when accept_data_t dequeued */
-		tcp_connection_t new_connection = tcp_node_connection_accept(tcp_node, listening_connection);	
+		tcp_connection_t new_connection = tcp_node_connection_accept(tcp_node, listening_connection);
 		if(new_connection == NULL){
+			puts("tcp_api_accept: NULL\n");	
 			// NULL is returned when we've reached max number of file descriptors or trying to close
 			if(tcp_connection_get_close_boolean(listening_connection)) // we were just rying to close
 				return CONNECTION_CLOSED;
 			return -ENFILE;	//The system limit on the total number of open files has been reached.
 		}
-		
-		
+		printf("tcp_api_accept: socket: %d\n", tcp_connection_get_socket(new_connection));	
+
 		// set state of this new_connection to LISTEN so that we can send it through transition LISTEN_to_SYN_RECEIVED
 		tcp_connection_set_state(new_connection, LISTEN);
 		
@@ -499,6 +500,8 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 			return SIGNAL_DESTROYING;
 		}
 		else if(ret == API_TIMEOUT){ //changing from SYN_RECEIVED to ESTABLISHED timed out
+			
+			puts("tcp_api_accept: API_TIMEOUT");	
 			// want to close it but don't want to block -- let's thread the close??! (which will also remove it)
 			tcp_api_args_t args = tcp_api_args_init();
 			args->node = tcp_node;
@@ -509,6 +512,7 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 			continue; //try again
 		}
 		else if(ret == REMOTE_CONNECTION_CLOSED){	//Instead of sending back ack they sent back fin
+			puts("tcp_api_accept: REMOTE_CONNECTION_CLOSED");
 			// lets close this connection responsibly and try again
 			tcp_api_args_t args = tcp_api_args_init();
 			args->node = tcp_node;
