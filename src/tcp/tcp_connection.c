@@ -1331,6 +1331,9 @@ int tcp_connection_api_result(tcp_connection_t connection){
 		}
 		// otherwise you timedout, keep waiting
 	}
+	
+	// let's see if this fixes the blocking issue
+	//tcp_connection_api_unlock(connection);
 
 	int ret = connection->api_ret;
 	if(ret == SIGNAL_CRASH_AND_BURN)
