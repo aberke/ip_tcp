@@ -523,7 +523,7 @@ tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t l
 // returns 1 if port successfully assigned, 0 otherwise
 
 /* just a note, I feel like 0 is traditional used to indicate success */
-int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, uint16_t local_port, uint16_t remote_port){
+int tcp_node_assign_port(tcp_node_t tcp_node, tcp_connection_t connection, int local_port, uint16_t remote_port){
 	
 	if(local_port<=0){
 		local_port = tcp_node_next_port(tcp_node);
