@@ -1070,7 +1070,7 @@ void *_handle_read_send(void *tcpconnection){
 		}
 		/* check if you're waiting for an ACK to come back */
 		else if(state == SYN_SENT){	         
-			if(time_elapsed > (1 << ((connection->syn_fin_count)-1))*RTO){
+			if(time_elapsed > (1 << (BACKOFF_MULTIPLER*(connection->syn_fin_count)-1))*RTO){
 				// we timeout connect or resend
 
 				if((connection->syn_fin_count)==SYN_COUNT_MAX){

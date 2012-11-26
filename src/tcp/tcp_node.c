@@ -430,18 +430,6 @@ void tcp_node_return_port_to_kernal(tcp_node_t tcp_node, uint16_t local_port, ui
 	connection_port_keyed_destroy(&port_keyed);
 	
 	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
-}
-
-//###TODO: FINISH LOGIC ####
-//needs to be called when close connection so that we can return port/socket to available queue for reuse
-// returns new number of connections in kernal
-int tcp_node_close_connection(tcp_node_t tcp_node, tcp_connection_t connection){
-	puts("in tcp_node_close_connection");
-	//TODO: CONNECTION CLOSING LOGIC
-	tcp_connection_state_machine_transition(connection, CLOSE);
-	//int num_connections = tcp_node_remove_connection_kernal(tcp_node);
-	//return num_connections;
-	return 0;
 }	
 	
 int tcp_node_remove_connection_kernal(tcp_node_t tcp_node, tcp_connection_t connection){
@@ -492,10 +480,8 @@ tcp_connection_t tcp_node_get_connection_by_socket(tcp_node_t tcp_node, int sock
 
 // returns tcp_connection corresponding to port
 tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t local_port, uint16_t remote_port){
-	puts("tcp_node_get_connection_by_port 0");
 	//lock kernal
 	pthread_mutex_lock(&(tcp_node->kernal_mutex));
-	puts("tcp_node_get_connection_by_port 1");
 	uint32_t combined;
 	_port_tuple_init(&combined, local_port, remote_port);
 
@@ -503,18 +489,14 @@ tcp_connection_t tcp_node_get_connection_by_port(tcp_node_t tcp_node, uint16_t l
 
 	/* try to find it with the combination of remote/local */
 	HASH_FIND(hh, tcp_node->portToConnection, &combined, sizeof(uint32_t), port_keyed);
-	puts("tcp_node_get_connection_by_port 2");
 	/* if unsuccessful try just the remote */
 	if(!port_keyed){
-		puts("tcp_node_get_connection_by_port 3");
 		uint32_t local_port_32 = (uint32_t)local_port;
 		HASH_FIND(hh, tcp_node->portToConnection, &local_port_32, sizeof(uint32_t), port_keyed);
-			puts("tcp_node_get_connection_by_port 4");
 	}
 	
 	//unlock kernal
 	pthread_mutex_unlock(&(tcp_node->kernal_mutex));
-	puts("tcp_node_get_connection_by_port 5");	
 	if(!port_keyed)
 		return NULL;
 	else
@@ -754,7 +736,6 @@ tcp_node_invalid_port
 void tcp_node_invalid_port(tcp_node_t tcp_node, tcp_packet_data_t packet){
 	/* anything else? */
 	tcp_node_refuse_connection(tcp_node, packet);
-	puts("invalid port. sent RST");
 }
 
 void tcp_node_refuse_connection(tcp_node_t tcp_node, tcp_packet_data_t packet){
@@ -840,16 +821,14 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 
 	uint16_t local_port   = tcp_dest_port(tcp_packet->packet);
 	uint32_t remote_port  = tcp_source_port(tcp_packet->packet);
-	puts("_handle_packet: 0");
+
 	tcp_connection_t connection = tcp_node_get_connection_by_port(tcp_node, local_port, remote_port);
-	puts("_handle_packet: 1");	
 	if(!connection){
-		printf("invalid port: %u\n", local_port);
+		printf("invalid port: %u.  Sending RST\n", local_port);
 		tcp_node_invalid_port(tcp_node, tcp_packet);
 		tcp_packet_data_destroy(&tcp_packet); //<--CAN'T JUST FREE -- caused segfaults
 		return;
 	}
-	puts("_handle_packet: 2");
 	// put it on that connection's my_to_read queue
 	tcp_connection_queue_to_read(connection, tcp_packet);
 }
