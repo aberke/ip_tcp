@@ -89,8 +89,8 @@ give to tcp_connection:
 		// now when a tcp_api function calls, it will lock the mutex, and wait on the api_cond for the 
 		//tcp connection to finish its duties
 */
-pthread_mutex_t tcp_connection_get_api_mutex(tcp_connection_t connection){
-	return connection->api_mutex;
+pthread_mutex_t* tcp_connection_get_api_mutex(tcp_connection_t connection){
+	return &(connection->api_mutex);
 }
 
 pthread_cond_t tcp_connection_get_api_cond(tcp_connection_t connection){
@@ -1467,6 +1467,8 @@ int tcp_connection_close_recv_window(tcp_connection_t connection){
 	connection->recv_window_alive = 0;
 	return 1;
 }
+
+
 
 /* hacky? */  //<-- yeah kinda
 #include "tcp_connection_state_machine_handle.c"

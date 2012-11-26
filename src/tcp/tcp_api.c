@@ -52,12 +52,13 @@ int tcp_api_args_destroy(tcp_api_args_t* args){
 #define _verify_buffer(args) if((args)->buffer == NULL) {CRASH_AND_BURN("NULL BUFFER TO READ INTO");}
 #define _verity_bool(args)	 if((((args)->boolean)!=0)&&(((args)->boolean)!=1)) {CRASH_AND_BURN("INVALID BOOLEAN VALUE");}
 
-static void* _return(tcp_api_args_t args, int ret){
-	//puts("thread queueing return");
-	args->done = 1;
-	args->result = ret;
-	pthread_exit(NULL);
-}
+#define _return(args, ret)	\
+do{							\
+	args->done = 1;			\
+	args->result = ret;		\
+	pthread_exit(NULL);		\
+}							\
+while(0)
 
 
 /* connects a socket to an address (active OPEN in the RFC)
@@ -135,7 +136,6 @@ void* tcp_api_sendfile_entry(void* _args){
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
 	if(connection == NULL){	
 		_return(args, -EBADF); 	 // = The file descriptor is not a valid index in the descriptor table.
-		return NULL;
 	}
 	tcp_connection_api_lock(connection);// make sure no one else is messing with the socket/connection
 		
@@ -144,7 +144,6 @@ void* tcp_api_sendfile_entry(void* _args){
 	if(!f){
 		fprintf(stderr, "Unable to open given file: %s\n", args->buffer);
 		_return(args, -EINVAL);	//Invalid argument passed
-		return NULL;
 	}
 	
 	/* open connection */
@@ -152,7 +151,6 @@ void* tcp_api_sendfile_entry(void* _args){
 	if(ret<0){
 		args->function_call = "sendfile: v_socket()";
 		_return(args, ret);
-		return NULL;		
  	}
 	
 	char input_line[BUFFER_SIZE];
@@ -161,7 +159,6 @@ void* tcp_api_sendfile_entry(void* _args){
 		if (ret < 0){
 			args->function_call = "sendfile: v_write()";
 			_return(args, ret);
-			return NULL;
 		}
 	}
 	
@@ -199,35 +196,67 @@ void* tcp_api_recvfile_entry(void* _args){
 		_return(args, -EINVAL);	//Invalid argument passed
 		return NULL;
 	}
-	/* Get new accepted connection -- this call will block */
-	struct in_addr *addr;	
-	int reading_socket = tcp_api_accept(args->node, args->socket, addr);
-	if(reading_socket < 0){
-		_return(args, reading_socket);
-		return NULL;
+
+/* GET THE NEXT CONNECTION */
+	tcp_connection_t new_connection = tcp_node_connection_accept(args->node, connection);	
+
+	if(new_connection == NULL){
+		// NULL is returned when we've reached max number of file descriptors or trying to close
+		tcp_connection_close(connection);
+		_return(args, -ENFILE);	//The system limit on the total number of open files has been reached.
 	}
-	tcp_connection_t reading_connection = tcp_node_get_connection_by_socket(args->node, reading_socket);
-	if(reading_connection == NULL){	
+
+	// set state of this new_connection to LISTEN so that we can send it through transition LISTEN_to_SYN_RECEIVED
+
+	tcp_connection_set_state(new_connection, LISTEN);
+	tcp_connection_state_machine_transition(new_connection, receiveSYN);
+
+	int ret = tcp_connection_api_result(new_connection); 
+
+	if(ret == SIGNAL_DESTROYING){
+		// is there anything else we can do here?
+		tcp_connection_close(connection);
+		_return(args, SIGNAL_DESTROYING);
+	}
+	else if(ret == API_TIMEOUT){ 	
+		tcp_connection_close(connection);
+		_return(args, -ETIMEDOUT);
+	}
+
+	// otherwise we're good?
+	tcp_connection_close(connection);
+
+	if(new_connection == NULL){	
 		puts("ERROR: Bug: See recvfile_entry");
 		_return(args, -EBADF); 	 // = The file descriptor is not a valid index in the descriptor table.
-		return NULL;
 	}	
-	
-	while(tcp_node_running(args->node) && tcp_connection_get_state(reading_connection) != CLOSE_WAIT){
-	
+
+	recv_window_t reading_window 	   = tcp_connection_get_recv_window(new_connection);
+	pthread_cond_t* read_blocking_cond = recv_window_get_read_condition(reading_window);
+	pthread_mutex_t* api_mutex 		   = tcp_connection_get_api_mutex(new_connection);
+
+	memchunk_t got;
+	while(tcp_node_running(args->node) && tcp_connection_get_state(new_connection) != CLOSE_WAIT){
+		pthread_cond_wait(read_blocking_cond, api_mutex);
+		
+		while((got = recv_window_get_next(reading_window, BUFFER_SIZE))){
+			fwrite(got->data, got->length, 1, f);
+			fflush(f);
+			memchunk_destroy_total(&got, util_free);
+		}
 	}
 
 /* CLEAN UP */
-	// close connections we opened 
-	tcp_api_close(args->node, reading_socket);
-	tcp_api_close(args->node, args->socket); //locks and blocks but we don't need this anymore anyhow
+
+	// close the connection
+	tcp_connection_close(new_connection);
+
 	// clean up the file
 	fclose(f);
 
 	/* and use my macro to return it 
 		(first arg is size of retal) */
 	_return(args, 0);
-	return NULL;
 }	
 
 
