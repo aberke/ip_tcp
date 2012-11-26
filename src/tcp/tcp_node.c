@@ -24,9 +24,9 @@
 // port_tuple = remote_port -- local_port
 #define _port_tuple_init(to_set, local_port, remote_port)	\
 do{															\
-	*to_set = 0;											\
-	*to_set += local_port;									\
-	*to_set += ( remote_port << 16 );						\
+	*(to_set) = 0;											\
+	*(to_set) += (uint16_t)local_port;						\
+	*(to_set) += (uint32_t)(remote_port << 16);				\
 }															\
 while(0);
 
@@ -222,17 +222,17 @@ void tcp_node_destroy(tcp_node_t tcp_node){
         print(("tcp_node_destroy 0.1"), CLOSING_PRINT);
         int result = tcp_api_args_destroy(&args);
         print(("tcp_node_destroy 0.2"), CLOSING_PRINT);
-		if(result < 0){	
+		/*if(result < 0){	
 			char* error_string = strerror(-result);
 			printf("Error: %s\n", error_string);
-		}
-        
+		}*/ // --let's not print this error because it's probably a SIGNAL_DESTROYING value as we did prematurely destroy
+        /*
 		else if(result==0)
 			printf("successful.");
 		
 		else
 			printf("got result: %d!\n", result);
-        		
+        */	//Let's just not print any of it -- does it really mean anything?  It's just confusing		
 		plain_list_remove(list, el);			
 	PLAIN_LIST_ITER_DONE(list);
 	/*****************************/

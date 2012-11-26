@@ -425,7 +425,7 @@ void send_cmd(const char* line, tcp_node_t tcp_node){
 	
 	ret = sscanf(line, "send %d %n", &socket, &num_consumed);
 	if((ret != 1)&&(sscanf(line, "s %d %n", &socket, &num_consumed)!=1)&&(sscanf(line, "w %d %n", &socket, &num_consumed)!=1)){
-		fprintf(stderr, "syntax error (usage: send [interface] [payload])\n");
+		fprintf(stderr, "syntax error (usage: send/s/w [socket] [data])\n");
 		return;
 	} 
 	data = line + num_consumed;

@@ -89,8 +89,8 @@ give to tcp_connection:
 		// now when a tcp_api function calls, it will lock the mutex, and wait on the api_cond for the 
 		//tcp connection to finish its duties
 */
-pthread_mutex_t tcp_connection_get_api_mutex(tcp_connection_t connection){
-	return connection->api_mutex;
+pthread_mutex_t* tcp_connection_get_api_mutex(tcp_connection_t connection){
+	return &(connection->api_mutex);
 }
 
 pthread_cond_t tcp_connection_get_api_cond(tcp_connection_t connection){
@@ -870,14 +870,8 @@ int tcp_connection_queue_ip_send(tcp_connection_t connection, tcp_packet_data_t 
 */
 int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, void* data, int data_len){	
 	
-	/* Record last seq sent -- only if we purposely set the seqnum */
-	/* NO BECAUSE WE RESEND UN-ACKED PACKETS
-	if(data_len > 0 || tcp_syn_bit(header))
-		connection->last_seq_sent = tcp_seqnum(header); */
-	
 	// gotta put a seqnum on it, right?	
 	if((data_len == 0) && (!tcp_seqnum(header))){
-		puts("tcp_wrap_packet_send 0");
 		if(connection->send_window)
 			tcp_set_seq(header, send_window_get_next_seq(connection->send_window));
 		else
@@ -1331,6 +1325,9 @@ int tcp_connection_api_result(tcp_connection_t connection){
 		}
 		// otherwise you timedout, keep waiting
 	}
+	
+	// let's see if this fixes the blocking issue
+	tcp_connection_api_unlock(connection);
 
 	int ret = connection->api_ret;
 	if(ret == SIGNAL_CRASH_AND_BURN)
@@ -1467,6 +1464,8 @@ int tcp_connection_close_recv_window(tcp_connection_t connection){
 	connection->recv_window_alive = 0;
 	return 1;
 }
+
+
 
 /* hacky? */  //<-- yeah kinda
 #include "tcp_connection_state_machine_handle.c"

@@ -42,6 +42,7 @@ struct recv_window {
 	uint32_t left;
 	uint32_t read_left;
 //	recv_window_chunk_t* slider;
+	pthread_cond_t read_cond;
 	pthread_mutex_t mutex;
 };
 
@@ -55,6 +56,9 @@ recv_window_t recv_window_init(uint16_t window_size, uint32_t ISN){
 	/* the next byte you're expecting is the one after the 
 		first sequence number */
 	recv_window->read_left = recv_window->left = (ISN+1)%MAX_SEQNUM;
+
+	/* initialize your cond */
+	pthread_cond_init(&(recv_window->read_cond), NULL);
 
 	/* initialize your mutex */
 	pthread_mutex_init(&(recv_window->mutex), NULL);
@@ -119,6 +123,10 @@ int recv_window_validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint
 	}
 }
 
+pthread_cond_t* recv_window_get_read_condition(recv_window_t recv_window){
+	return &(recv_window->read_cond);
+}
+
 /* we've received data up until the left of the window */
 uint32_t recv_window_get_ack_synchronized(recv_window_t recv_window){
 	return recv_window->read_left;
@@ -152,8 +160,17 @@ void recv_window_receive_synchronized(recv_window_t recv_window, void* data, uin
 		LOG(("seqnum %d not accepted. left: %d\n", seqnum, recv_window->left)); 
 		return;
 	}
+
+	if(length==0){
+		// then theres nothing to do
+		return;
+	}	
 	
 	uint32_t to_write = MIN(length-offset, WRAP_DIFF(seqnum, (recv_window->left+recv_window->size)%MAX_SEQNUM, MAX_SEQNUM));
+	if(!to_write){
+		// then there's also nothing to do
+		return;
+	}
 
 	/* if the data has a non-zero offset, then we will need to make a new chunk
 		   of data that the recv_chunk can point to so that when it frees that void* 
@@ -169,6 +186,7 @@ void recv_window_receive_synchronized(recv_window_t recv_window, void* data, uin
  		free(data);
  		data = new_data;
  	}
+
 
 	int already_read_overlap = WRAP_DIFF((seqnum+offset)%MAX_SEQNUM, recv_window->read_left, MAX_SEQNUM);
 	if(already_read_overlap >= 0)
@@ -220,6 +238,9 @@ void recv_window_receive_synchronized(recv_window_t recv_window, void* data, uin
 	{
  		sorted_list_insert(recv_window->chunks_received, recv_chunk_init(seqnum, data, to_write)); 
 	}	
+	
+	// inform any interested parties that you just got some new stuff
+	pthread_cond_signal(&(recv_window->read_cond));
 }
   
 void recv_window_receive(recv_window_t recv_window, void* data, uint32_t length, uint32_t seqnum){
@@ -256,6 +277,7 @@ memchunk_t recv_window_get_next(recv_window_t recv_window, int bytes){
 	return chunk;
 }
 
+
 /*
 recv_window_destroy
 	destroys the window AND ALL OF THE DATA IN IT. ie it frees the data
@@ -268,6 +290,7 @@ void recv_window_destroy(recv_window_t* recv_window){
 	sorted_list_destroy_total(&((*recv_window)->chunks_received), (destructor_f)recv_chunk_destroy);
 
 	pthread_mutex_destroy(&((*recv_window)->mutex));
+	pthread_cond_destroy(&((*recv_window)->read_cond));
 	free(*(recv_window));
 	*recv_window = NULL;
 }
