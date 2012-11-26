@@ -629,20 +629,22 @@ int tcp_api_close(tcp_node_t tcp_node, int socket){
 }
 void* tcp_api_close_entry(void* _args){
 	tcp_api_args_t args = (tcp_api_args_t)_args;
-
+	puts("tcp_api_close_entry 0");
 	/* verifies that these fields are valid (node != NULL, socket >=0, ...) */
 	_verify_node(args);
 	_verify_socket(args);
-
+	puts("tcp_api_close_entry 1");
 	tcp_connection_t connection = tcp_node_get_connection_by_socket(args->node, args->socket);
 	if(connection == NULL){
 		_return(args, -EBADF);
 	}
+	puts("tcp_api_close_entry 2");
 	// sets the closing boolean now so that locking accept can unlock and return and then we can close yay
 	tcp_connection_set_close(connection);
+	puts("tcp_api_close_entry 3");
 	// WE LOCK HERE AND UNLOCK IN TCP_API_ARGS_DESTROY which will check if connection null or not before calling unlock	
 	tcp_connection_api_lock(connection);
-		
+	puts("tcp_api_close_entry 4");		
 	int ret = tcp_api_close(args->node, args->socket);
 
 	_return(args, ret);
