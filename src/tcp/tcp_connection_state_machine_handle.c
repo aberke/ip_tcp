@@ -345,8 +345,10 @@ int tcp_connection_CLOSE_WAIT_to_LAST_ACK(tcp_connection_t connection){
 }
 // we received the ack we sent our peer -- so we can finish this closing process
 int tcp_connection_LAST_ACK_to_CLOSED(tcp_connection_t connection){
-	// destroy window
-	send_window_destroy(&(connection->send_window));
+	// destroy window -- i mean make a new one (We don't want to reuse the old one if reOPEN)
+	connection->send_window = send_window_init(DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, RAND_ISN(),
+								WINDOW_ALPHA, WINDOW_BETA, WINDOW_UBOUND, WINDOW_LBOUND);
+	//okay but destroy this one
 	recv_window_destroy(&(connection->receive_window));
 	tcp_connection_api_signal(connection, 0); //0 for success, right?
 	return 1;	
@@ -495,8 +497,10 @@ int tcp_connection_SYN_SENT_to_CLOSED(tcp_connection_t connection){
 	/* We're going into CLOSED state */
 	connection->closing = 1;
 
-	if(connection->send_window)
-		send_window_destroy(&(connection->send_window));
+	// destroy window -- i mean make a new one (We don't want to reuse the old one if reOPEN)
+	connection->send_window = send_window_init(DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, RAND_ISN(),
+								WINDOW_ALPHA, WINDOW_BETA, WINDOW_UBOUND, WINDOW_LBOUND);
+	//okay but destroy this one
 	if(connection->receive_window)
 		recv_window_destroy(&(connection->receive_window));
 	
@@ -513,9 +517,11 @@ int tcp_connection_CLOSED_by_RST(tcp_connection_t connection){
 	
 	/* We're going into CLOSED state */
 	connection->closing = 1;	
-	
-	if(connection->send_window)
-		send_window_destroy(&(connection->send_window));
+
+	// destroy window -- i mean make a new one (We don't want to reuse the old one if reOPEN)
+	connection->send_window = send_window_init(DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, RAND_ISN(),
+								WINDOW_ALPHA, WINDOW_BETA, WINDOW_UBOUND, WINDOW_LBOUND);
+	//okay but destroy this one
 	if(connection->receive_window)
 		recv_window_destroy(&(connection->receive_window));
 	

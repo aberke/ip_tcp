@@ -1043,9 +1043,14 @@ void *_handle_read_send(void *tcpconnection){
 
 	while(connection->running){	
         
-        state_e state = tcp_connection_get_state(connection);
-        RTO = send_window_get_RTO(connection->send_window);
-        
+        state_e state = state_machine_get_state(connection->state_machine);
+        if(connection->send_window){
+        	RTO = send_window_get_RTO(connection->send_window);
+        	//printf("_handle_read_send: *************************RTO: %f\n", RTO);
+        }
+        else{
+        	puts("_handle_read_send: *************************send_window NULL??");
+        }
 		gettimeofday(&now, NULL);	
 		wait_cond.tv_sec = now.tv_sec+0;
 		wait_cond.tv_nsec = 1000*now.tv_usec+TCP_CONNECTION_DEQUEUE_TIMEOUT_NSECS;

@@ -35,7 +35,7 @@
 		    | (1<<(PACKET_PRINT-1))				\
 		    /* | (1<<(ALEX_PRINT-1))		*/			\
 		   /*| (1<<(PORT_PRINT-1))			*/		\
-		   | (1<<(CHECKSUM_PRINT-1))		  	\
+		   /*| (1<<(CHECKSUM_PRINT-1))		*/  	\
 			 )
 
 
