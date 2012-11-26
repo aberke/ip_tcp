@@ -128,6 +128,3 @@ void _set_transitioning(state_machine_t machine, state_e state, transition_e tra
 void state_machine_print_state(state_machine_t state_machine){
 	print_state(state_machine->current_state);
 }
-
-
-

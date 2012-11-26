@@ -14,8 +14,6 @@
 #include <errno.h>
 //#include <netinet/tcp.h> -- we define it in utils.h!
 #include <inttypes.h>
-#include <sys/time.h>
-#include <time.h>
 #include <pthread.h>
 
 #include "tcp_node.h" // in tcp_node.h #include "tcp_connection.h"
@@ -116,7 +114,8 @@ tcp_connection_t tcp_connection_init(tcp_node_t tcp_node, int socket, bqueue_t *
 	
 	/* we init send window here but only init recv window when we get our first seqnum */
 	uint32_t ISN = RAND_ISN();	
-	connection->send_window = send_window_init(WINDOW_DEFAULT_TIMEOUT, DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, ISN);
+	connection->send_window = send_window_init(DEFAULT_WINDOW_SIZE, DEFAULT_WINDOW_CHUNK_SIZE, ISN,
+								WINDOW_ALPHA, WINDOW_BETA, WINDOW_UBOUND, WINDOW_LBOUND);
 
 	connection->receive_window = NULL;
 	connection->recv_window_alive = 1; //I set it to one for the purpose of knowing how to set window size in tcp_wrap_packet_send
@@ -1038,13 +1037,14 @@ void *_handle_read_send(void *tcpconnection){
 
 	struct timespec wait_cond;	
 	struct timeval now;	// keep track of time to compare to window timeouts and connections' syn_timer 
-	float time_elapsed;
+	double time_elapsed, RTO;
 	void* packet;
 	int ret, timers_ret;
 
 	while(connection->running){	
         
         state_e state = tcp_connection_get_state(connection);
+        RTO = send_window_get_RTO(connection->send_window);
         
 		gettimeofday(&now, NULL);	
 		wait_cond.tv_sec = now.tv_sec+0;
@@ -1065,7 +1065,7 @@ void *_handle_read_send(void *tcpconnection){
 		}
 		/* check if you're waiting for an ACK to come back */
 		else if(state == SYN_SENT){	         
-			if(time_elapsed > (1 << ((connection->syn_fin_count)-1))*RETRANSMISSION_TIMEOUT){
+			if(time_elapsed > (1 << ((connection->syn_fin_count)-1))*RTO){
 				// we timeout connect or resend
 
 				if((connection->syn_fin_count)==SYN_COUNT_MAX){
@@ -1082,7 +1082,7 @@ void *_handle_read_send(void *tcpconnection){
 		else if(state == SYN_RECEIVED){
 			/* after a conservative amount of time, let's let the SYN_RECEIVED time out so that accept doesn't 
 				block waiting for the api signal forever */
-			if(time_elapsed > (1 << 3)*RETRANSMISSION_TIMEOUT){
+			if(time_elapsed > (1 << 3)*RTO){
 				// right now we're letting the api close and remove it when it sees this timeout
 				tcp_connection_api_signal(connection, API_TIMEOUT);
 			}
@@ -1099,7 +1099,7 @@ void *_handle_read_send(void *tcpconnection){
 		else if(state == FIN_WAIT_1){
 			/* For active close: 
 				RFC: All segments preceding and including FIN  will be retransmitted until acknowledged. */
-			if(time_elapsed > WINDOW_DEFAULT_TIMEOUT){ // lets use same timeout as send_window
+			if(time_elapsed > RTO){ // lets use same timeout as send_window
 				if((connection->syn_fin_count)==SYN_COUNT_MAX){
 					// lets give up on them ever acking it
 					tcp_connection_ABORT(connection);

@@ -253,16 +253,20 @@ alex's questions for neil:
 		open up a bunch of accepting connections.  try to connect past MAX_FILE_DESCRIPTORS limit
 
 alex's questions for tas:
-	
-alex's checksum changes:
-
+	interface going down?
 	
 	
 TODO: TO HANDLE:
 
+	alex dealing with RTO
+
+	LOSSY LINKS	
+	SIMULTANEOUS OPEN
+	
+	do we want to error out if data never acked?
+
 	put user time outs into the closing protocol
 	
-	recvfile
 	
 	simultaneous open thing
 	

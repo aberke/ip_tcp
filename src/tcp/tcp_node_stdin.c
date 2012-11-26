@@ -22,8 +22,6 @@
 
 #define FILE_BUF_SIZE	1024
 
-// TODO remove the below #defines, replace by linking with API implementation 	
-#define v_close(a)	-ENOTSUP
 
 void sockets_cmd(const char *line, tcp_node_t tcp_node){
 	tcp_node_print(tcp_node);
