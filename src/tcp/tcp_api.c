@@ -530,9 +530,14 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 			// is there anything else we can do here?
 			return SIGNAL_DESTROYING;
 		}
-		else if(ret == API_TIMEOUT){ //changing from SYN_RECEIVED to ESTABLISHED timed out
-			
-			puts("tcp_api_accept: API_TIMEOUT");	
+		else if(ret == CONNECTION_RESET || ret == CONNECTION_CLOSED){
+			//puts("tcp_api_accept: CONNECTION_RESET or CONNECTION_CLOSED");
+			continue;
+		}
+		else if(ret == API_TIMEOUT || ret == REMOTE_CONNECTION_CLOSED){ 
+			//changing from SYN_RECEIVED to ESTABLISHED timed out or Instead of sending back ack they sent back fin		
+			//puts("tcp_api_accept: API_TIMEOUT or REMOTE_CONNECTION_CLOSED");
+				
 			// want to close it but don't want to block -- let's thread the close??! (which will also remove it)
 			tcp_api_args_t args = tcp_api_args_init();
 			args->node = tcp_node;
@@ -542,18 +547,7 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 		
 			continue; //try again
 		}
-		else if(ret == REMOTE_CONNECTION_CLOSED){	//Instead of sending back ack they sent back fin
-			puts("tcp_api_accept: REMOTE_CONNECTION_CLOSED");
-			// lets close this connection responsibly and try again
-			tcp_api_args_t args = tcp_api_args_init();
-			args->node = tcp_node;
-			args->socket = tcp_connection_get_socket(new_connection);
-			args->function_call = "v_close";		
-			tcp_node_thread(tcp_node, tcp_api_close_entry, args);
-			
-			continue; //try again
-		}	
-	
+		
 		/* Our connection has been established! 
 		TODO:HANDLE bad ret value */		
 		return ret;	

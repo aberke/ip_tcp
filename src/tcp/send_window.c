@@ -263,7 +263,7 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 		return;
 
 	if(!BETWEEN_WRAP(seqnum, send_window_min, send_window_max)){ 
-		LOG(("Received invalid seqnum: %d, current send_window_min: %d, send_window_max: %d\n", seqnum, send_window_min, send_window_max)); 
+		print(("Received invalid seqnum: %d, current send_window_min: %d, send_window_max: %d\n", seqnum, send_window_min, send_window_max), SEND_WINDOW_PRINT); 
 		return; 
 	}
 
@@ -298,7 +298,7 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 		free(chunk);
 	
 		/* you can delete this link in the list */
-		//printf("removing from sentlist: %p\n", chunk);
+		print(("removing from sentlist: %p\n", chunk), SEND_WINDOW_PRINT);
 		plain_list_remove(list, el);
 	PLAIN_LIST_ITER_DONE(list);
 
@@ -338,7 +338,7 @@ int send_window_check_timers_synchronized(send_window_t send_window){
 		time_elapsed += now.tv_usec/1000000.0 - chunk_timer.tv_usec/1000000.0;
 		
 		if(time_elapsed > send_window->RTO){
-			//puts("------------resending---------------");
+			print(("------------resending---------------"), SEND_WINDOW_PRINT);
 			chunk->resent = (chunk->resent) + 1;
 			queue_push_front(send_window->timed_out_chunks, (void*)chunk);
 		}
