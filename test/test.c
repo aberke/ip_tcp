@@ -517,6 +517,7 @@ void test_wrapping(){
 	TEST_FALSE(CONGRUENT(3,0,4),"");
 }
 
+
 void test_queue(){
 	queue_t q = queue_init();
 	
