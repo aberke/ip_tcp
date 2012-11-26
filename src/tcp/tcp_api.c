@@ -71,7 +71,7 @@ int tcp_api_connect(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint1
 
 	/* Make sure connection has a unique port before sending anything so that node can multiplex response */
 	if(!tcp_connection_get_local_port(connection))
-		tcp_node_assign_port(tcp_node, connection, tcp_node_next_port(tcp_node));
+		tcp_node_assign_port(tcp_node, connection, tcp_node_next_port(tcp_node), 0);
 
 	//connection needs to know both its local and remote ip before sending
 	uint32_t local_ip = tcp_node_get_local_ip(tcp_node, (*addr).s_addr);
@@ -282,7 +282,7 @@ returns 0 on success or negative number on failure */
 int tcp_api_bind(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint16_t port){
 
 	// check if port already in use
-	if(tcp_node_port_unused(tcp_node, port) < 0)		
+	if(tcp_node_port_unused(tcp_node, port, 0) < 0)		
 		return -EADDRINUSE;	//The given address is already in use.
 
 	// get corresponding tcp_connection
@@ -295,7 +295,7 @@ int tcp_api_bind(tcp_node_t tcp_node, int socket, struct in_addr* addr, uint16_t
 	if(tcp_connection_get_local_port(connection)){
 		return -EINVAL; 	// The socket is already bound to an address.
 	}
-	tcp_node_assign_port(tcp_node, connection, port);
+	tcp_node_assign_port(tcp_node, connection, port, 0);
 	return 0;
 }
 
@@ -312,7 +312,7 @@ int tcp_api_listen(tcp_node_t tcp_node, int socket){
 	if(!tcp_connection_get_local_port(connection)){
 		// port not already set -- must bind to random port	
 		port = tcp_node_next_port(tcp_node);
-		tcp_node_assign_port(tcp_node, connection, port);
+		tcp_node_assign_port(tcp_node, connection, port, 0);
 	}
 	
 	if(tcp_connection_passive_open(connection) < 0){ // returns -1 on failure
