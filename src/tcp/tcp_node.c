@@ -829,6 +829,7 @@ static void _handle_packet(tcp_node_t tcp_node, tcp_packet_data_t tcp_packet){
 		tcp_packet_data_destroy(&tcp_packet); //<--CAN'T JUST FREE -- caused segfaults
 		return;
 	}
+
 	// put it on that connection's my_to_read queue
 	tcp_connection_queue_to_read(connection, tcp_packet);
 }

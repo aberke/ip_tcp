@@ -79,6 +79,8 @@ int recv_window_validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint
 	if(seqnum==(recv_window->left+1) || seqnum==(recv_window->left) || seqnum==(recv_window->left-1))
         return 0;
     
+	int ret;
+		
     uint32_t window_min = recv_window->left,
 			 window_max = (recv_window->left+recv_window->size) % MAX_SEQNUM;
 		
@@ -96,31 +98,40 @@ int recv_window_validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint
 	if( length == 0 ){
 		if( recv_window->available_size == 0){
 			if( seqnum==recv_window->left ) 
-				return 0;
+				ret = 0;
 			else 
-				return -1;
+				ret = -1;
 		}
 	
 		else{ /* (recv_window->size > 0) */
 			if(BETWEEN_WRAP(seqnum, window_min, window_max)) 
-				return 0;
+				ret = 0;
 			else 
-				return -1; 
+				ret = -1; 
 		}
 	}
 	else{ /* length > 0 */
 		if(recv_window->available_size == 0)
-			return -1;
+			ret = -1;
 
 		else if (BETWEEN_WRAP(seqnum, window_min, window_max)) 
-			return 0;
+			ret = 0;
 	
 		else if (BETWEEN_WRAP((seqnum+length)%MAX_SEQNUM, window_min, window_max))
-			return WRAP_DIFF(seqnum, window_min, MAX_SEQNUM);
+			ret = WRAP_DIFF(seqnum, window_min, MAX_SEQNUM);
 
 		else 
-			return -1;
+			ret = -1;
 	}
+
+	if(ret<0){
+		printf("REJECTED: seqnum: %u, window min: %u, window_max: %u\n", seqnum, window_min, window_max);
+	}
+	else{
+		printf("ACCEPTED: seqnum: %u, window min: %u, window_max: %u\n", seqnum, window_min, window_max);
+	}
+
+	return ret;
 }
 
 pthread_cond_t* recv_window_get_read_condition(recv_window_t recv_window){
@@ -230,7 +241,6 @@ void recv_window_receive_synchronized(recv_window_t recv_window, void* data, uin
 			}
 			
 			/* destroy that chunk */
-			free(next_chunk->data);
 			recv_chunk_destroy(&next_chunk);
 		}
 	}
@@ -267,6 +277,7 @@ memchunk_t recv_window_get_next_synchronized(recv_window_t recv_window, int byte
 		return NULL;
 	
 	recv_window->available_size+=got->length;
+	recv_window->left = (recv_window->left+got->length) % MAX_SEQNUM;	
 	return got;
 }
 
