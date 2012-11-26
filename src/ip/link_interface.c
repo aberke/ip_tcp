@@ -1,4 +1,5 @@
 #include "list.h"
+#include "utils.h"
 #include "parselinks.h"
 #include "link_interface.h"
 
