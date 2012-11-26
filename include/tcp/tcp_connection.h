@@ -15,7 +15,7 @@
 #define SIGNAL_DESTROYING -666
 #define API_TIMEOUT -555
 #define REMOTE_CONNECTION_CLOSED -444
-#define CONNECTION_RESET -333
+#define CONNECTION_RESET -ECONNRESET
 #define CONNECTION_CLOSED -222
 
 #define KEEP_ALIVE_FREQUENCY 10 //we send a keep-alive message every second
