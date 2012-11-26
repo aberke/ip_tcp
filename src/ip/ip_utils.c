@@ -138,6 +138,11 @@ int ip_unwrap_packet(char* buffer, char** packet_unwrapped, int packet_data_size
 
 // fills wraps ip header around data and sends through interface li
 int ip_wrap_send_packet(void* data, int data_len, int protocol, struct in_addr ip_src, struct in_addr ip_dst, link_interface_t li){
+	
+	if(protocol == TCP_DATA){	
+		uint16_t checksum = tcp_checksum(data);
+		print(("ip_wrap_send_packet: checksum: %u\n", checksum), PACKET_PRINT);
+	}
 	//make sure not to send more than UDP_PACKET_MAX_SIZE
 	if(data_len > (UDP_PACKET_MAX_SIZE - IP_HEADER_SIZE)){
 		data_len = UDP_PACKET_MAX_SIZE - IP_HEADER_SIZE;
