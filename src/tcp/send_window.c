@@ -113,8 +113,6 @@ void send_window_destroy(send_window_t* send_window){
 }
 
 void send_window_set_size(send_window_t send_window, uint32_t size){
-	print(("%u", size), WINDOW_PRINT);
-
 	pthread_mutex_lock(&(send_window->mutex));
 	send_window->size = size;
 	pthread_mutex_unlock(&(send_window->mutex));
@@ -161,11 +159,23 @@ uint32_t send_window_get_next_seq(send_window_t send_window){
 send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window){
 	send_window_chunk_t sw_chunk;
 	if((sw_chunk=(send_window_chunk_t)queue_pop(send_window->timed_out_chunks)) != NULL){
+		// add it back to the list
+		gettimeofday(&(sw_chunk->send_time));
+		plain_list_append(send_window->sent_list, sw_chunk);
+
+		CRASH_AND_BURN("BLAH!!!!\n");
 		return sw_chunk;
 	}
 
 	uint32_t sent_left = send_window->sent_left;
-	memchunk_t chunk = ext_array_peel(send_window->data_queue, MIN(send_window->send_size, send_window->left+send_window->size - sent_left));
+
+	int left_in_window = WRAP_DIFF(sent_left, (send_window->left+send_window->size)%MAX_SEQNUM, MAX_SEQNUM);
+	int to_send = MIN(send_window->send_size, left_in_window);
+
+	if(to_send <= 0) 
+	 	return NULL;
+
+	memchunk_t chunk = ext_array_peel(send_window->data_queue, to_send);
 	if(!chunk)	
 		return NULL;
 
@@ -173,8 +183,15 @@ send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window)
 	sw_chunk->data = chunk->data;
 	sw_chunk->length = chunk->length;
 	sw_chunk->seqnum = sent_left;
+	
+	// append to the sent_list
+	plain_list_append(send_window->sent_list, sw_chunk);
 
+	// increment the sent_left
 	send_window->sent_left = (sent_left + chunk->length) % MAX_SEQNUM;
+
+	printf("[sw chunk size: %d] [regular chunk size: %d]\n", sw_chunk->length, chunk->length);
+
 	free(chunk);
 	return sw_chunk;
 }

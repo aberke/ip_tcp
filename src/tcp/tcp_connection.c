@@ -806,6 +806,7 @@ int tcp_wrap_packet_send(tcp_connection_t connection, struct tcphdr* header, voi
 
 void tcp_connection_send_next_chunk(tcp_connection_t connection, send_window_chunk_t next_chunk){
 	// mallocs enough memory for the header and the data
+	printf("[send chunk length: %d]\n", next_chunk->length);
 	struct tcphdr* header = tcp_header_init(next_chunk->length);
 		
 	/* the seqnum should be the seqnum in the next_chunk */
