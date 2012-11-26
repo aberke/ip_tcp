@@ -1053,7 +1053,7 @@ void *_handle_read_send(void *tcpconnection){
         wait_cond.tv_sec += wait_cond.tv_nsec/1000000000;
         wait_cond.tv_nsec %= 1000000000;
         
-		ret = bqueue_timed_dequeue_abs(connection->my_to_read, &packet, &wait_cond);
+		ret = bqueue_timed_dequeue_abs(connection->my_to_read, (void*)&packet, &wait_cond);
 
 		time_elapsed = now.tv_sec - connection->state_timer.tv_sec;
 		time_elapsed += now.tv_usec/1000000.0 - connection->state_timer.tv_usec/1000000.0;
