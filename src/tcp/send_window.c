@@ -46,6 +46,7 @@ send_window_chunk_t send_window_chunk_init(send_window_t send_window, void* data
 	send_window_chunk->seqnum = seqnum;
 	send_window_chunk->length = length;
 	send_window_chunk->resent = 0;
+	send_window_chunk->offset = 0;
 	
 	return send_window_chunk;
 }
@@ -256,7 +257,7 @@ send_window_chunk_t send_window_get_next(send_window_t send_window){
 }
 
 void send_window_ack_synchronized(send_window_t send_window, int seqnum){
-
+	print(("send_window_ack_synchronized seqnum %d", seqnum), SEND_WINDOW_PRINT);
 	int send_window_min = send_window->left,
 		send_window_max = (send_window->left+send_window->size) % MAX_SEQNUM;
 	
@@ -280,7 +281,10 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 
 	PLAIN_LIST_ITER(list, el)
 		chunk = (send_window_chunk_t)el->data;
-		if(BETWEEN_WRAP(seqnum, chunk->seqnum, (chunk->seqnum+chunk->length)%MAX_SEQNUM)){
+		int temp = seqnum - 1;
+		print(("chunk->seqnum: %d seqnum: %d temp: %d chunk->length: %d", chunk->seqnum, seqnum, temp, chunk->length), SEND_WINDOW_PRINT);
+		if(BETWEEN_WRAP(temp, chunk->seqnum, (chunk->seqnum+chunk->length)%MAX_SEQNUM)){
+			print(("if(BETWEEN_WRAP(seqnum, chunk->seqnum, (chunk->seqnum+chunk->length)MAX_SEQNUM))"), SEND_WINDOW_PRINT);
 			/* this is the chunk containing the ack, so move the pointer of 
 				chunk up until its pointing to the as-of-yet unsent data */ 
 			chunk->offset += WRAP_DIFF(chunk->seqnum, seqnum, MAX_SEQNUM);
@@ -294,12 +298,14 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 			}
 			
 			if(chunk->offset==chunk->length){
+				print(("chunk->offset==chunk->length: %d", chunk->offset), SEND_WINDOW_PRINT);
 				plain_list_remove(list, el);
 				free(chunk->data);
 				free(chunk);
 			}
-			
-			
+			else{
+				print(("chunk->offset = %d, chunk->length = %d", chunk->offset, chunk->length), SEND_WINDOW_PRINT);
+			}
 			break;
 		}
 
