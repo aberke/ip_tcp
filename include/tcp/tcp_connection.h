@@ -42,7 +42,7 @@ if it is believed that will lead to better operation. */
 typedef struct tcp_connection* tcp_connection_t;  
 
 tcp_connection_t tcp_connection_init(tcp_node_t tcp_node, int socket, bqueue_t *to_send);
-void tcp_connection_destroy(tcp_connection_t connection);
+void tcp_connection_destroy(tcp_connection_t *connection);
 
 /*
 	tcp_connection	

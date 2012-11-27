@@ -243,8 +243,6 @@ void* tcp_api_recvfile_entry(void* _args){
 
 	recv_window_t reading_window 	   = tcp_connection_get_recv_window(new_connection);
 	memchunk_t got;
-	int i=0;
-	int j = 0;
 	while(tcp_node_running(args->node) && tcp_connection_get_state(new_connection) != CLOSE_WAIT){
 	
 		while((got = recv_window_get_next(reading_window, BUFFER_SIZE))){
