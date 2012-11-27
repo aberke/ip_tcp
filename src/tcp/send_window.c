@@ -262,7 +262,8 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 	int send_window_min = send_window->left,
 		send_window_max = (send_window->left+send_window->size) % MAX_SEQNUM;
 	
-	if(seqnum==send_window->left || seqnum==(send_window->left+send_window->size+1)%MAX_SEQNUM)
+	//if(seqnum==send_window->left || seqnum==(send_window->left+send_window->size+1)%MAX_SEQNUM)
+	if(seqnum==send_window->left)
 		return;
 
 	if(!BETWEEN_WRAP(seqnum, send_window_min, send_window_max)){ 
@@ -279,10 +280,10 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 	double RTT;
 	struct timeval now, chunk_timer;
 	gettimeofday(&now, NULL);
-
+	
 	PLAIN_LIST_ITER(list, el)
 		chunk = (send_window_chunk_t)el->data;
-		if(BETWEEN_WRAP(seqnum, chunk->seqnum, (chunk->seqnum+chunk->length)%MAX_SEQNUM)){
+		if(BETWEEN_WRAP(seqnum-1, chunk->seqnum, (chunk->seqnum+chunk->length)%MAX_SEQNUM)){
 			/* this is the chunk containing the ack, so move the pointer of 
 				chunk up until its pointing to the as-of-yet unsent data */ 
 			chunk->offset += WRAP_DIFF(chunk->seqnum, seqnum, MAX_SEQNUM);
@@ -300,7 +301,6 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 				free(chunk->data);
 				free(chunk);
 			}
-			
 			
 			break;
 		}
