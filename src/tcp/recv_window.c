@@ -132,7 +132,6 @@ int recv_window_validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint
 	else{
 		//printf("ACCEPTED: seqnum: %u, window min: %u, window_max: %u\n", seqnum, window_min, window_max);
 	}
-
 	return ret;
 }
 

@@ -197,6 +197,7 @@ void* tcp_api_recvfile_entry(void* _args){
 	FILE* f = fopen(args->buffer, "w");
 	if(!f){
 		fprintf(stderr, "Unable to open file for writing: %s\n", args->buffer);
+		tcp_api_close(args->node, args->socket);
 		_return(args, -EINVAL);	//Invalid argument passed
 		return NULL;
 	}
@@ -219,16 +220,21 @@ void* tcp_api_recvfile_entry(void* _args){
 
 	if(ret == SIGNAL_DESTROYING){
 		// is there anything else we can do here?
+		// close and remove the connections
 		tcp_connection_close(connection);
+		tcp_connection_close(new_connection);
+		tcp_node_remove_connection_kernal(args->node, connection);
+		tcp_node_remove_connection_kernal(args->node, new_connection);
 		_return(args, SIGNAL_DESTROYING);
 	}
 	else if(ret == API_TIMEOUT){ 	
+		// close and remove the connections
 		tcp_connection_close(connection);
+		tcp_connection_close(new_connection);
+		tcp_node_remove_connection_kernal(args->node, connection);
+		tcp_node_remove_connection_kernal(args->node, new_connection);
 		_return(args, -ETIMEDOUT);
 	}
-
-	// otherwise we're good?
-	tcp_connection_close(connection);
 
 	if(new_connection == NULL){	
 		puts("ERROR: Bug: See recvfile_entry");
@@ -236,25 +242,34 @@ void* tcp_api_recvfile_entry(void* _args){
 	}	
 
 	recv_window_t reading_window 	   = tcp_connection_get_recv_window(new_connection);
-	pthread_cond_t* read_blocking_cond = recv_window_get_read_condition(reading_window);
-	pthread_mutex_t* api_mutex 		   = tcp_connection_get_api_mutex(new_connection);
-
 	memchunk_t got;
+	int i=0;
+	int j = 0;
 	while(tcp_node_running(args->node) && tcp_connection_get_state(new_connection) != CLOSE_WAIT){
-		pthread_cond_wait(read_blocking_cond, api_mutex);
-		
+	
 		while((got = recv_window_get_next(reading_window, BUFFER_SIZE))){
 			fwrite(got->data, got->length, 1, f);
 			fflush(f);
 			memchunk_destroy_total(&got, util_free);
 		}
+		if(tcp_node_running(args->node) && tcp_connection_get_state(new_connection) != CLOSE_WAIT){
+			int result = tcp_connection_api_result(new_connection); // will block until it gets the result
+			if(result<0)
+				break;
+		}
 	}
 
 /* CLEAN UP */
-
-	// close the connection
+	puts("0");
+	// close and remove the connections
+	tcp_connection_close(connection);
+	puts("1");
 	tcp_connection_close(new_connection);
-
+	puts("2");
+	tcp_node_remove_connection_kernal(args->node, connection);
+	puts("3");
+	tcp_node_remove_connection_kernal(args->node, new_connection);
+	puts("4");
 	// clean up the file
 	fclose(f);
 
