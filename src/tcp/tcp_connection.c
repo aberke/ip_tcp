@@ -937,9 +937,7 @@ void *_handle_read_send(void *tcpconnection){
 				tcp_connection_send_keep_alive(connection);
 		}
 		/* check if you're waiting for an ACK to come back */
-		else if(state == SYN_SENT){	         
-			printf("[elapsed %f] [(1 << (BACKOFF_MULTIPLER*(connection->syn_fin_count)-1))*RTO) %f]\n", time_elapsed, (1 << (BACKOFF_MULTIPLER*(connection->syn_fin_count)-1))*RTO);
-
+		else if(state == SYN_SENT){	  
 			if(time_elapsed > (1 << (BACKOFF_MULTIPLER*(connection->syn_fin_count)-1))*RTO){
 				// we timeout connect or resend
 
