@@ -28,7 +28,7 @@
 		  /* | (1<<(IP_PRINT-1))		*/    		\
 		  /* | (1<<(TCP_PRINT-1)) 		*/    		\
 		  /* | (1<<(WINDOW_PRINT-1)) 			*/	\
-	   	   /*  | (1<<(SEND_WINDOW_PRINT-1))	 	*/	\
+	   	     | (1<<(SEND_WINDOW_PRINT-1))	 		\
 		   /*| (1<<(LEAK_PRINT-1))          */		\
 		  /* | (1<<(STATES_PRINT-1))			*/	\
 		  /* | (1<<(CLOSING_PRINT-1))	 		 */   \
@@ -53,8 +53,9 @@
 #define BETWEEN(x,lo,hi) (((lo) <= (x)) && ((x) <= (hi)))
 #define BETWEEN_WRAP(x,lo,hi) ((lo) > (hi) ? ((x) >= (lo) || (x) <= (hi)) : BETWEEN((x),(lo),(hi)))
 #define CONGRUENT(a,b,mod) ((a) % (mod) == (b) % (mod))
-#define WRAP_DIFF(x,y,length) ((y) >= (x) ? (y) - (x) : (length) - (x) + (y)) 
 #define WRAP_ADD(x,y,mod) (((x) + (y)) % (mod))
+
+#define WRAP_DIFF(x,y,length) ((y) >= (x) ? (y) - (x) : (length) - (x) + (y)) 
 
 #define CRASH_AND_BURN(msg) 						\
 do{													\

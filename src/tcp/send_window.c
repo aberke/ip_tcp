@@ -49,7 +49,6 @@ send_window_chunk_t send_window_chunk_init(send_window_t send_window, void* data
 	send_window_chunk->resent = 0;
 	send_window_chunk->offset = 0;
 	
-	printf("chunk with length %d and seqnum : %u\n", length, seqnum);
 	return send_window_chunk;
 }
 
@@ -223,18 +222,24 @@ send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window)
 	send_window_chunk_t sw_chunk;
 	if((sw_chunk=(send_window_chunk_t)queue_pop(send_window->timed_out_chunks)) != NULL){
 		/* restart its timer (it's still on the sent list!) */
-		sw_chunk->resending = 0;
 		gettimeofday(&(sw_chunk->send_time), NULL);
+		sw_chunk->resending = 0;
 		return sw_chunk;
 	}
 
 	uint32_t sent_left = send_window->sent_left;
 
 	int left_in_window = WRAP_DIFF(sent_left, (send_window->left+send_window->size)%MAX_SEQNUM, MAX_SEQNUM);
-	int to_send = MIN(send_window->send_size, left_in_window);
 
-	if(to_send <= 0) 
+	//printf("left in window: %d, send_window->send_size: %d\n", left_in_window, send_window->send_size);
+
+	int to_send = MIN((int)send_window->send_size, left_in_window);
+
+	//printf("Left in window: %d, send_window->send_size: %d, to_send: %d\n", left_in_window, send_window->send_size, to_send);
+
+	if(to_send <= 0) {
 	 	return NULL;
+	}
 
 	memchunk_t chunk = ext_array_peel(send_window->data_queue, to_send);
 	if(!chunk || chunk->length==0)	
@@ -259,13 +264,13 @@ send_window_chunk_t send_window_get_next(send_window_t send_window){
 }
 
 void send_window_ack_synchronized(send_window_t send_window, int seqnum){
-	print(("send_window_ack_synchronized seqnum %d", seqnum), SEND_WINDOW_PRINT);
 	int send_window_min = send_window->left,
 		send_window_max = (send_window->left+send_window->size) % MAX_SEQNUM;
 	
 	//if(seqnum==send_window->left || seqnum==(send_window->left+send_window->size+1)%MAX_SEQNUM)
-	if(seqnum==send_window->left)
+	if(seqnum==send_window->left){
 		return;
+	}
 
 	if(!BETWEEN_WRAP(seqnum, send_window_min, send_window_max)){ 
 		print(("Received invalid seqnum: %d, current send_window_min: %d, send_window_max: %d\n", seqnum, send_window_min, send_window_max), SEND_WINDOW_PRINT); 
@@ -299,10 +304,11 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 			}
 			
 			if(chunk->offset==chunk->length){
-				print(("chunk->offset==chunk->length: %d", chunk->offset), SEND_WINDOW_PRINT);
-				plain_list_remove(list, el);
+				//print(("chunk->offset==chunk->length: %d", chunk->offset), SEND_WINDOW_PRINT);
+
 				free(chunk->data);
 				free(chunk);
+				plain_list_remove(list, el);
 			}
 			break;
 		}
@@ -313,7 +319,7 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 		free(chunk);
 	
 		/* you can delete this link in the list */
-		print(("removing from sentlist: %p\n", chunk), SEND_WINDOW_PRINT);
+		//print(("removing from sentlist: %p\n", chunk), SEND_WINDOW_PRINT);
 		plain_list_remove(list, el);
 	PLAIN_LIST_ITER_DONE(list);
 

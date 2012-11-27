@@ -259,7 +259,7 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	for(i=0; i<(tcp_node->num_connections); i++){
 		// we already aborted it when we called quit_cmd
 		if(tcp_node->connections[i] != NULL)
-			tcp_connection_destroy(tcp_node->connections[i]);
+			tcp_connection_destroy(&(tcp_node->connections[i]));
 
 	}
 
@@ -449,7 +449,7 @@ int tcp_node_remove_connection_kernal(tcp_node_t tcp_node, tcp_connection_t conn
 	
 	// lock kernal
 	pthread_mutex_lock(&(tcp_node->kernal_mutex));
-	tcp_connection_destroy(connection);
+	tcp_connection_destroy(&connection);
 		
 	tcp_node->connections[socket] = NULL;
 	tcp_node->num_connections = (tcp_node->num_connections) - 1;

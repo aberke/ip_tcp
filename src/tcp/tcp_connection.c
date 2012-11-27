@@ -596,6 +596,7 @@ void tcp_connection_handle_receive_packet(tcp_connection_t connection, tcp_packe
 				if(connection->recv_window_alive)
 					tcp_connection_api_signal(connection, 1);
 				// now lets send our ack -- handles the update peer situation
+
 				/* now update that peer because friends don't let friends send unacknowledged bytes*/
 				tcp_wrap_packet_send(connection, tcp_header_init(0), NULL, 0);
 			}   	
