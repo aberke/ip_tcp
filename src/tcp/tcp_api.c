@@ -228,8 +228,9 @@ void* tcp_api_recvfile_entry(void* _args){
 		_return(args, -ETIMEDOUT);
 	}
 
-	// otherwise we're good? -- close the original listening connection
-	tcp_api_close(args->node, args->socket);
+	// otherwise we're good?
+	tcp_connection_close(connection);
+	tcp_node_remove_connection_kernal(args->node, connection);
 
 	if(new_connection == NULL){	
 		puts("ERROR: Bug: See recvfile_entry");
@@ -253,9 +254,11 @@ void* tcp_api_recvfile_entry(void* _args){
 
 /* CLEAN UP */
 
-	// close the new connection that read the file
-	tcp_api_close(args->node, tcp_connection_get_socket(new_connection));
-
+	// close the connection
+	tcp_connection_close(new_connection);
+	//delete it 
+	tcp_node_remove_connection_kernal(args->node, new_connection);
+	
 	// clean up the file
 	fclose(f);
 
