@@ -42,6 +42,7 @@ send_window_chunk_t send_window_chunk_init(send_window_t send_window, void* data
 	send_window_chunk_t send_window_chunk = malloc(sizeof(struct send_window_chunk));
 	
 	gettimeofday(&(send_window_chunk->send_time), NULL);
+	send_window_chunk->resending = 0;
 	send_window_chunk->data   = data;
 	send_window_chunk->seqnum = seqnum;
 	send_window_chunk->length = length;
@@ -220,6 +221,7 @@ send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window)
 	send_window_chunk_t sw_chunk;
 	if((sw_chunk=(send_window_chunk_t)queue_pop(send_window->timed_out_chunks)) != NULL){
 		/* restart its timer (it's still on the sent list!) */
+		sw_chunk->resending = 0;
 		gettimeofday(&(sw_chunk->send_time), NULL);
 		return sw_chunk;
 	}
@@ -338,9 +340,10 @@ int send_window_check_timers_synchronized(send_window_t send_window){
 		time_elapsed = now.tv_sec - chunk_timer.tv_sec;
 		time_elapsed += now.tv_usec/1000000.0 - chunk_timer.tv_usec/1000000.0;
 		
-		if(time_elapsed > send_window->RTO){
+		if(!chunk->resending && time_elapsed > send_window->RTO){
 			print(("------------resending---------------"), SEND_WINDOW_PRINT);
 			chunk->resent = (chunk->resent) + 1;
+			chunk->resending = 1;
 			queue_push(send_window->timed_out_chunks, (void*)chunk);
 		}
 		
