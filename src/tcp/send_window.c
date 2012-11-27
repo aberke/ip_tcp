@@ -42,6 +42,7 @@ send_window_chunk_t send_window_chunk_init(send_window_t send_window, void* data
 	send_window_chunk_t send_window_chunk = malloc(sizeof(struct send_window_chunk));
 	
 	gettimeofday(&(send_window_chunk->send_time), NULL);
+	send_window_chunk->resending = 0;
 	send_window_chunk->data   = data;
 	send_window_chunk->seqnum = seqnum;
 	send_window_chunk->length = length;
@@ -221,6 +222,7 @@ send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window)
 	send_window_chunk_t sw_chunk;
 	if((sw_chunk=(send_window_chunk_t)queue_pop(send_window->timed_out_chunks)) != NULL){
 		/* restart its timer (it's still on the sent list!) */
+		sw_chunk->resending = 0;
 		gettimeofday(&(sw_chunk->send_time), NULL);
 		return sw_chunk;
 	}
@@ -261,7 +263,8 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 	int send_window_min = send_window->left,
 		send_window_max = (send_window->left+send_window->size) % MAX_SEQNUM;
 	
-	if(seqnum==send_window->left || seqnum==(send_window->left+send_window->size+1)%MAX_SEQNUM)
+	//if(seqnum==send_window->left || seqnum==(send_window->left+send_window->size+1)%MAX_SEQNUM)
+	if(seqnum==send_window->left)
 		return;
 
 	if(!BETWEEN_WRAP(seqnum, send_window_min, send_window_max)){ 
@@ -278,13 +281,11 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 	double RTT;
 	struct timeval now, chunk_timer;
 	gettimeofday(&now, NULL);
-
+	
+	uint32_t toCheck=seqnum-1;
 	PLAIN_LIST_ITER(list, el)
 		chunk = (send_window_chunk_t)el->data;
-		int temp = seqnum - 1;
-		print(("chunk->seqnum: %d seqnum: %d temp: %d chunk->length: %d", chunk->seqnum, seqnum, temp, chunk->length), SEND_WINDOW_PRINT);
-		if(BETWEEN_WRAP(temp, chunk->seqnum, (chunk->seqnum+chunk->length)%MAX_SEQNUM)){
-			print(("if(BETWEEN_WRAP(seqnum, chunk->seqnum, (chunk->seqnum+chunk->length)MAX_SEQNUM))"), SEND_WINDOW_PRINT);
+		if(BETWEEN_WRAP(toCheck, chunk->seqnum, (chunk->seqnum+chunk->length)%MAX_SEQNUM)){
 			/* this is the chunk containing the ack, so move the pointer of 
 				chunk up until its pointing to the as-of-yet unsent data */ 
 			chunk->offset += WRAP_DIFF(chunk->seqnum, seqnum, MAX_SEQNUM);
@@ -302,9 +303,6 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 				plain_list_remove(list, el);
 				free(chunk->data);
 				free(chunk);
-			}
-			else{
-				print(("chunk->offset = %d, chunk->length = %d", chunk->offset, chunk->length), SEND_WINDOW_PRINT);
 			}
 			break;
 		}
@@ -354,9 +352,10 @@ int send_window_check_timers_synchronized(send_window_t send_window){
 		time_elapsed = now.tv_sec - chunk_timer.tv_sec;
 		time_elapsed += now.tv_usec/1000000.0 - chunk_timer.tv_usec/1000000.0;
 		
-		if(time_elapsed > send_window->RTO){
+		if(!chunk->resending && time_elapsed > send_window->RTO){
 			print(("------------resending---------------"), SEND_WINDOW_PRINT);
 			chunk->resent = (chunk->resent) + 1;
+			chunk->resending = 1;
 			queue_push(send_window->timed_out_chunks, (void*)chunk);
 		}
 		

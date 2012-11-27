@@ -57,6 +57,7 @@ typedef struct send_window* send_window_t;
 struct send_window_chunk{
 	struct timeval send_time;
 	void* data;
+	int resending;
 	int length;
 	int seqnum;
 	int offset;
