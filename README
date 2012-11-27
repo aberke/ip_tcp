@@ -33,6 +33,8 @@ KNOWN BUGS:
 
 One of the major known bugs occurs when sending large files using recvfile/sendfile. Although it appears that we are able to do so efficiently and at relatively high speeds, these speeds asymptotically decline and lead to a perpetual exchange of unacked/resent chunks of data. 
 
+Another bug is related to the initial connection of two agents with highly lossy links. Although once connected, transmission works flawlessly, the initial connection seems to be difficult due a problem with IP. 
+
 
 DESIGN-SKETCH:
 
