@@ -220,17 +220,21 @@ void* tcp_api_recvfile_entry(void* _args){
 
 	if(ret == SIGNAL_DESTROYING){
 		// is there anything else we can do here?
+		// close and remove the connections
 		tcp_connection_close(connection);
+		tcp_connection_close(new_connection);
+		tcp_node_remove_connection_kernal(args->node, connection);
+		tcp_node_remove_connection_kernal(args->node, new_connection);
 		_return(args, SIGNAL_DESTROYING);
 	}
 	else if(ret == API_TIMEOUT){ 	
+		// close and remove the connections
 		tcp_connection_close(connection);
+		tcp_connection_close(new_connection);
+		tcp_node_remove_connection_kernal(args->node, connection);
+		tcp_node_remove_connection_kernal(args->node, new_connection);
 		_return(args, -ETIMEDOUT);
 	}
-
-	// otherwise we're good?
-	tcp_connection_close(connection);
-	tcp_node_remove_connection_kernal(args->node, connection);
 
 	if(new_connection == NULL){	
 		puts("ERROR: Bug: See recvfile_entry");
@@ -254,9 +258,10 @@ void* tcp_api_recvfile_entry(void* _args){
 
 /* CLEAN UP */
 
-	// close the connection
+	// close and remove the connections
+	tcp_connection_close(connection);
 	tcp_connection_close(new_connection);
-	//delete it 
+	tcp_node_remove_connection_kernal(args->node, connection);
 	tcp_node_remove_connection_kernal(args->node, new_connection);
 	
 	// clean up the file
