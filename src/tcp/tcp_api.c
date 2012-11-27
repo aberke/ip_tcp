@@ -242,27 +242,21 @@ void* tcp_api_recvfile_entry(void* _args){
 	}	
 
 	recv_window_t reading_window 	   = tcp_connection_get_recv_window(new_connection);
-	puts("0.0");
 	memchunk_t got;
 	int i=0;
 	int j = 0;
 	while(tcp_node_running(args->node) && tcp_connection_get_state(new_connection) != CLOSE_WAIT){
-		printf("i: %d\n", i);	
+	
 		while((got = recv_window_get_next(reading_window, BUFFER_SIZE))){
-			printf("0 j: %d\n", j);
 			fwrite(got->data, got->length, 1, f);
 			fflush(f);
 			memchunk_destroy_total(&got, util_free);
-			printf("1 j: %d\n", j);
-			j++;
 		}
 		if(tcp_node_running(args->node) && tcp_connection_get_state(new_connection) != CLOSE_WAIT){
 			int result = tcp_connection_api_result(new_connection); // will block until it gets the result
-			printf("result: %d\n", result);
 			if(result<0)
 				break;
 		}
-		i++;
 	}
 
 /* CLEAN UP */
@@ -275,7 +269,7 @@ void* tcp_api_recvfile_entry(void* _args){
 	tcp_node_remove_connection_kernal(args->node, connection);
 	puts("3");
 	tcp_node_remove_connection_kernal(args->node, new_connection);
-	
+	puts("4");
 	// clean up the file
 	fclose(f);
 
