@@ -245,14 +245,16 @@ void* tcp_api_recvfile_entry(void* _args){
 
 	memchunk_t got;
 	while(tcp_node_running(args->node) && tcp_connection_get_state(new_connection) != CLOSE_WAIT){
-		int result = tcp_connection_api_result(connection); // will block until it gets the result
-		if(result<0)
-			break;
 			
 		while((got = recv_window_get_next(reading_window, BUFFER_SIZE))){
 			fwrite(got->data, got->length, 1, f);
 			fflush(f);
 			memchunk_destroy_total(&got, util_free);
+		}
+		if(tcp_node_running(args->node) && tcp_connection_get_state(new_connection) != CLOSE_WAIT){
+			int result = tcp_connection_api_result(connection); // will block until it gets the result
+			if(result<0)
+				break;
 		}
 	}
 
