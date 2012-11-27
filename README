@@ -1,6 +1,5 @@
 ********************************** TCP ********************************************************************
 
-
 HOW TO RUN:
 The make-file has a lot of targets in it for help with debugging and running the program. 
 In order to build everything, type make build/make rebuild (which will clean first). 
@@ -8,9 +7,31 @@ In order to run the tests, type make test.
 To run a single node (A.lnx) through valgrind, type make valgrind. 
 
 
-
 QUITTING NODE:
-	We do not clean-close.  We send an rst before deleting the TCB from the node.
+
+We send an rst before deleting the TCB from the node (although this disagrees with the implementation which seems to be under the assumption that the user should commit to running a tcp node FOREVER).
+
+
+DESIGN DECISIONS
+
+== The State Machine ==
+
+The state machine was a way for us to abstract away from the state transitions necessary to implement TCP. Each connection in our node has its own state machine, which has a pointer back to the connection in order to invoke the appropriate callback functions when a transition is made. These 'callback' functions are set when the state machine is initialized, and we can simply pass transitions to the state machine (such as received-valid-syn) and then the state machine will react accordingly. The state machine is simply a transition matrix that records in Aij the NEXT state that should be transitioned to while in state i and having received transition j. 
+
+
+== Threading Rationale == 
+
+There are several crucial blocking queues that justify our threading rationale. Our basic use of the blocking queue is as a consumer/producer relationship. While tcp connections will produce packets that the ip node should consume and send, the reverse will also be true for incoming packets. Bqueue_ts are used for each direction in this relationship. That being said, we have a thread running the IP node, waiting for incoming packets on its interfaces and pushing them onto a queue for the tcp_node to consume. The tcp node is then sitting in its own thread, pulling off the packets that ip_node pushes to it. These packets are then multiplexed in order to find which connection they are destined for. The connections themselves are also run in their own individual threads, where each thread is handling reading/writing for all of its functionality. The writing queue that the connection pushes too is the same queue that the IP node pulls from, and this completes the loop. 
+
+
+== Windows == 
+
+The send window and receive window were built separately, and are maintained in their own files. They are built as abstractions over the sliding window protocol and simply provide the functionality without fully mechanizing the process. The benefit of this is that they are more modular, and easier to test. However, many of the difficulties we had throughout the process of debugging were related to the operation of the windows because of their abstractness. In retrospect, it would have been much more useful to us had the windows been implemented with a more direct purpose in mind (ie less modular). 
+
+
+KNOWN BUGS:
+
+One of the major known bugs occurs when sending large files using recvfile/sendfile. Although it appears that we are able to do so efficiently and at relatively high speeds, these speeds asymptotically decline and lead to a perpetual exchange of unacked/resent chunks of data. 
 
 
 DESIGN-SKETCH:
