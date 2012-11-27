@@ -21,7 +21,7 @@
 #define KEEP_ALIVE_FREQUENCY 10 //we send a keep-alive message every second
 
 #define BACKOFF_MULTIPLER 2 //set back to 1
-#define SYN_COUNT_MAX 3 // how many syns we send before timing out
+#define SYN_COUNT_MAX 5 // how many syns we send before timing out
 /* TIMEOUTS DEFINED BY RFC:
       Timeouts
 
