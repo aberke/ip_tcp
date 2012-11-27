@@ -161,44 +161,44 @@ tcp_connection_t tcp_connection_init(tcp_node_t tcp_node, int socket, bqueue_t *
 	return connection;
 }
 
-void tcp_connection_destroy(tcp_connection_t connection){
+void tcp_connection_destroy(tcp_connection_t *connection){
 	connection->running = 0;
 
 	// >> do this immediately! because it depends on the things you're destroying! <<
 	// cancel read_thread
-	int rc = pthread_join(connection->read_send_thread, NULL);
+	int rc = pthread_join((*connection)->read_send_thread, NULL);
 	if (rc) {
-		printf("ERROR; return code from pthread_cancel() for tcp_connection of socket %d is %d\n", connection->socket_id, rc);
+		printf("ERROR; return code from pthread_cancel() for tcp_connection of socket %d is %d\n", (*connection)->socket_id, rc);
 		exit(-1);
 	}
 	// tell everyone who is waiting on this thread that
 	// the connection is being destroyed
-	tcp_connection_api_signal(connection, SIGNAL_DESTROYING);
+	tcp_connection_api_signal((*connection), SIGNAL_DESTROYING);
 
 	/* Destroy mutex and signal */
-	pthread_mutex_destroy(&(connection->api_mutex));
-	pthread_cond_destroy(&(connection->api_cond));
+	pthread_mutex_destroy(&((*connection)->api_mutex));
+	pthread_cond_destroy(&((*connection)->api_cond));
 	
 	// destroy windows
-	if(connection->send_window)
-		send_window_destroy(&(connection->send_window));
-	if(connection->receive_window)
-		recv_window_destroy(&(connection->receive_window));
+	if((*connection)->send_window)
+		send_window_destroy(&((*connection)->send_window));
+	if((*connection)->receive_window)
+		recv_window_destroy(&((*connection)->receive_window));
 	
 	// destroy state machine
-	state_machine_destroy(&(connection->state_machine));
-	tcp_connection_accept_queue_destroy(connection);
+	state_machine_destroy(&((*connection)->state_machine));
+	tcp_connection_accept_queue_destroy((*connection));
 	
 	// take all packets off my_to_read queue and destroys queue
 	tcp_packet_data_t tcp_packet_data;
-	while(!bqueue_trydequeue(connection->my_to_read, (void**)&tcp_packet_data))
+	while(!bqueue_trydequeue((*connection)->my_to_read, (void**)&tcp_packet_data))
 		tcp_packet_data_destroy(&tcp_packet_data);	
 	
-	bqueue_destroy(connection->my_to_read);
-	free(connection->my_to_read);
+	bqueue_destroy((*connection)->my_to_read);
+	free((*connection)->my_to_read);
 						
-	free(connection);
-	connection = NULL;
+	free(*connection);
+	*connection = NULL;
 }
 
 /* ////////////////////////////////////////////// */
@@ -232,10 +232,13 @@ int _validate_ack(tcp_connection_t connection, uint32_t ack){
 	returns 1 on success, 0 on failure */
 int tcp_connection_queue_to_read(tcp_connection_t connection, tcp_packet_data_t tcp_packet){
 	print(("queueing packet"), TCP_PRINT);
-	if(bqueue_enqueue(connection->my_to_read, tcp_packet))
-		return 0;
-	else
-		return 1;
+	if(connection){
+		if(bqueue_enqueue(connection->my_to_read, tcp_packet))
+			return 0;
+		else
+			return 1;
+	}
+	return 0;
 }
 
 /* Called when connection in LISTEN state receives a syn.  
