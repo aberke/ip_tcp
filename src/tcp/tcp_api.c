@@ -242,13 +242,13 @@ void* tcp_api_recvfile_entry(void* _args){
 	}	
 
 	recv_window_t reading_window 	   = tcp_connection_get_recv_window(new_connection);
-	pthread_cond_t* read_blocking_cond = recv_window_get_read_condition(reading_window);
-	pthread_mutex_t* api_mutex 		   = tcp_connection_get_api_mutex(new_connection);
 
 	memchunk_t got;
 	while(tcp_node_running(args->node) && tcp_connection_get_state(new_connection) != CLOSE_WAIT){
-		pthread_cond_wait(read_blocking_cond, api_mutex);
-		
+		int result = tcp_connection_api_result(connection); // will block until it gets the result
+		if(result<0)
+			break;
+			
 		while((got = recv_window_get_next(reading_window, BUFFER_SIZE))){
 			fwrite(got->data, got->length, 1, f);
 			fflush(f);
@@ -257,11 +257,14 @@ void* tcp_api_recvfile_entry(void* _args){
 	}
 
 /* CLEAN UP */
-
+	puts("0");
 	// close and remove the connections
 	tcp_connection_close(connection);
+	puts("1");
 	tcp_connection_close(new_connection);
+	puts("2");
 	tcp_node_remove_connection_kernal(args->node, connection);
+	puts("3");
 	tcp_node_remove_connection_kernal(args->node, new_connection);
 	
 	// clean up the file
