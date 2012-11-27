@@ -302,6 +302,7 @@ void recvfile_cmd(const char* line, tcp_node_t tcp_node){
 	ret = tcp_api_bind(tcp_node, socket, &addr, port);
 	if(ret < 0){
 		printf("Error: v_bind returned: %s\n", strerror(-ret));
+		tcp_node_remove_connection_kernal(tcp_node, tcp_node_get_connection_by_socket(tcp_node, socket));
 		free(filename_buffer);
 		return;
 	}

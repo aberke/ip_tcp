@@ -197,6 +197,7 @@ void* tcp_api_recvfile_entry(void* _args){
 	FILE* f = fopen(args->buffer, "w");
 	if(!f){
 		fprintf(stderr, "Unable to open file for writing: %s\n", args->buffer);
+		tcp_api_close(args->node, args->socket);
 		_return(args, -EINVAL);	//Invalid argument passed
 		return NULL;
 	}
