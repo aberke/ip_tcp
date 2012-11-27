@@ -239,6 +239,7 @@ void tcp_node_destroy(tcp_node_t tcp_node){
   	print(("tcp_node_destroy 1"), CLOSING_PRINT);	
 	// wait for mutex so we can ensure we destroy e'erthang
 	pthread_mutex_lock(&(tcp_node->kernal_mutex));
+  	print(("tcp_node_destroy 2"), CLOSING_PRINT);
 	//// iterate through the hash maps and destroy all of the keys/values,
 	//// this will NOT destroy the connections
 	connection_virt_socket_keyed_t socket_keyed, tmp_sock_keyed;
@@ -246,14 +247,14 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 		HASH_DEL(tcp_node->virt_socketToConnection, socket_keyed);
 		connection_virt_socket_keyed_destroy(&socket_keyed);
 	}
-
+  	print(("tcp_node_destroy 3"), CLOSING_PRINT);
 	//// ditto (see above)
 	connection_port_keyed_t port_keyed, tmp_port_keyed;
 	HASH_ITER(hh, tcp_node->portToConnection, port_keyed, tmp_port_keyed){
 		HASH_DEL(tcp_node->portToConnection, port_keyed);
 		connection_port_keyed_destroy(&port_keyed);
 	}
-	
+  	print(("tcp_node_destroy 4"), CLOSING_PRINT);	
 	//// NOW destroy all the connections
 	int i;
 	for(i=0; i<(tcp_node->num_connections); i++){
@@ -262,7 +263,7 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 			tcp_connection_destroy(&(tcp_node->connections[i]));
 
 	}
-
+  	print(("tcp_node_destroy 5"), CLOSING_PRINT);
 	// free the array itself
 	free(tcp_node->connections);
 	// get rid of kernal mutex
@@ -270,27 +271,27 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	pthread_mutex_destroy(&(tcp_node->kernal_mutex));
 
 
-
+  	print(("tcp_node_destroy 6"), CLOSING_PRINT);
 	// destroy ip_node and queues
 	ip_node_t ip_node = tcp_node->ip_node;
 	ip_node_destroy(&ip_node);
-	
-	// destroy bqueues
+  	print(("tcp_node_destroy 7"), CLOSING_PRINT);
+  		
 	bqueue_destroy(tcp_node->to_send);
 	free(tcp_node->to_send);
-
+  	print(("tcp_node_destroy 8"), CLOSING_PRINT);
 	bqueue_destroy(tcp_node->to_read);
 	free(tcp_node->to_read);
-
+  	print(("tcp_node_destroy 9"), CLOSING_PRINT);
 	bqueue_destroy(tcp_node->stdin_commands);
 	free(tcp_node->stdin_commands);
-	
+  	print(("tcp_node_destroy 10"), CLOSING_PRINT);	
 	// destroy socket/port queues -- they just hold ints so i don't think we need to destroy each item inside
 	int_queue_destroy(&(tcp_node->sockets_available_queue));
 	int_queue_destroy(&(tcp_node->ports_available_queue));
-	
+  	print(("tcp_node_destroy 11"), CLOSING_PRINT);	
 	plain_list_destroy(&(tcp_node->thread_list));
-	
+  	print(("tcp_node_destroy 12"), CLOSING_PRINT);	
 	free(tcp_node);
 	tcp_node = NULL;
 }

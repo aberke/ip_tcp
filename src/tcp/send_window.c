@@ -123,8 +123,9 @@ double _recalculate_RTO(send_window_t send_window, double RTT){
 	else{
 		send_window->SRTT = ((send_window->ALPHA)*(send_window->SRTT)) + ((1-send_window->ALPHA)*RTT);
 	}
-	//send_window->RTO = 1.0;
+	
 	if(send_window->SRTT == 0){
+		send_window->RTO = 1.0;
 		return 1.0;
 	}
 	send_window->RTO = MIN(send_window->UBOUND, MAX(send_window->LBOUND, (send_window->BETA)*(send_window->SRTT)));

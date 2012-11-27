@@ -915,10 +915,9 @@ void *_handle_read_send(void *tcpconnection){
         state_e state = state_machine_get_state(connection->state_machine);
         if(connection->send_window){
         	RTO = send_window_get_RTO(connection->send_window);
-        	//printf("_handle_read_send: *************************RTO: %f\n", RTO);
         }
         else{
-        	puts("_handle_read_send: *************************send_window NULL??");
+        	RTO = 1.0;
         }
 		gettimeofday(&now, NULL);	
 		wait_cond.tv_sec = now.tv_sec+0;
