@@ -162,7 +162,7 @@ tcp_connection_t tcp_connection_init(tcp_node_t tcp_node, int socket, bqueue_t *
 }
 
 void tcp_connection_destroy(tcp_connection_t *connection){
-	connection->running = 0;
+	(*connection)->running = 0;
 
 	// >> do this immediately! because it depends on the things you're destroying! <<
 	// cancel read_thread
