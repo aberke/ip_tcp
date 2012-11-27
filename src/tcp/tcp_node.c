@@ -220,7 +220,7 @@ void tcp_node_destroy(tcp_node_t tcp_node){
 	PLAIN_LIST_ITER(list, el)
         args = (tcp_api_args_t)el->data;
         print(("tcp_node_destroy 0.1"), CLOSING_PRINT);
-        int result = tcp_api_args_destroy(&args);
+        tcp_api_args_destroy(&args);
         print(("tcp_node_destroy 0.2"), CLOSING_PRINT);
 		/*if(result < 0){	
 			char* error_string = strerror(-result);
