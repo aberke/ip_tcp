@@ -286,12 +286,22 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 			/* this is the chunk containing the ack, so move the pointer of 
 				chunk up until its pointing to the as-of-yet unsent data */ 
 			chunk->offset += WRAP_DIFF(chunk->seqnum, seqnum, MAX_SEQNUM);
+
 			if(!chunk->resent){
 				chunk_timer = chunk->send_time;
 				RTT = now.tv_sec - chunk_timer.tv_sec;
 				RTT += now.tv_usec/1000000.0 - chunk_timer.tv_usec/1000000.0;
-				_recalculate_RTO(send_window, RTT);						
+				_recalculate_RTO(send_window, RTT);	
+				chunk->resent = 1; //don't want to reuse the timer					
 			}
+			
+			if(chunk->offset==chunk->length){
+				plain_list_remove(list, el);
+				free(chunk->data);
+				free(chunk);
+			}
+			
+			
 			break;
 		}
 
