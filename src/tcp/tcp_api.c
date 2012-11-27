@@ -257,7 +257,7 @@ void* tcp_api_recvfile_entry(void* _args){
 			j++;
 		}
 		if(tcp_node_running(args->node) && tcp_connection_get_state(new_connection) != CLOSE_WAIT){
-			int result = tcp_connection_api_result(connection); // will block until it gets the result
+			int result = tcp_connection_api_result(new_connection); // will block until it gets the result
 			printf("result: %d\n", result);
 			if(result<0)
 				break;
