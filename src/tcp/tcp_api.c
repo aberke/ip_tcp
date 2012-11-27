@@ -532,6 +532,9 @@ int tcp_api_accept(tcp_node_t tcp_node, int socket, struct in_addr *addr){
 		}
 		else if(ret == CONNECTION_RESET || ret == CONNECTION_CLOSED){
 			//puts("tcp_api_accept: CONNECTION_RESET or CONNECTION_CLOSED");
+			if(new_connection != NULL)
+				//let's get rid of it
+				tcp_node_remove_connection_kernal(tcp_node, new_connection);
 			continue;
 		}
 		else if(ret == API_TIMEOUT || ret == REMOTE_CONNECTION_CLOSED){ 

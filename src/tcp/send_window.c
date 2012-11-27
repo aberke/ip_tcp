@@ -259,7 +259,7 @@ send_window_chunk_t send_window_get_next(send_window_t send_window){
 }
 
 void send_window_ack_synchronized(send_window_t send_window, int seqnum){
-
+	print(("send_window_ack_synchronized seqnum %d", seqnum), SEND_WINDOW_PRINT);
 	int send_window_min = send_window->left,
 		send_window_max = (send_window->left+send_window->size) % MAX_SEQNUM;
 	
@@ -285,7 +285,6 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 	uint32_t toCheck=seqnum-1;
 	PLAIN_LIST_ITER(list, el)
 		chunk = (send_window_chunk_t)el->data;
-
 		if(BETWEEN_WRAP(toCheck, chunk->seqnum, (chunk->seqnum+chunk->length)%MAX_SEQNUM)){
 			/* this is the chunk containing the ack, so move the pointer of 
 				chunk up until its pointing to the as-of-yet unsent data */ 
@@ -300,11 +299,11 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 			}
 			
 			if(chunk->offset==chunk->length){
+				print(("chunk->offset==chunk->length: %d", chunk->offset), SEND_WINDOW_PRINT);
 				plain_list_remove(list, el);
 				free(chunk->data);
 				free(chunk);
 			}
-			
 			break;
 		}
 
