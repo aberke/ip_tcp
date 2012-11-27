@@ -47,6 +47,7 @@ send_window_chunk_t send_window_chunk_init(send_window_t send_window, void* data
 	send_window_chunk->seqnum = seqnum;
 	send_window_chunk->length = length;
 	send_window_chunk->resent = 0;
+	send_window_chunk->offset = 0;
 	
 	return send_window_chunk;
 }
@@ -281,9 +282,11 @@ void send_window_ack_synchronized(send_window_t send_window, int seqnum){
 	struct timeval now, chunk_timer;
 	gettimeofday(&now, NULL);
 	
+	uint32_t toCheck=seqnum-1;
 	PLAIN_LIST_ITER(list, el)
 		chunk = (send_window_chunk_t)el->data;
-		if(BETWEEN_WRAP(seqnum-1, chunk->seqnum, (chunk->seqnum+chunk->length)%MAX_SEQNUM)){
+
+		if(BETWEEN_WRAP(toCheck, chunk->seqnum, (chunk->seqnum+chunk->length)%MAX_SEQNUM)){
 			/* this is the chunk containing the ack, so move the pointer of 
 				chunk up until its pointing to the as-of-yet unsent data */ 
 			chunk->offset += WRAP_DIFF(chunk->seqnum, seqnum, MAX_SEQNUM);
