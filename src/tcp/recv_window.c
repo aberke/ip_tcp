@@ -128,6 +128,7 @@ int recv_window_validate_seqnum(recv_window_t recv_window, uint32_t seqnum, uint
 
 	if(ret<0){
 		printf("REJECTED: seqnum: %u, window min: %u, window_max: %u\n", seqnum, window_min, window_max);
+		CRASH_AND_BURN("ASDFAKSDJFSFDSFJDKLSFJDKLSFJLASDKFA");
 	}
 	else{
 		printf("ACCEPTED: seqnum: %u, window min: %u, window_max: %u\n", seqnum, window_min, window_max);

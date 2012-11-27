@@ -49,6 +49,7 @@ send_window_chunk_t send_window_chunk_init(send_window_t send_window, void* data
 	send_window_chunk->resent = 0;
 	send_window_chunk->offset = 0;
 	
+	printf("chunk with length %d and seqnum : %u\n", length, seqnum);
 	return send_window_chunk;
 }
 
@@ -236,18 +237,17 @@ send_window_chunk_t send_window_get_next_synchronized(send_window_t send_window)
 	 	return NULL;
 
 	memchunk_t chunk = ext_array_peel(send_window->data_queue, to_send);
-	if(!chunk)	
+	if(!chunk || chunk->length==0)	
 		return NULL;
 
 	/* generate the chunk to send and add it to the sent_list */
 	sw_chunk = send_window_chunk_init(send_window, chunk->data, chunk->length, sent_left);
-	free(chunk);
 	plain_list_append(send_window->sent_list, sw_chunk);
 
 	/* increment the sent_left */
 	send_window->sent_left = (sent_left + chunk->length) % MAX_SEQNUM;
 
-	//printf("[sw chunk size: %d] [regular chunk size: %d]\n", sw_chunk->length, chunk->length);
+	free(chunk);
 	return sw_chunk;
 }
 
